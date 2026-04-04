@@ -9,8 +9,20 @@ const fmtUSD = (n) => (n == null || isNaN(n))
       : `$${n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`)
 
 // Signed delta applied to balance for each transaction type.
-function txDelta(t) {
+// For liability accounts (credit cards, loans), the balance represents
+// amount owed, so charges add and payments subtract (opposite of assets).
+function txDelta(t, accountType) {
   const amt = Number(t.amount) || 0
+  const isLiability = accountType === 'credit' || accountType === 'loan'
+  if (isLiability) {
+    switch (t.type) {
+      case 'Income':   return -amt  // payment received → debt down
+      case 'Refund':   return -amt  // return → debt down
+      case 'Expense':  return amt   // charge → debt up
+      case 'Transfer': return -amt  // signed; inbound (+) reduces debt
+      default:         return 0
+    }
+  }
   switch (t.type) {
     case 'Income':
     case 'Refund':   return amt
@@ -61,11 +73,11 @@ export default function AccountDetail({ account, onBack }) {
     const start = Number(account.starting_balance) || 0
     let running = start
     const rows = transactions.map(t => {
-      running = running + txDelta(t)
+      running = running + txDelta(t, account.type)
       return { ...t, running_balance: running }
     })
     return rows.slice().reverse()
-  }, [transactions, account.starting_balance])
+  }, [transactions, account.starting_balance, account.type])
 
   const currentBalance = rowsDesc.length > 0 ? rowsDesc[0].running_balance : (Number(account.starting_balance) || 0)
 
@@ -151,7 +163,7 @@ export default function AccountDetail({ account, onBack }) {
               <tbody className="divide-y divide-gray-100">
                 {rowsDesc.map(t => {
                   const isEditing = editingId === t.id
-                  const delta = txDelta(t)
+                  const delta = txDelta(t, account.type)
                   return (
                     <Fragment key={t.id}>
                       <tr className="hover:bg-gray-50">
