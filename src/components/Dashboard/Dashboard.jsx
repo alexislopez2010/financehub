@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
+import AccountsPage from '../Accounts/AccountsPage.jsx'
 
 const COLORS = ['#2563eb','#059669','#d97706','#dc2626','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#6366f1','#14b8a6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316']
 const ACCENT = { blue: '#2563eb', green: '#059669', red: '#dc2626', amber: '#d97706', purple: '#7c3aed', slate: '#475569' }
@@ -256,7 +257,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['spending','Spending',PieIcon],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['spending','Spending',PieIcon],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -282,7 +283,7 @@ export default function Dashboard({ user }) {
         </div>
       </div>
 
-      {transactions.length === 0 ? (
+      {transactions.length === 0 && activeTab !== 'accounts' ? (
         <div className="max-w-xl mx-auto px-4 md:px-6 py-12">
           <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
             <h2 className="text-lg font-semibold text-gray-900 mb-2">No transactions yet</h2>
@@ -291,6 +292,8 @@ export default function Dashboard({ user }) {
         </div>
       ) : (
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6 space-y-4 md:space-y-6">
+
+          {activeTab === 'accounts' && <AccountsPage />}
 
           {activeTab === 'overview' && (
             <>
