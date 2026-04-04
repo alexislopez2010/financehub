@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import AccountsPage from '../Accounts/AccountsPage.jsx'
@@ -77,6 +77,148 @@ const CustomTooltip = ({ active, payload, label }) => {
       {payload.map((p, i) => (
         <p key={i} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{backgroundColor:p.color}}/>{p.name}: {fmt(p.value)}</p>
       ))}
+    </div>
+  )
+}
+
+function TransactionsTab({ rows, fmt, MONTH_NAMES }) {
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
+  const [page, setPage] = useState(1)
+  const pageSize = 50
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let out = rows
+    if (typeFilter !== 'all') out = out.filter(t => t.type === typeFilter)
+    if (q) {
+      out = out.filter(t =>
+        (t.description || '').toLowerCase().includes(q) ||
+        (t.category || '').toLowerCase().includes(q) ||
+        (t.sub_category || '').toLowerCase().includes(q) ||
+        (t.account || '').toLowerCase().includes(q) ||
+        (t.member || '').toLowerCase().includes(q)
+      )
+    }
+    const mult = sort.dir === 'asc' ? 1 : -1
+    out = [...out].sort((a, b) => {
+      const av = a[sort.col] ?? ''
+      const bv = b[sort.col] ?? ''
+      if (sort.col === 'amount') return (Number(av) - Number(bv)) * mult
+      return String(av).localeCompare(String(bv)) * mult
+    })
+    return out
+  }, [rows, search, typeFilter, sort])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1) }, [search, typeFilter, rows])
+
+  const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' })
+  const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
+
+  const exportCsv = () => {
+    const cols = ['date','description','type','category','sub_category','amount','account','member','notes']
+    const escape = (v) => {
+      if (v == null) return ''
+      const s = String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const lines = [cols.join(',')]
+    filtered.forEach(t => lines.push(cols.map(c => escape(t[c])).join(',')))
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `transactions_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const typeColor = (t) => t === 'Income' ? 'bg-emerald-100 text-emerald-700' : t === 'Refund' ? 'bg-blue-100 text-blue-700' : t === 'Transfer' ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'
+  const amountColor = (t) => t === 'Income' || t === 'Refund' ? 'text-emerald-700' : t === 'Transfer' ? 'text-slate-600' : 'text-gray-900'
+  const amountSign = (t) => t === 'Income' || t === 'Refund' ? '+' : t === 'Transfer' ? '' : '−'
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 flex-wrap">
+        <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+          <div className="relative flex-1 max-w-md">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search description, category, account, member…"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+          >
+            <option value="all">All types</option>
+            <option value="Expense">Expense</option>
+            <option value="Income">Income</option>
+            <option value="Refund">Refund</option>
+            <option value="Transfer">Transfer</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span>{filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'}</span>
+          <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50" title="Export filtered rows to CSV">
+            <Download size={14} /> Export CSV
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            <tr>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('date')}>Date{sortIcon('date')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('description')}>Description{sortIcon('description')}</th>
+              <th className="px-3 py-2 text-left">Type</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('category')}>Category{sortIcon('category')}</th>
+              <th className="px-3 py-2 text-left">Sub</th>
+              <th className="px-3 py-2 text-right cursor-pointer hover:text-gray-900" onClick={() => toggleSort('amount')}>Amount{sortIcon('amount')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('account')}>Account{sortIcon('account')}</th>
+              <th className="px-3 py-2 text-left">Member</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">No transactions match.</td></tr>
+            ) : pageRows.map((t) => (
+              <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <td className="px-3 py-2 text-gray-600 tabular-nums whitespace-nowrap">{t.date}</td>
+                <td className="px-3 py-2 text-gray-900 max-w-[320px] truncate" title={t.description}>{t.description}</td>
+                <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeColor(t.type)}`}>{t.type || ''}</span></td>
+                <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{t.category || '—'}</td>
+                <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{t.sub_category || ''}</td>
+                <td className={`px-3 py-2 text-right tabular-nums font-medium ${amountColor(t.type)} whitespace-nowrap`}>{amountSign(t.type)}{fmt(Number(t.amount) || 0).replace('-','')}</td>
+                <td className="px-3 py-2 text-gray-600 whitespace-nowrap text-xs">{t.account || ''}</td>
+                <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{t.member || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 text-xs text-gray-600">
+          <span>Page {currentPage} of {totalPages} · {pageSize} per page</span>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setPage(1)} disabled={currentPage === 1} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">« First</button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next ›</button>
+            <button onClick={() => setPage(totalPages)} disabled={currentPage === totalPages} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Last »</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -422,7 +564,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -594,6 +736,10 @@ export default function Dashboard({ user }) {
                 </div>
               </div>
             </>
+          )}
+
+          {activeTab === 'transactions' && (
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} />
           )}
 
           {activeTab === 'budget' && (
