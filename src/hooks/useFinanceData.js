@@ -16,6 +16,9 @@ export function useFinanceData() {
     setLoading(true)
     setError('')
     try {
+      // Ensure current user is linked to the Lopez household (no-op if already a member).
+      // Safe to call on every load: the RPC is idempotent and fast.
+      await supabase.rpc('claim_lopez_household')
       const [txRes, billRes] = await Promise.all([
         supabase.from('transactions').select('*').order('date', { ascending: false }),
         supabase.from('bills').select('*').order('name', { ascending: true }),
