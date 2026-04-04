@@ -292,6 +292,33 @@ export default function Dashboard({ user }) {
     }
   }, [transactions, availableMonths, thisYear])
 
+  // Quick Stats — days covered, avg spend/day, avg income/month, top category, recurring bills
+  const quickStats = useMemo(() => {
+    const months = period !== 'ytd' ? [period] : availableMonths
+    // Days covered in the filtered window
+    const dates = filtered.map(t => t.date).filter(Boolean).sort()
+    let daysCovered = 30
+    if (dates.length > 0) {
+      const first = new Date(dates[0])
+      const last = new Date(dates[dates.length - 1])
+      daysCovered = Math.max(1, Math.round((last - first) / 86400000) + 1)
+    }
+    const monthCount = Math.max(1, months.length)
+    const activeBills = bills.filter(b => b.is_active)
+    const billsMonthly = activeBills.reduce((s, b) => s + toNum(b.budget_amount), 0)
+    return {
+      txnCount: filtered.length,
+      daysCovered,
+      avgDailySpend: totalExpense / daysCovered,
+      topCategory: categoryData[0] || null,
+      refundAmount: totalRefund,
+      refundCount: refunds.length,
+      billsMonthly,
+      billsCount: activeBills.length,
+      avgMonthlyIncome: totalIncome / monthCount,
+    }
+  }, [filtered, period, availableMonths, bills, totalExpense, totalIncome, totalRefund, refunds, categoryData])
+
   // Budget vs Actual — group budgets + expenses by (category, sub_category),
   // aggregate across selected period, roll up to parents.
   const budgetVsActual = useMemo(() => {
@@ -470,17 +497,40 @@ export default function Dashboard({ user }) {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Net Cash Flow by Month</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={monthlyData}>
-                    <CartesianGrid {...GRID_STYLE} />
-                    <XAxis dataKey="month" tick={LABEL_STYLE} />
-                    <YAxis tickFormatter={fmtK} tick={LABEL_STYLE} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line type="monotone" dataKey="net" name="Net" stroke={ACCENT.blue} strokeWidth={2} dot={{ r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-4">Net Cash Flow by Month</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={monthlyData}>
+                      <CartesianGrid {...GRID_STYLE} />
+                      <XAxis dataKey="month" tick={LABEL_STYLE} />
+                      <YAxis tickFormatter={fmtK} tick={LABEL_STYLE} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line type="monotone" dataKey="net" name="Net" stroke={ACCENT.blue} strokeWidth={2} dot={{ r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-4">Quick Stats</h3>
+                  <div className="space-y-0.5">
+                    {[
+                      ['Transactions', quickStats.txnCount.toString(), `${quickStats.daysCovered} days`],
+                      ['Avg Daily Spend', fmt(quickStats.avgDailySpend), '/day'],
+                      ['Top Category', quickStats.topCategory ? fmt(quickStats.topCategory.value) : '$0', quickStats.topCategory?.name || ''],
+                      ['Total Refunds', fmt(quickStats.refundAmount), `${quickStats.refundCount} items`],
+                      ['Recurring Bills', fmt(quickStats.billsMonthly), `${quickStats.billsCount} /mo`],
+                      ['Avg Income', fmt(quickStats.avgMonthlyIncome), '/month'],
+                    ].map(([label, val, sub], i) => (
+                      <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                        <span className="text-xs text-gray-500">{label}</span>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-gray-900">{val}</span>
+                          {sub && <span className="text-xs text-gray-400 ml-1">{sub}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           )}
