@@ -223,6 +223,211 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES }) {
   )
 }
 
+function BillsDetail({ bills, transactions, thisYear, fmt }) {
+  const [sort, setSort] = useState({ col: 'due_day', dir: 'asc' })
+
+  const toNum = (n) => Number(n) || 0
+  const today = new Date()
+  const todayIso = today.toISOString().slice(0, 10)
+  const curMonth = today.getMonth() + 1 // 1-12
+  const curYear = today.getFullYear()
+
+  // Monthly-equivalent for each bill
+  const monthlyEquiv = (b) => {
+    const amt = toNum(b.budget_amount)
+    const f = (b.frequency || '').toLowerCase()
+    if (f === 'biweekly') return amt * 26 / 12
+    if (f === 'weekly') return amt * 52 / 12
+    if (f === 'annual' || f === 'yearly') return amt / 12
+    if (f === 'quarterly') return amt / 3
+    return amt // Monthly or unspecified
+  }
+
+  // Next due date based on due_day + frequency (monthly cadence approximation)
+  const nextDue = (b) => {
+    if (!b.due_day) return null
+    const day = Math.min(28, Math.max(1, b.due_day))
+    const f = (b.frequency || '').toLowerCase()
+    if (f === 'annual' || f === 'yearly') {
+      // Unknown month — show day of current month as anchor
+      const d = new Date(curYear, curMonth - 1, day)
+      if (d < today) d.setFullYear(curYear + 1)
+      return d
+    }
+    // Monthly/Biweekly/Weekly/Quarterly: approximate via monthly anchor
+    const d = new Date(curYear, curMonth - 1, day)
+    if (d < today) d.setMonth(d.getMonth() + 1)
+    return d
+  }
+
+  // Last paid date from transactions matching category within last 90 days
+  const ninetyDaysAgo = new Date(today)
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  const ninetyIso = ninetyDaysAgo.toISOString().slice(0, 10)
+  const byCategory = useMemo(() => {
+    const m = {}
+    transactions.forEach(t => {
+      if (t.type !== 'Expense' || !t.category || !t.date) return
+      if (t.date < ninetyIso) return
+      if (!m[t.category]) m[t.category] = []
+      m[t.category].push(t)
+    })
+    Object.values(m).forEach(arr => arr.sort((a, b) => b.date.localeCompare(a.date)))
+    return m
+  }, [transactions, ninetyIso])
+
+  // This-month actual per category
+  const thisMonthActual = useMemo(() => {
+    const mm = String(curMonth).padStart(2, '0')
+    const prefix = `${curYear}-${mm}`
+    const m = {}
+    transactions.forEach(t => {
+      if (t.type !== 'Expense' || !t.category || !t.date?.startsWith(prefix)) return
+      m[t.category] = (m[t.category] || 0) + toNum(t.amount)
+    })
+    return m
+  }, [transactions, curMonth, curYear])
+
+  const rows = useMemo(() => bills.filter(b => b.is_active).map(b => {
+    const monthly = monthlyEquiv(b)
+    const due = nextDue(b)
+    const daysUntil = due ? Math.round((due - today) / 86400000) : null
+    const catTxns = byCategory[b.category] || []
+    const lastTxn = catTxns[0]
+    const actualThisMonth = thisMonthActual[b.category] || 0
+    const pctUsed = monthly > 0 ? actualThisMonth / monthly : 0
+    return {
+      id: b.id,
+      name: b.name,
+      category: b.category,
+      account: b.account,
+      frequency: b.frequency,
+      due_day: b.due_day,
+      budget_amount: toNum(b.budget_amount),
+      monthly,
+      nextDueDate: due,
+      daysUntil,
+      lastPaidDate: lastTxn?.date || null,
+      lastPaidAmount: lastTxn ? toNum(lastTxn.amount) : null,
+      actualThisMonth,
+      pctUsed,
+    }
+  }), [bills, byCategory, thisMonthActual])
+
+  const sorted = useMemo(() => {
+    const mult = sort.dir === 'asc' ? 1 : -1
+    const out = [...rows].sort((a, b) => {
+      const av = a[sort.col]
+      const bv = b[sort.col]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * mult
+      if (av instanceof Date && bv instanceof Date) return (av - bv) * mult
+      return String(av).localeCompare(String(bv)) * mult
+    })
+    return out
+  }, [rows, sort])
+
+  const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })
+  const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
+
+  const monthlyTotal = rows.reduce((s, r) => s + r.monthly, 0)
+  const thisMonthTotal = rows.reduce((s, r) => s + r.actualThisMonth, 0)
+  const upcoming7 = rows.filter(r => r.daysUntil !== null && r.daysUntil >= 0 && r.daysUntil <= 7).length
+
+  const pctColor = (p) => {
+    if (p === 0) return { bar: '#e5e7eb', text: 'text-gray-400' }
+    if (p > 1) return { bar: '#dc2626', text: 'text-red-600' }
+    if (p >= 0.9) return { bar: '#d97706', text: 'text-amber-600' }
+    return { bar: '#059669', text: 'text-emerald-600' }
+  }
+
+  const fmtDate = (d) => d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'
+  const relDays = (n) => {
+    if (n === null) return ''
+    if (n === 0) return 'today'
+    if (n === 1) return 'tomorrow'
+    if (n < 0) return `${Math.abs(n)}d ago`
+    return `in ${n}d`
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-wrap gap-3">
+        <h3 className="text-sm font-semibold text-gray-700">Recurring Bills — Detail</h3>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <span>{rows.length} active</span>
+          <span className="text-gray-400">·</span>
+          <span>Monthly budget: <span className="font-semibold text-gray-900">{fmt(Math.round(monthlyTotal))}</span></span>
+          <span className="text-gray-400">·</span>
+          <span>This month: <span className="font-semibold text-gray-900">{fmt(Math.round(thisMonthTotal))}</span></span>
+          {upcoming7 > 0 && (
+            <>
+              <span className="text-gray-400">·</span>
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">{upcoming7} due in 7 days</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+            <tr>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('name')}>Bill{sortIcon('name')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('category')}>Category{sortIcon('category')}</th>
+              <th className="px-3 py-2 text-left">Account</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('frequency')}>Freq{sortIcon('frequency')}</th>
+              <th className="px-3 py-2 text-right cursor-pointer hover:text-gray-900" onClick={() => toggleSort('monthly')}>Monthly{sortIcon('monthly')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('nextDueDate')}>Next Due{sortIcon('nextDueDate')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('lastPaidDate')}>Last Paid{sortIcon('lastPaidDate')}</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('pctUsed')}>% Used (this mo){sortIcon('pctUsed')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">No active bills.</td></tr>
+            ) : sorted.map(r => {
+              const { bar, text } = pctColor(r.pctUsed)
+              const width = Math.min(r.pctUsed * 100, 150)
+              const urgent = r.daysUntil !== null && r.daysUntil >= 0 && r.daysUntil <= 3
+              return (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-900 font-medium max-w-[220px] truncate" title={r.name}>{r.name}</td>
+                  <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">{r.category || '—'}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{r.account || ''}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs whitespace-nowrap">{r.frequency || '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-900 whitespace-nowrap">{fmt(Math.round(r.monthly))}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap text-xs ${urgent ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}>
+                    {fmtDate(r.nextDueDate)} <span className="text-gray-400">· {relDays(r.daysUntil)}</span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+                    {r.lastPaidDate ? (
+                      <>
+                        {r.lastPaidDate} {r.lastPaidAmount != null && <span className="text-gray-400">· {fmt(Math.round(r.lastPaidAmount))}</span>}
+                      </>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <div className="flex items-center gap-2 min-w-[140px]">
+                      <div className="flex-1 bg-gray-200 rounded-full h-1.5 min-w-[60px] overflow-hidden">
+                        <div className="h-1.5 rounded-full" style={{ width: `${Math.min(width, 100)}%`, backgroundColor: bar }} />
+                      </div>
+                      <span className={`text-xs ${text} tabular-nums w-10 text-right`}>{r.monthly > 0 ? `${Math.round(r.pctUsed * 100)}%` : '—'}</span>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function DebtTracker({ debts, fmt }) {
   const [strategy, setStrategy] = useState('avalanche') // 'snowball' | 'avalanche'
   const [extra, setExtra] = useState(0)
@@ -957,6 +1162,8 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'bills' && (
+            <>
+            <BillsDetail bills={bills} transactions={transactions} thisYear={thisYear} fmt={fmt} />
             <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Bills: Budget vs Actual ({period === 'ytd' ? 'YTD' : MONTH_NAMES[parseInt(period,10)-1]})</h3>
               {billsComparison.length === 0 ? (
@@ -975,6 +1182,7 @@ export default function Dashboard({ user }) {
                 </ResponsiveContainer>
               )}
             </div>
+            </>
           )}
 
           {activeTab === 'debt' && (
