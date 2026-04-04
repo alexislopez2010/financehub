@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Edit2, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
+import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
 
 const fmtUSD = (n) => (n == null || isNaN(n))
   ? '—'
@@ -45,8 +46,10 @@ export default function AccountDetail({ account, onBack }) {
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [editCategory, setEditCategory] = useState('')
+  const [editSubCategory, setEditSubCategory] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const { tree: catTree, categories: catList } = useCategoryTaxonomy()
 
   const load = async () => {
     setLoading(true); setError('')
@@ -81,31 +84,36 @@ export default function AccountDetail({ account, onBack }) {
 
   const currentBalance = rowsDesc.length > 0 ? rowsDesc[0].running_balance : (Number(account.starting_balance) || 0)
 
-  // Distinct categories from this account's transactions, for the datalist.
-  const categoryOptions = useMemo(() => {
-    const s = new Set()
-    for (const t of transactions) if (t.category) s.add(t.category)
-    return Array.from(s).sort()
-  }, [transactions])
+  // Sub-categories available for the currently-selected Category (cascades).
+  const subCatOptions = useMemo(() => {
+    if (!editCategory) return []
+    return catTree[editCategory] || []
+  }, [editCategory, catTree])
 
   const startEdit = (t) => {
     setEditingId(t.id)
     setEditCategory(t.category || '')
+    setEditSubCategory(t.sub_category || '')
     setEditNotes(t.notes || '')
   }
-  const cancelEdit = () => { setEditingId(null); setEditCategory(''); setEditNotes('') }
+  const cancelEdit = () => {
+    setEditingId(null); setEditCategory(''); setEditSubCategory(''); setEditNotes('')
+  }
 
   const saveEdit = async (id) => {
     setSaving(true)
     try {
+      const patch = {
+        category:     editCategory || null,
+        sub_category: editSubCategory || null,
+        notes:        editNotes.trim() || null,
+      }
       const { error } = await supabase
         .from('transactions')
-        .update({ category: editCategory.trim() || null, notes: editNotes.trim() || null })
+        .update(patch)
         .eq('id', id)
       if (error) throw error
-      setTransactions(prev => prev.map(t => t.id === id
-        ? { ...t, category: editCategory.trim() || null, notes: editNotes.trim() || null }
-        : t))
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
       cancelEdit()
     } catch (e) {
       alert('Save failed: ' + (e.message || 'unknown error'))
@@ -194,15 +202,27 @@ export default function AccountDetail({ account, onBack }) {
                             <div className="flex flex-col md:flex-row gap-2 md:items-end">
                               <label className="flex-1">
                                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Category</span>
-                                <input
-                                  list="category-options"
-                                  type="text"
+                                <select
                                   value={editCategory}
-                                  onChange={e => setEditCategory(e.target.value)}
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                                  placeholder="e.g. Groceries"
+                                  onChange={e => { setEditCategory(e.target.value); setEditSubCategory('') }}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                                   autoFocus
-                                />
+                                >
+                                  <option value="">— Select —</option>
+                                  {catList.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </label>
+                              <label className="flex-1">
+                                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Sub-category</span>
+                                <select
+                                  value={editSubCategory}
+                                  onChange={e => setEditSubCategory(e.target.value)}
+                                  disabled={!editCategory || subCatOptions.length === 0}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                >
+                                  <option value="">{subCatOptions.length === 0 ? '—' : '— None —'}</option>
+                                  {subCatOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
                               </label>
                               <label className="flex-[2]">
                                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Notes</span>
@@ -243,9 +263,6 @@ export default function AccountDetail({ account, onBack }) {
         </div>
       )}
 
-      <datalist id="category-options">
-        {categoryOptions.map(c => <option key={c} value={c} />)}
-      </datalist>
     </div>
   )
 }
