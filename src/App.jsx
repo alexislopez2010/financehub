@@ -15,22 +15,31 @@ export default function App() {
   const [aal, setAal] = useState(null) // current MFA assurance level
   const [needsEnroll, setNeedsEnroll] = useState(false)
   const [recovery, setRecovery] = useState(false) // true when user arrived via password-reset link
+  const [recoveryAal2, setRecoveryAal2] = useState(false) // true once MFA stepped-up during recovery
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       checkMFA()
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (event === 'PASSWORD_RECOVERY') {
         setRecovery(true)
+        setRecoveryAal2(false)
         setSession(s)
+        // Detect whether MFA step-up is required to update password
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+        if (aalData?.nextLevel === 'aal2' && aalData?.currentLevel !== 'aal2') {
+          setRecoveryAal2(false)
+        } else {
+          setRecoveryAal2(true) // no MFA required — skip straight to reset form
+        }
         setLoading(false)
         return
       }
       setSession(s)
       if (s) checkMFA()
-      else { setAal(null); setNeedsEnroll(false); setRecovery(false); setLoading(false) }
+      else { setAal(null); setNeedsEnroll(false); setRecovery(false); setRecoveryAal2(false); setLoading(false) }
     })
     return () => sub.subscription.unsubscribe()
   }, [])
@@ -47,10 +56,12 @@ export default function App() {
 
   if (loading) return <Loading />
 
-  // Arrived via password-reset email link — force the "set new password" screen
-  // regardless of session state. onDone signs out so the user logs in fresh.
+  // Arrived via password-reset email link — step up MFA if needed, then show reset form.
   if (recovery) {
-    return <ResetPassword onDone={() => { setRecovery(false); setView('login') }} />
+    if (!recoveryAal2) {
+      return <MFAChallenge onVerified={() => setRecoveryAal2(true)} />
+    }
+    return <ResetPassword onDone={() => { setRecovery(false); setRecoveryAal2(false); setView('login') }} />
   }
 
   // Not logged in — show login, signup, or forgot password
