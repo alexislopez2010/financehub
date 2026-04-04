@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Edit2, Archive, ArchiveRestore, X, Building2, CreditCard, Wallet, PiggyBank, TrendingUp, Landmark } from 'lucide-react'
 import { useAccounts } from '../../hooks/useAccounts.js'
+import AccountDetail from './AccountDetail.jsx'
 
 const TYPE_META = {
   checking:   { label: 'Checking',   icon: Wallet,     color: '#2563eb', isLiability: false },
@@ -24,6 +25,7 @@ const EMPTY_FORM = {
 export default function AccountsPage() {
   const { accounts, balances, loading, error, createAccount, updateAccount, archiveAccount, unarchiveAccount } = useAccounts()
   const [showArchived, setShowArchived] = useState(false)
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [editingId, setEditingId] = useState(null) // 'new' or account.id
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -91,6 +93,11 @@ export default function AccountsPage() {
   if (loading) return <div className="text-center text-gray-500 py-12">Loading accounts…</div>
   if (error) return <div className="text-center text-red-600 py-12">Error: {error}</div>
 
+  const selectedAccount = selectedAccountId ? accounts.find(a => a.id === selectedAccountId) : null
+  if (selectedAccount) {
+    return <AccountDetail account={selectedAccount} onBack={() => setSelectedAccountId(null)} />
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -133,7 +140,11 @@ export default function AccountsPage() {
             const displayBal = bal != null ? bal : Number(a.starting_balance) || 0
             const effectiveBal = meta.isLiability ? -displayBal : displayBal
             return (
-              <div key={a.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <div
+                key={a.id}
+                onClick={() => setSelectedAccountId(a.id)}
+                className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: meta.color + '15' }}>
@@ -147,15 +158,15 @@ export default function AccountsPage() {
                     </div>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Edit">
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(a) }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Edit">
                       <Edit2 size={14}/>
                     </button>
                     {a.archived_at ? (
-                      <button onClick={() => unarchiveAccount(a.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Restore">
+                      <button onClick={(e) => { e.stopPropagation(); unarchiveAccount(a.id) }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Restore">
                         <ArchiveRestore size={14}/>
                       </button>
                     ) : (
-                      <button onClick={() => archiveAccount(a.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Archive">
+                      <button onClick={(e) => { e.stopPropagation(); archiveAccount(a.id) }} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Archive">
                         <Archive size={14}/>
                       </button>
                     )}
