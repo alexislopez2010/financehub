@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase.js'
 import Login from './components/Auth/Login.jsx'
 import Signup from './components/Auth/Signup.jsx'
+import ForgotPassword from './components/Auth/ForgotPassword.jsx'
+import ResetPassword from './components/Auth/ResetPassword.jsx'
 import MFAEnroll from './components/Auth/MFAEnroll.jsx'
 import MFAChallenge from './components/Auth/MFAChallenge.jsx'
 import Dashboard from './components/Dashboard/Dashboard.jsx'
@@ -9,19 +11,26 @@ import Dashboard from './components/Dashboard/Dashboard.jsx'
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('login') // 'login' | 'signup'
+  const [view, setView] = useState('login') // 'login' | 'signup' | 'forgot'
   const [aal, setAal] = useState(null) // current MFA assurance level
   const [needsEnroll, setNeedsEnroll] = useState(false)
+  const [recovery, setRecovery] = useState(false) // true when user arrived via password-reset link
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       checkMFA()
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecovery(true)
+        setSession(s)
+        setLoading(false)
+        return
+      }
       setSession(s)
       if (s) checkMFA()
-      else { setAal(null); setNeedsEnroll(false); setLoading(false) }
+      else { setAal(null); setNeedsEnroll(false); setRecovery(false); setLoading(false) }
     })
     return () => sub.subscription.unsubscribe()
   }, [])
@@ -38,11 +47,17 @@ export default function App() {
 
   if (loading) return <Loading />
 
-  // Not logged in — show login or signup
+  // Arrived via password-reset email link — force the "set new password" screen
+  // regardless of session state. onDone signs out so the user logs in fresh.
+  if (recovery) {
+    return <ResetPassword onDone={() => { setRecovery(false); setView('login') }} />
+  }
+
+  // Not logged in — show login, signup, or forgot password
   if (!session) {
-    return view === 'signup'
-      ? <Signup onBack={() => setView('login')} />
-      : <Login onSignupClick={() => setView('signup')} />
+    if (view === 'signup')  return <Signup onBack={() => setView('login')} />
+    if (view === 'forgot')  return <ForgotPassword onBack={() => setView('login')} />
+    return <Login onSignupClick={() => setView('signup')} onForgotClick={() => setView('forgot')} />
   }
 
   // Logged in but hasn't enrolled in MFA yet — force enrollment

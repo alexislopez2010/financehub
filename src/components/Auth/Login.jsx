@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase.js'
 import AuthShell from './AuthShell.jsx'
 
-export default function Login({ onSignupClick }) {
+export default function Login({ onSignupClick, onForgotClick }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState('')
@@ -33,6 +33,9 @@ export default function Login({ onSignupClick }) {
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
         </div>
         {err && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{err}</div>}
+        <div className="text-right">
+          <button type="button" onClick={onForgotClick} className="text-xs text-blue-600 font-medium hover:underline">Forgot password?</button>
+        </div>
         <button type="submit" disabled={busy}
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors">
           {busy ? 'Signing in…' : 'Sign in'}
