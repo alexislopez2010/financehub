@@ -10,6 +10,7 @@ export function useFinanceData() {
   const [transactions, setTransactions] = useState([])
   const [bills, setBills] = useState([])
   const [budgets, setBudgets] = useState([])
+  const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -20,17 +21,20 @@ export function useFinanceData() {
       // Ensure current user is linked to the Lopez household (no-op if already a member).
       // Safe to call on every load: the RPC is idempotent and fast.
       await supabase.rpc('claim_lopez_household')
-      const [txRes, billRes, budgetRes] = await Promise.all([
+      const [txRes, billRes, budgetRes, debtRes] = await Promise.all([
         supabase.from('transactions').select('*').order('date', { ascending: false }),
         supabase.from('bills').select('*').order('name', { ascending: true }),
         supabase.from('budgets').select('*').order('category', { ascending: true }),
+        supabase.from('debts').select('*').order('balance', { ascending: false }),
       ])
       if (txRes.error) throw txRes.error
       if (billRes.error) throw billRes.error
       if (budgetRes.error) throw budgetRes.error
+      if (debtRes.error) throw debtRes.error
       setTransactions(txRes.data || [])
       setBills(billRes.data || [])
       setBudgets(budgetRes.data || [])
+      setDebts(debtRes.data || [])
     } catch (e) {
       setError(e.message || 'Failed to load data')
     } finally {
@@ -40,5 +44,5 @@ export function useFinanceData() {
 
   useEffect(() => { load() }, [])
 
-  return { transactions, bills, budgets, loading, error, reload: load }
+  return { transactions, bills, budgets, debts, loading, error, reload: load }
 }

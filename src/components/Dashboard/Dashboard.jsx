@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import AccountsPage from '../Accounts/AccountsPage.jsx'
@@ -223,6 +223,216 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES }) {
   )
 }
 
+function DebtTracker({ debts, fmt }) {
+  const [strategy, setStrategy] = useState('avalanche') // 'snowball' | 'avalanche'
+  const [extra, setExtra] = useState(0)
+
+  const active = useMemo(() => (debts || []).filter(d => d.is_active !== false).map(d => ({
+    id: d.id,
+    name: d.name,
+    type: d.type || '',
+    balance: Number(d.balance) || 0,
+    apr: Number(d.apr) || 0,
+    minPayment: Number(d.min_payment) || 0,
+  })), [debts])
+
+  const totalBalance = active.reduce((s, d) => s + d.balance, 0)
+  const totalMin = active.reduce((s, d) => s + d.minPayment, 0)
+  const weightedApr = totalBalance > 0 ? active.reduce((s, d) => s + d.apr * d.balance, 0) / totalBalance : 0
+
+  // Simulate a payoff plan given an ordering function and monthly extra.
+  // Budget model: total monthly payment = sum(original min_payments) + extra.
+  // Each month, pay interest + min on every debt; route any leftover (including
+  // freed min payments from paid-off debts) to the top-priority debt.
+  const simulate = (ordering, monthlyExtra) => {
+    const MAX_MONTHS = 600 // 50 years cap
+    const bals = active.map(d => ({ ...d, paidMonth: null, interestPaid: 0 }))
+    if (bals.length === 0) return { months: 0, totalInterest: 0, schedule: [], capped: false }
+    const originalMinTotal = bals.reduce((s, b) => s + b.minPayment, 0)
+    const monthlyBudget = originalMinTotal + (Number(monthlyExtra) || 0)
+    let month = 0
+    let totalInterest = 0
+    while (bals.some(b => b.balance > 0.01) && month < MAX_MONTHS) {
+      month++
+      // 1) accrue interest
+      bals.forEach(b => {
+        if (b.balance > 0.01) {
+          const interest = b.balance * (b.apr / 100 / 12)
+          b.balance += interest
+          b.interestPaid += interest
+          totalInterest += interest
+        }
+      })
+      // 2) pay the min on each non-zero debt (bounded by balance)
+      let spent = 0
+      bals.forEach(b => {
+        if (b.balance <= 0.01) return
+        const pay = Math.min(b.minPayment, b.balance)
+        b.balance -= pay
+        spent += pay
+        if (b.balance <= 0.01 && b.paidMonth === null) b.paidMonth = month
+      })
+      // 3) route the leftover budget to the highest-priority remaining debt(s)
+      let pool = Math.max(0, monthlyBudget - spent)
+      const order = ordering(bals.filter(b => b.balance > 0.01))
+      for (const target of order) {
+        if (pool <= 0.01) break
+        const pay = Math.min(pool, target.balance)
+        target.balance -= pay
+        pool -= pay
+        if (target.balance <= 0.01 && target.paidMonth === null) target.paidMonth = month
+      }
+      // Safety: if min payments cannot cover interest and no extra, break
+      if (monthlyExtra === 0 && month > 12) {
+        const stuck = bals.every(b => b.balance <= 0.01 || b.minPayment <= b.balance * (b.apr / 100 / 12) + 0.01)
+        if (stuck) break
+      }
+    }
+    const capped = bals.some(b => b.balance > 0.01)
+    return { months: month, totalInterest, schedule: bals, capped }
+  }
+
+  const snowballOrder = (list) => [...list].sort((a, b) => a.balance - b.balance)
+  const avalancheOrder = (list) => [...list].sort((a, b) => b.apr - a.apr)
+  const orderFn = strategy === 'snowball' ? snowballOrder : avalancheOrder
+
+  const plan = useMemo(() => simulate(orderFn, Number(extra) || 0), [active, strategy, extra])
+  const planMinOnly = useMemo(() => simulate(orderFn, 0), [active, strategy])
+
+  const monthsToYears = (m) => {
+    if (m <= 0) return '0 mo'
+    const y = Math.floor(m / 12), r = m % 12
+    return y > 0 ? `${y}y ${r}m` : `${r} mo`
+  }
+  const debtFreeDate = plan.months > 0 && !plan.capped
+    ? new Date(new Date().setMonth(new Date().getMonth() + plan.months)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : plan.capped ? '30+ years' : '—'
+  const interestSaved = Math.max(0, planMinOnly.totalInterest - plan.totalInterest)
+
+  // Table: ordered by current strategy, with simulated payoff month
+  const tableRows = useMemo(() => {
+    const map = Object.fromEntries(plan.schedule.map(s => [s.id, s]))
+    return orderFn(active.map(d => ({ ...d }))).map((d, i) => {
+      const sim = map[d.id] || {}
+      return { ...d, order: i + 1, paidMonth: sim.paidMonth, interestPaid: sim.interestPaid || 0 }
+    })
+  }, [active, strategy, plan])
+
+  if (active.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+        <p className="text-sm text-gray-500">No debts tracked yet. Add rows to the <code className="text-xs bg-gray-100 px-1 py-0.5 rounded">debts</code> table.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4 md:space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <KPICard title="Total Balance" value={fmt(totalBalance)} icon={Banknote} color={ACCENT.red} subtitle={`${active.length} debt${active.length===1?'':'s'}`} />
+        <KPICard title="Weighted APR" value={`${weightedApr.toFixed(2)}%`} icon={TrendingDown} color={ACCENT.amber} subtitle="blended rate" />
+        <KPICard title="Min Monthly" value={fmt(totalMin)} icon={Wallet} color={ACCENT.slate} subtitle="required /mo" />
+        <KPICard title="Debt-Free Date" value={debtFreeDate} icon={Target} color={ACCENT.green} subtitle={plan.capped ? '(capped)' : monthsToYears(plan.months)} />
+      </div>
+
+      {/* Strategy controls */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Strategy</div>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setStrategy('avalanche')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium ${strategy==='avalanche' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Pay highest-APR debt first (saves the most interest)"
+              >Avalanche</button>
+              <button
+                onClick={() => setStrategy('snowball')}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium ${strategy==='snowball' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Pay smallest-balance debt first (psychological wins)"
+              >Snowball</button>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Extra Payment / Month</div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={extra}
+                  onChange={(e) => setExtra(e.target.value)}
+                  className="w-28 pl-6 pr-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                />
+              </div>
+              {[100, 250, 500, 1000].map(v => (
+                <button key={v} onClick={() => setExtra(v)} className="px-2 py-1 text-xs text-gray-600 border border-gray-200 rounded hover:bg-gray-50">+${v}</button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1" />
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <div className="text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Total Interest (plan)</div>
+              <div className="text-sm font-semibold text-gray-900 tabular-nums">{fmt(Math.round(plan.totalInterest))}</div>
+            </div>
+            <div>
+              <div className="text-gray-400 uppercase tracking-wider font-semibold text-[10px]">Saved vs Min-Only</div>
+              <div className={`text-sm font-semibold tabular-nums ${interestSaved > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>{fmt(Math.round(interestSaved))}</div>
+            </div>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-3">
+          {strategy === 'avalanche'
+            ? 'Avalanche: extra payments attack the highest-APR debt first. Mathematically optimal.'
+            : 'Snowball: extra payments attack the smallest-balance debt first. Faster psychological wins.'}
+        </p>
+      </div>
+
+      {/* Debt table */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-700">Payoff Order — {strategy === 'avalanche' ? 'Avalanche' : 'Snowball'}</h3>
+          <span className="text-xs text-gray-400">{Number(extra) > 0 ? `with $${Number(extra).toLocaleString()}/mo extra` : 'minimum payments only'}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+              <tr>
+                <th className="px-3 py-2 text-left w-10">#</th>
+                <th className="px-3 py-2 text-left">Debt</th>
+                <th className="px-3 py-2 text-left">Type</th>
+                <th className="px-3 py-2 text-right">Balance</th>
+                <th className="px-3 py-2 text-right">APR</th>
+                <th className="px-3 py-2 text-right">Min / mo</th>
+                <th className="px-3 py-2 text-right">Payoff</th>
+                <th className="px-3 py-2 text-right">Interest</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map(r => (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-400 tabular-nums">{r.order}</td>
+                  <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs">{r.type}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-900">{fmt(Math.round(r.balance))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.apr.toFixed(2)}%</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmt(Math.round(r.minPayment))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.paidMonth ? monthsToYears(r.paidMonth) : <span className="text-red-500">30+ yrs</span>}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-600">{fmt(Math.round(r.interestPaid))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BudgetTab({ data, period, fmt }) {
   const [expanded, setExpanded] = useState({})
   const toggle = (cat) => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))
@@ -317,7 +527,7 @@ function BudgetTab({ data, period, fmt }) {
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, loading, error, reload } = useFinanceData()
+  const { transactions, bills, budgets, debts, loading, error, reload } = useFinanceData()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
   const [selectedMembers, setSelectedMembers] = useState(null)
@@ -564,7 +774,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['debt','Debt',Banknote],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -765,6 +975,10 @@ export default function Dashboard({ user }) {
                 </ResponsiveContainer>
               )}
             </div>
+          )}
+
+          {activeTab === 'debt' && (
+            <DebtTracker debts={debts} fmt={fmt} />
           )}
 
           {activeTab === 'trends' && (
