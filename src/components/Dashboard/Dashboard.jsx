@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2 } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import AccountsPage from '../Accounts/AccountsPage.jsx'
@@ -81,8 +81,101 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+function BudgetTab({ data, period, fmt }) {
+  const [expanded, setExpanded] = useState({})
+  const toggle = (cat) => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))
+  const statusColor = (budget, actual) => {
+    if (budget === 0 && actual === 0) return { bar: '#e5e7eb', text: 'text-gray-400' }
+    if (budget === 0) return { bar: '#dc2626', text: 'text-red-600' }           // spent with no budget
+    const used = actual / budget
+    if (used > 1) return { bar: '#dc2626', text: 'text-red-600' }               // over budget
+    if (used >= 0.9) return { bar: '#d97706', text: 'text-amber-600' }          // 90-100%
+    if (used >= 0.7) return { bar: '#ca8a04', text: 'text-yellow-600' }         // 70-90%
+    return { bar: '#059669', text: 'text-emerald-600' }                         // under 70%
+  }
+  const Row = ({ label, budget, actual, variance, depth=0, isParent=false, onClick, expandedNow, canExpand }) => {
+    const { bar, text } = statusColor(budget, actual)
+    const pctUsed = budget > 0 ? Math.min((actual / budget) * 100, 150) : 0
+    return (
+      <div
+        onClick={canExpand ? onClick : undefined}
+        className={`grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm ${isParent ? 'bg-gray-50 font-semibold text-gray-900' : 'text-gray-700'} ${canExpand ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
+      >
+        <div className="flex items-center gap-2 truncate">
+          {canExpand && <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${expandedNow ? '' : '-rotate-90'}`} />}
+          <span className="truncate">{label}</span>
+        </div>
+        <div className="text-right tabular-nums">{fmt(budget)}</div>
+        <div className="text-right tabular-nums">{fmt(actual)}</div>
+        <div className={`text-right tabular-nums font-medium ${text}`}>{fmt(variance)}</div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 bg-gray-200 rounded-full h-1.5 min-w-[40px] overflow-hidden">
+            <div className="h-1.5 rounded-full" style={{ width: `${Math.min(pctUsed, 100)}%`, backgroundColor: bar }} />
+          </div>
+          <span className={`text-xs ${text} tabular-nums w-12 text-right`}>{budget > 0 ? `${Math.round(pctUsed)}%` : '—'}</span>
+        </div>
+      </div>
+    )
+  }
+  const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const periodLabel = period === 'ytd' ? `YTD (${data.monthCount} mo)` : MONTH_LABELS[parseInt(period,10)-1]
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <h3 className="text-sm font-semibold text-gray-700">Budget vs Actual — {periodLabel}</h3>
+        <div className="text-xs text-gray-500">Click a category to expand sub-categories</div>
+      </div>
+      <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 bg-gray-100 text-[10px] font-semibold uppercase tracking-wider text-gray-500 border-b border-gray-200">
+        <div>Category</div>
+        <div className="text-right">Budget</div>
+        <div className="text-right">Actual</div>
+        <div className="text-right">Variance</div>
+        <div>% Used</div>
+      </div>
+      {data.parents.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-gray-500">No budget data for this period.</div>
+      ) : (
+        <>
+          {data.parents.map(p => (
+            <div key={p.category}>
+              <Row
+                label={p.category}
+                budget={p.budget}
+                actual={p.actual}
+                variance={p.variance}
+                isParent
+                canExpand={p.subs.length > 0}
+                expandedNow={expanded[p.category]}
+                onClick={() => toggle(p.category)}
+              />
+              {expanded[p.category] && p.subs.map(s => (
+                <Row
+                  key={`${p.category}|${s.sub_category}`}
+                  label={s.sub_category || '(no sub-category)'}
+                  budget={s.budget}
+                  actual={s.actual}
+                  variance={s.variance}
+                  depth={1}
+                />
+              ))}
+            </div>
+          ))}
+          <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-3 bg-gray-100 text-sm font-bold text-gray-900 border-t-2 border-gray-300">
+            <div className="pl-3">Total</div>
+            <div className="text-right tabular-nums">{fmt(data.totals.budget)}</div>
+            <div className="text-right tabular-nums">{fmt(data.totals.actual)}</div>
+            <div className={`text-right tabular-nums ${data.totals.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(data.totals.variance)}</div>
+            <div className="text-xs text-gray-500">{data.totals.budget > 0 ? `${Math.round((data.totals.actual / data.totals.budget) * 100)}% used` : '—'}</div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Dashboard({ user }) {
-  const { transactions, bills, loading, error, reload } = useFinanceData()
+  const { transactions, bills, budgets, loading, error, reload } = useFinanceData()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
   const [selectedMembers, setSelectedMembers] = useState(null)
@@ -199,6 +292,51 @@ export default function Dashboard({ user }) {
     }
   }, [transactions, availableMonths, thisYear])
 
+  // Budget vs Actual — group budgets + expenses by (category, sub_category),
+  // aggregate across selected period, roll up to parents.
+  const budgetVsActual = useMemo(() => {
+    const months = period !== 'ytd' ? [parseInt(period, 10)] : availableMonths.map(m => parseInt(m, 10))
+    const monthSet = new Set(months)
+    // Sum budgets for the selected months (current year only)
+    const budgetMap = {} // key "cat|sub" -> amount
+    budgets.forEach(b => {
+      if (b.year !== thisYear || !monthSet.has(b.month)) return
+      const key = `${b.category}|${b.sub_category || ''}`
+      budgetMap[key] = (budgetMap[key] || 0) + toNum(b.amount)
+    })
+    // Sum actuals (Expense + Refund) for the selected months, honoring filters
+    const actualMap = {}
+    filtered.forEach(t => {
+      if (t.type !== 'Expense' && t.type !== 'Refund') return
+      const key = `${t.category || 'Uncategorized'}|${t.sub_category || ''}`
+      const sign = t.type === 'Refund' ? -1 : 1
+      actualMap[key] = (actualMap[key] || 0) + sign * toNum(t.amount)
+    })
+    // Union of keys
+    const allKeys = new Set([...Object.keys(budgetMap), ...Object.keys(actualMap)])
+    const subRows = [...allKeys].map(k => {
+      const [cat, sub] = k.split('|')
+      const budget = Math.round(budgetMap[k] || 0)
+      const actual = Math.round(actualMap[k] || 0)
+      return { category: cat, sub_category: sub, budget, actual, variance: budget - actual }
+    })
+    // Roll up to parents
+    const parentMap = {}
+    subRows.forEach(r => {
+      if (!parentMap[r.category]) parentMap[r.category] = { category: r.category, budget: 0, actual: 0, subs: [] }
+      parentMap[r.category].budget += r.budget
+      parentMap[r.category].actual += r.actual
+      parentMap[r.category].subs.push(r)
+    })
+    const parents = Object.values(parentMap).map(p => ({
+      ...p,
+      variance: p.budget - p.actual,
+      subs: p.subs.sort((a,b) => b.actual - a.actual),
+    })).sort((a,b) => b.actual - a.actual)
+    const totals = parents.reduce((acc,p) => ({ budget: acc.budget+p.budget, actual: acc.actual+p.actual }), { budget: 0, actual: 0 })
+    return { parents, totals: { ...totals, variance: totals.budget - totals.actual }, monthCount: months.length }
+  }, [budgets, filtered, period, availableMonths, thisYear])
+
   // Bills: monthly spend against each bill's budget_amount
   const billsComparison = useMemo(() => {
     const months = period !== 'ytd' ? [period] : availableMonths
@@ -257,7 +395,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['spending','Spending',PieIcon],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['trends','Trends',BarChart3]].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -406,6 +544,10 @@ export default function Dashboard({ user }) {
                 </div>
               </div>
             </>
+          )}
+
+          {activeTab === 'budget' && (
+            <BudgetTab data={budgetVsActual} period={period} fmt={fmt} />
           )}
 
           {activeTab === 'bills' && (
