@@ -13,10 +13,15 @@ export default function MFAEnroll({ onDone }) {
   useEffect(() => { enroll() }, [])
 
   const enroll = async () => {
+    setErr('')
     // Clean up any stale unverified factors first
-    const { data: list } = await supabase.auth.mfa.listFactors()
+    const { data: list, error: listErr } = await supabase.auth.mfa.listFactors()
+    if (listErr) { setErr(`Could not load existing factors: ${listErr.message}`); return }
     const stale = list?.totp?.filter(f => f.status !== 'verified') || []
-    for (const f of stale) await supabase.auth.mfa.unenroll({ factorId: f.id })
+    for (const f of stale) {
+      const { error: unErr } = await supabase.auth.mfa.unenroll({ factorId: f.id })
+      if (unErr) { setErr(`Could not remove a stuck MFA factor: ${unErr.message}. Contact support.`); return }
+    }
 
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: 'totp',
@@ -69,6 +74,12 @@ export default function MFAEnroll({ onDone }) {
             </button>
           </form>
         </>
+      ) : err ? (
+        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 my-3">
+          <p className="font-semibold mb-1">Setup error</p>
+          <p>{err}</p>
+          <button onClick={enroll} className="mt-2 text-blue-600 hover:text-blue-800 font-medium underline">Try again</button>
+        </div>
       ) : (
         <div className="text-sm text-gray-500 text-center py-6">Loading QR code…</div>
       )}
