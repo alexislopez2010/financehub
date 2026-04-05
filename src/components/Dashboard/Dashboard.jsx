@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield, Plus } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
@@ -994,9 +994,96 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
   )
 }
 
-function BudgetTab({ data, period, fmt }) {
+function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, categoryList }) {
   const [expanded, setExpanded] = useState({})
   const toggle = (cat) => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))
+  const editableMonth = period !== 'ytd' ? parseInt(period, 10) : null
+  const canEdit = editableMonth !== null && !!householdId
+  const [editing, setEditing] = useState(null) // { category, sub_category, value }
+  const [saving, setSaving] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [newRow, setNewRow] = useState({ category: '', sub_category: '', amount: '' })
+  const [err, setErr] = useState('')
+
+  const startEdit = (category, sub_category, current) => {
+    if (!canEdit) return
+    setErr('')
+    setEditing({ category, sub_category, value: current != null ? String(current) : '' })
+  }
+
+  const saveEdit = async () => {
+    if (!editing || !canEdit) return
+    setSaving(true); setErr('')
+    try {
+      const amt = Number(editing.value)
+      if (Number.isNaN(amt)) throw new Error('Amount must be a number')
+      // Find existing row (sub_category may be null, so branch)
+      const baseSel = supabase.from('budgets').select('id')
+        .eq('household_id', householdId).eq('year', thisYear).eq('month', editableMonth)
+        .eq('category', editing.category)
+      const { data: found, error: selErr } = editing.sub_category
+        ? await baseSel.eq('sub_category', editing.sub_category)
+        : await baseSel.is('sub_category', null)
+      if (selErr) throw selErr
+      const matchRow = found?.[0] || null
+      if (matchRow) {
+        const { error } = await supabase.from('budgets').update({ amount: amt }).eq('id', matchRow.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('budgets').insert({
+          household_id: householdId, year: thisYear, month: editableMonth,
+          category: editing.category, sub_category: editing.sub_category || null, amount: amt
+        })
+        if (error) throw error
+      }
+      setEditing(null)
+      if (onBudgetChanged) await onBudgetChanged()
+    } catch (e) {
+      setErr(e.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteLine = async (category, sub_category) => {
+    if (!canEdit) return
+    if (!confirm(`Remove budget for ${category}${sub_category ? ' / ' + sub_category : ''} in this month?`)) return
+    setSaving(true); setErr('')
+    try {
+      const q = supabase.from('budgets').delete()
+        .eq('household_id', householdId).eq('year', thisYear).eq('month', editableMonth)
+        .eq('category', category)
+      const { error } = sub_category ? await q.eq('sub_category', sub_category) : await q.is('sub_category', null)
+      if (error) throw error
+      if (onBudgetChanged) await onBudgetChanged()
+    } catch (e) {
+      setErr(e.message || 'Delete failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addLine = async () => {
+    if (!canEdit) return
+    setSaving(true); setErr('')
+    try {
+      const amt = Number(newRow.amount)
+      if (!newRow.category.trim()) throw new Error('Category is required')
+      if (Number.isNaN(amt)) throw new Error('Amount must be a number')
+      const { error } = await supabase.from('budgets').insert({
+        household_id: householdId, year: thisYear, month: editableMonth,
+        category: newRow.category.trim(), sub_category: newRow.sub_category.trim() || null, amount: amt
+      })
+      if (error) throw error
+      setAdding(false)
+      setNewRow({ category: '', sub_category: '', amount: '' })
+      if (onBudgetChanged) await onBudgetChanged()
+    } catch (e) {
+      setErr(e.message || 'Add failed')
+    } finally {
+      setSaving(false)
+    }
+  }
   const statusColor = (budget, actual) => {
     if (budget === 0 && actual === 0) return { bar: '#e5e7eb', text: 'text-gray-400' }
     if (budget === 0) return { bar: '#dc2626', text: 'text-red-600' }           // spent with no budget
@@ -1006,20 +1093,44 @@ function BudgetTab({ data, period, fmt }) {
     if (used >= 0.7) return { bar: '#ca8a04', text: 'text-yellow-600' }         // 70-90%
     return { bar: '#059669', text: 'text-emerald-600' }                         // under 70%
   }
-  const Row = ({ label, budget, actual, variance, depth=0, isParent=false, onClick, expandedNow, canExpand }) => {
+  const Row = ({ label, budget, actual, variance, depth=0, isParent=false, onClick, expandedNow, canExpand, editable, onEditClick, onDelete, isEditing, editValue, onEditChange, onEditSave, onEditCancel }) => {
     const { bar, text } = statusColor(budget, actual)
     const pctUsed = budget > 0 ? Math.min((actual / budget) * 100, 150) : 0
     return (
       <div
         onClick={canExpand ? onClick : undefined}
-        className={`grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm ${isParent ? 'bg-gray-50 font-semibold text-gray-900' : 'text-gray-700'} ${canExpand ? 'cursor-pointer hover:bg-gray-100' : ''}`}
+        className={`group grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm ${isParent ? 'bg-gray-50 font-semibold text-gray-900' : 'text-gray-700'} ${canExpand ? 'cursor-pointer hover:bg-gray-100' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
         <div className="flex items-center gap-2 truncate">
           {canExpand && <ChevronDown size={14} className={`transition-transform flex-shrink-0 ${expandedNow ? '' : '-rotate-90'}`} />}
           <span className="truncate">{label}</span>
+          {editable && onDelete && !isEditing && (
+            <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="ml-auto opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600" title="Remove this budget line">
+              <X size={12} />
+            </button>
+          )}
         </div>
-        <div className="text-right tabular-nums">{fmt(budget)}</div>
+        {isEditing ? (
+          <div className="text-right" onClick={e => e.stopPropagation()}>
+            <input
+              type="number" step="0.01" autoFocus
+              value={editValue}
+              onChange={e => onEditChange(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onEditSave(); if (e.key === 'Escape') onEditCancel() }}
+              onBlur={onEditSave}
+              className="w-24 px-2 py-0.5 border border-blue-500 rounded text-sm text-right tabular-nums focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+        ) : (
+          <div
+            onClick={editable ? (e) => { e.stopPropagation(); onEditClick() } : undefined}
+            className={`text-right tabular-nums ${editable ? 'cursor-pointer hover:bg-blue-50 rounded px-2 -mx-2' : ''}`}
+            title={editable ? 'Click to edit' : undefined}
+          >
+            {fmt(budget)}
+          </div>
+        )}
         <div className="text-right tabular-nums">{fmt(actual)}</div>
         <div className={`text-right tabular-nums font-medium ${text}`}>{fmt(variance)}</div>
         <div className="flex items-center gap-2">
@@ -1037,8 +1148,11 @@ function BudgetTab({ data, period, fmt }) {
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-gray-700">Budget vs Actual — {periodLabel}</h3>
-        <div className="text-xs text-gray-500">Click a category to expand sub-categories</div>
+        <div className="text-xs text-gray-500">
+          {canEdit ? 'Expand a category and click a budget amount to edit' : 'Pick a single month above to edit budgets'}
+        </div>
       </div>
+      {err && <div className="mx-4 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{err}</div>}
       <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 bg-gray-100 text-[10px] font-semibold uppercase tracking-wider text-gray-500 border-b border-gray-200">
         <div>Category</div>
         <div className="text-right">Budget</div>
@@ -1062,16 +1176,27 @@ function BudgetTab({ data, period, fmt }) {
                 expandedNow={expanded[p.category]}
                 onClick={() => toggle(p.category)}
               />
-              {expanded[p.category] && p.subs.map(s => (
-                <Row
-                  key={`${p.category}|${s.sub_category}`}
-                  label={s.sub_category || '(no sub-category)'}
-                  budget={s.budget}
-                  actual={s.actual}
-                  variance={s.variance}
-                  depth={1}
-                />
-              ))}
+              {expanded[p.category] && p.subs.map(s => {
+                const isEditingThis = canEdit && editing && editing.category === p.category && (editing.sub_category || '') === (s.sub_category || '')
+                return (
+                  <Row
+                    key={`${p.category}|${s.sub_category}`}
+                    label={s.sub_category || '(no sub-category)'}
+                    budget={s.budget}
+                    actual={s.actual}
+                    variance={s.variance}
+                    depth={1}
+                    editable={canEdit}
+                    onEditClick={() => startEdit(p.category, s.sub_category, s.budget)}
+                    onDelete={() => deleteLine(p.category, s.sub_category)}
+                    isEditing={isEditingThis}
+                    editValue={editing?.value || ''}
+                    onEditChange={(v) => setEditing(prev => prev ? { ...prev, value: v } : prev)}
+                    onEditSave={saveEdit}
+                    onEditCancel={() => setEditing(null)}
+                  />
+                )
+              })}
             </div>
           ))}
           <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-3 bg-gray-100 text-sm font-bold text-gray-900 border-t-2 border-gray-300">
@@ -1083,6 +1208,43 @@ function BudgetTab({ data, period, fmt }) {
           </div>
         </>
       )}
+      {canEdit && (
+        <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+          {adding ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex-1 min-w-[140px]">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Category</span>
+                <input list="budget-categories" value={newRow.category} onChange={e => setNewRow({ ...newRow, category: e.target.value })}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="e.g. Groceries" />
+                <datalist id="budget-categories">
+                  {(categoryList || []).map(c => <option key={c} value={c} />)}
+                </datalist>
+              </label>
+              <label className="flex-1 min-w-[140px]">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Sub-category</span>
+                <input type="text" value={newRow.sub_category} onChange={e => setNewRow({ ...newRow, sub_category: e.target.value })}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Optional" />
+              </label>
+              <label className="w-32">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Amount</span>
+                <input type="number" step="0.01" value={newRow.amount} onChange={e => setNewRow({ ...newRow, amount: e.target.value })}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white text-right tabular-nums focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+              </label>
+              <div className="flex gap-2">
+                <button onClick={addLine} disabled={saving} className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold">
+                  {saving ? 'Saving…' : 'Add'}
+                </button>
+                <button onClick={() => { setAdding(false); setNewRow({ category: '', sub_category: '', amount: '' }); setErr('') }} disabled={saving}
+                  className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-100">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => { setAdding(true); setErr('') }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700">
+              <Plus size={14} />Add budget line for {MONTH_LABELS[editableMonth-1]} {thisYear}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1090,6 +1252,7 @@ function BudgetTab({ data, period, fmt }) {
 export default function Dashboard({ user }) {
   const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, loading, error, reload, patchTransaction } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
+  const { categories: dashCatList } = useCategoryTaxonomy()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
   const [selectedMembers, setSelectedMembers] = useState(null)
@@ -1534,7 +1697,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'budget' && (
-            <BudgetTab data={budgetVsActual} period={period} fmt={fmt} />
+            <BudgetTab data={budgetVsActual} period={period} fmt={fmt} thisYear={thisYear} householdId={householdId} onBudgetChanged={reload} categoryList={dashCatList} />
           )}
 
           {activeTab === 'bills' && (
