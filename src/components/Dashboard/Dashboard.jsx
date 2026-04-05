@@ -428,18 +428,57 @@ function BillsDetail({ bills, transactions, thisYear, fmt }) {
   )
 }
 
-function DebtTracker({ debts, fmt }) {
+function DebtTracker({ debts, accounts, transactions, fmt }) {
   const [strategy, setStrategy] = useState('avalanche') // 'snowball' | 'avalanche'
   const [extra, setExtra] = useState(0)
+  // Per-card min-payment overrides (keyed by debt id). undefined means "use default".
+  const [minOverrides, setMinOverrides] = useState({})
 
-  const active = useMemo(() => (debts || []).filter(d => d.is_active !== false).map(d => ({
-    id: d.id,
-    name: d.name,
-    type: d.type || '',
-    balance: Number(d.balance) || 0,
-    apr: Number(d.apr) || 0,
-    minPayment: Number(d.min_payment) || 0,
-  })), [debts])
+  // For account-linked debts, compute live balance from starting_balance + transactions.
+  // Assumes liability-account convention: Expense adds debt, Income/Refund/Transfer reduce it.
+  const liveBalances = useMemo(() => {
+    const map = {}
+    ;(accounts || []).forEach(a => {
+      if (a.type !== 'credit' && a.type !== 'loan') return
+      const starting = Number(a.starting_balance) || 0
+      let change = 0
+      ;(transactions || []).forEach(t => {
+        if (t.account_id !== a.id) return
+        const amt = Number(t.amount) || 0
+        switch (t.type) {
+          case 'Expense': change += amt; break       // charge → debt up
+          case 'Income':
+          case 'Refund': change -= amt; break        // payment/refund → debt down
+          case 'Transfer': change -= amt; break      // inbound payment → debt down
+          default: break
+        }
+      })
+      map[a.id] = starting + change
+    })
+    return map
+  }, [accounts, transactions])
+
+  const active = useMemo(() => (debts || []).filter(d => d.is_active !== false).map(d => {
+    const linked = d.account_id && liveBalances[d.account_id] != null
+    const balance = linked ? Math.max(0, liveBalances[d.account_id]) : (Number(d.balance) || 0)
+    // Default min payment: stored value if present, else max($25, 2% of balance) for cards,
+    // else just $0 (forces user to set one).
+    const storedMin = Number(d.min_payment) || 0
+    const computedMin = storedMin > 0 ? storedMin
+      : d.type === 'credit_card' ? Math.max(25, Math.round(balance * 0.02))
+      : storedMin
+    const minPayment = minOverrides[d.id] != null ? Number(minOverrides[d.id]) : computedMin
+    return {
+      id: d.id,
+      name: d.name,
+      type: d.type || '',
+      balance,
+      apr: Number(d.apr) || 0,
+      minPayment,
+      defaultMin: computedMin,
+      linked,
+    }
+  }), [debts, liveBalances, minOverrides])
 
   const totalBalance = active.reduce((s, d) => s + d.balance, 0)
   const totalMin = active.reduce((s, d) => s + d.minPayment, 0)
@@ -618,18 +657,44 @@ function DebtTracker({ debts, fmt }) {
               </tr>
             </thead>
             <tbody>
-              {tableRows.map(r => (
-                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-2 text-gray-400 tabular-nums">{r.order}</td>
-                  <td className="px-3 py-2 text-gray-900 font-medium">{r.name}</td>
-                  <td className="px-3 py-2 text-gray-500 text-xs">{r.type}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-900">{fmt(Math.round(r.balance))}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.apr.toFixed(2)}%</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmt(Math.round(r.minPayment))}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.paidMonth ? monthsToYears(r.paidMonth) : <span className="text-red-500">30+ yrs</span>}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-amber-600">{fmt(Math.round(r.interestPaid))}</td>
-                </tr>
-              ))}
+              {tableRows.map(r => {
+                const isOverridden = minOverrides[r.id] != null && Number(minOverrides[r.id]) !== r.defaultMin
+                return (
+                  <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-2 text-gray-400 tabular-nums">{r.order}</td>
+                    <td className="px-3 py-2 text-gray-900 font-medium">
+                      <span>{r.name}</span>
+                      {r.linked && <span className="ml-2 text-[9px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">LIVE</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">{r.type}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">{fmt(Math.round(r.balance))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.apr.toFixed(2)}%</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="text-gray-400 text-xs">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          value={Math.round(r.minPayment)}
+                          onChange={(e) => setMinOverrides(o => ({ ...o, [r.id]: e.target.value }))}
+                          className={`w-20 px-1.5 py-1 text-xs text-right border rounded tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-300 ${isOverridden ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 text-gray-700'}`}
+                          title={isOverridden ? `Overridden (default: $${r.defaultMin})` : `Default: $${r.defaultMin}`}
+                        />
+                        {isOverridden && (
+                          <button
+                            onClick={() => setMinOverrides(o => { const n = { ...o }; delete n[r.id]; return n })}
+                            className="text-[10px] text-gray-400 hover:text-gray-600"
+                            title="Reset to default"
+                          >↺</button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.paidMonth ? monthsToYears(r.paidMonth) : <span className="text-red-500">30+ yrs</span>}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-amber-600">{fmt(Math.round(r.interestPaid))}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -732,7 +797,7 @@ function BudgetTab({ data, period, fmt }) {
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, debts, loading, error, reload } = useFinanceData()
+  const { transactions, bills, budgets, debts, accounts: accountRecords, loading, error, reload } = useFinanceData()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
   const [selectedMembers, setSelectedMembers] = useState(null)
@@ -1186,7 +1251,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'debt' && (
-            <DebtTracker debts={debts} fmt={fmt} />
+            <DebtTracker debts={debts} accounts={accountRecords} transactions={transactions} fmt={fmt} />
           )}
 
           {activeTab === 'trends' && (
