@@ -1456,13 +1456,82 @@ export default function Dashboard({ user }) {
     return { parents, totals: { ...totals, variance: totals.budget - totals.actual }, monthCount: months.length }
   }, [budgets, filtered, period, availableMonths, thisYear])
 
+  // Bill category → transaction (category, sub_category, optional description keywords)
+  // Keywords narrow the match when multiple bills share the same tx sub_category
+  const BILL_TX_MAP = {
+    'AI Services':        { cat: 'Entertainment & Subscriptions', sub: 'AI Services' },
+    'Books/Courses':      { cat: 'Entertainment & Subscriptions', sub: 'Books & Courses' },
+    'Books/Media':        { cat: 'Entertainment & Subscriptions', sub: 'Books & Media' },
+    'Car Payment':        { cat: 'Transportation',                sub: 'Auto Loan/Lease' },
+    'Debt Payment':       { cat: 'Financial',                     sub: 'Debt Payment' },
+    'Dog Food/Supplies':  { cat: 'Personal & Family',             sub: 'Pets' },
+    'Electric':           { cat: 'Housing', sub: 'Utilities (Electric/Gas/Water)', kw: ['firstenergy','electric'] },
+    'Gas':                { cat: 'Housing', sub: 'Utilities (Electric/Gas/Water)', kw: ['njng','natgas','natural gas'] },
+    'Water/Sewer':        { cat: 'Housing', sub: 'Utilities (Electric/Gas/Water)', kw: ['american water','water'] },
+    'Gifts':              { cat: 'Family & Gifts',                sub: null },
+    'Gym/Fitness':        { cat: 'Health & Medical',              sub: 'Fitness' },
+    'Home Insurance':     { cat: 'Housing',                       sub: 'Home Insurance' },
+    'Mortgage/Rent':      { cat: 'Housing',                       sub: null, kw: ['mortgage','freedom mtg'] },
+    'Movies/Events':      { cat: 'Entertainment & Subscriptions', sub: null, kw: ['cinemark','movie','amc'] },
+    'Parking/Tolls':      { cat: 'Transportation',                sub: null, kw: ['ezpass','e-zpass','toll','parking'] },
+    'Phone':              { cat: 'Housing',                       sub: 'Phone' },
+    'School Fees':        { cat: 'Kids',                          sub: 'School Fees' },
+    'School Tuition':     { cat: 'Kids',                          sub: null, kw: ['tuition','middle road'] },
+    'Spa/Massage':        { cat: 'Health & Medical',              sub: 'Spa' },
+    'Streaming Services': { cat: 'Entertainment & Subscriptions', sub: 'Streaming' },
+    'Subscriptions':      { cat: 'Entertainment & Subscriptions', sub: 'Subscriptions' },
+    'Taxes (Federal)':    { cat: 'Taxes',                         sub: 'Federal' },
+    'Technology/Software':{ cat: 'Software & Apps',               sub: 'Subscriptions' },
+    'Tithes/Offering':    { cat: 'Giving',                        sub: 'Tithing' },
+  }
+
+  // Per-bill keyword overrides — narrows AI Services / Debt Payment pools to individual bills
+  const BILL_NAME_KW = {
+    'OpenAI (ChatGPT + API)':       ['openai'],
+    'Claude AI / Anthropic':        ['anthropic','claude'],
+    'ElevenLabs':                   ['elevenlabs'],
+    'Perplexity AI':                ['perplexity'],
+    'Undetectable AI':              ['undetectable'],
+    'Hedra AI':                     ['hedra'],
+    'Best Buy Card':                ['best buy','bestbuy','comenity'],
+    'Merrick Bank Card':            ['merrick'],
+    'Premier / First Premier Cards':['premier','first premier'],
+    'Continental Finance':          ['continental'],
+    'Apple Services Bundle (PayPal)':['apple','paypal inst xfer apple'],
+    'Pinter':                       ['pinter'],
+    'Tucker Carlson Network':       ['tucker','tcn'],
+    'Cozyla':                       ['cozyla'],
+    'NRA Membership':               ['nra'],
+    'LinkedIn Premium':             ['linkedin'],
+    'Uber One':                     ['uber'],
+    'Wired Magazine':               ['wired'],
+    'Microsoft 365':                ['microsoft'],
+    'n8n Cloud':                    ['n8n'],
+    'Canva Pro':                    ['canva'],
+    'Regrid':                       ['regrid'],
+  }
+
   // Bills: monthly spend against each bill's budget_amount
   const billsComparison = useMemo(() => {
     const months = period !== 'ytd' ? [period] : availableMonths
     return bills.filter(b => b.is_active).slice(0,15).map(b => {
       const budget = toNum(b.budget_amount) * months.length
+      const mapping = BILL_TX_MAP[b.category]
+      const nameKw = BILL_NAME_KW[b.name]
       const actual = transactions
-        .filter(t => t.type === 'Expense' && t.category === b.category && months.some(m => t.date?.startsWith(`${thisYear}-${m}`)))
+        .filter(t => {
+          if (t.type !== 'Expense') return false
+          if (!months.some(m => t.date?.startsWith(`${thisYear}-${m}`))) return false
+          if (!mapping) return t.category === b.category  // fallback: exact match
+          if (t.category !== mapping.cat) return false
+          if (mapping.sub && t.sub_category !== mapping.sub) return false
+          const desc = (t.description || '').toLowerCase()
+          // If bill-specific keywords exist, use them for precise matching
+          if (nameKw) return nameKw.some(k => desc.includes(k))
+          // If category-level keywords exist (e.g. Utilities), use them
+          if (mapping.kw) return mapping.kw.some(k => desc.includes(k))
+          return true
+        })
         .reduce((s,t) => s+toNum(t.amount), 0)
       return { name: b.name.length > 20 ? b.name.substring(0,20)+'…' : b.name, budget: Math.round(budget), actual: Math.round(actual) }
     })
