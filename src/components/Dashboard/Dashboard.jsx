@@ -82,12 +82,21 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
+function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilter, onCategoryFilterConsumed }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState(initialCategoryFilter || '')
   const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
   const [page, setPage] = useState(1)
   const pageSize = 50
+  // Accept external category filter hand-off (e.g. from clicking pie chart)
+  useEffect(() => {
+    if (initialCategoryFilter !== undefined && initialCategoryFilter !== null) {
+      setCategoryFilter(initialCategoryFilter || '')
+      if (onCategoryFilterConsumed) onCategoryFilterConsumed()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategoryFilter])
   const [editingId, setEditingId] = useState(null)
   const [editCategory, setEditCategory] = useState('')
   const [editSubCategory, setEditSubCategory] = useState('')
@@ -181,6 +190,9 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
     const q = search.trim().toLowerCase()
     let out = rows
     if (typeFilter !== 'all') out = out.filter(t => t.type === typeFilter)
+    if (categoryFilter) {
+      out = out.filter(t => (t.category || '(uncategorized)') === categoryFilter)
+    }
     if (q) {
       out = out.filter(t =>
         (t.description || '').toLowerCase().includes(q) ||
@@ -198,14 +210,14 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
       return String(av).localeCompare(String(bv)) * mult
     })
     return out
-  }, [rows, search, typeFilter, sort])
+  }, [rows, search, typeFilter, categoryFilter, sort])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1) }, [search, typeFilter, rows])
+  useEffect(() => { setPage(1) }, [search, typeFilter, categoryFilter, rows])
 
   const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' })
   const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
@@ -257,6 +269,15 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
             <option value="Refund">Refund</option>
             <option value="Transfer">Transfer</option>
           </select>
+          {categoryFilter && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs">
+              <span className="text-gray-500">Category:</span>
+              <span className="font-semibold text-blue-700">{categoryFilter}</span>
+              <button onClick={() => setCategoryFilter('')} className="ml-1 p-0.5 rounded hover:bg-blue-100 text-blue-600" title="Clear category filter">
+                <X size={12}/>
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'}</span>
@@ -1036,6 +1057,12 @@ export default function Dashboard({ user }) {
   const [selectedMembers, setSelectedMembers] = useState(null)
   const [selectedCats, setSelectedCats] = useState([])
   const [activeTab, setActiveTab] = useState('overview')
+  const [pendingCategoryFilter, setPendingCategoryFilter] = useState(null)
+
+  const jumpToCategory = (cat) => {
+    setPendingCategoryFilter(cat)
+    setActiveTab('transactions')
+  }
 
   const thisYear = new Date().getFullYear()
 
@@ -1343,12 +1370,13 @@ export default function Dashboard({ user }) {
                   <h3 className="text-sm font-semibold text-gray-700 mb-4">Spending by Category</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <PieChart>
-                      <Pie data={categoryData.slice(0,10)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({name,percent}) => `${(name||'').substring(0,10)} ${(percent*100).toFixed(0)}%`} labelLine={false} style={{fontSize:10}}>
-                        {categoryData.slice(0,10).map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
+                      <Pie data={categoryData.slice(0,10)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({name,percent}) => `${(name||'').substring(0,10)} ${(percent*100).toFixed(0)}%`} labelLine={false} style={{fontSize:10,cursor:'pointer'}} onClick={(d) => d && d.name && jumpToCategory(d.name)}>
+                        {categoryData.slice(0,10).map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} style={{cursor:'pointer'}} />)}
                       </Pie>
                       <Tooltip formatter={(v) => fmt(v)} />
                     </PieChart>
                   </ResponsiveContainer>
+                  <p className="text-[10px] text-gray-400 text-center mt-1">Click a slice to view transactions</p>
                 </div>
               </div>
 
@@ -1452,7 +1480,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} />
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} />
           )}
 
           {activeTab === 'budget' && (
