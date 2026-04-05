@@ -82,10 +82,11 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilter, onCategoryFilterConsumed }) {
+function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilter, onCategoryFilterConsumed, initialAccountFilter, onAccountFilterConsumed }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState(initialCategoryFilter || '')
+  const [accountFilter, setAccountFilter] = useState(initialAccountFilter || '')
   const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
   const [page, setPage] = useState(1)
   const pageSize = 50
@@ -97,6 +98,14 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCategoryFilter])
+  // Accept external account filter hand-off (e.g. from "By Account" pie on Spending tab)
+  useEffect(() => {
+    if (initialAccountFilter !== undefined && initialAccountFilter !== null) {
+      setAccountFilter(initialAccountFilter || '')
+      if (onAccountFilterConsumed) onAccountFilterConsumed()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAccountFilter])
   const [editingId, setEditingId] = useState(null)
   const [editCategory, setEditCategory] = useState('')
   const [editSubCategory, setEditSubCategory] = useState('')
@@ -193,6 +202,9 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
     if (categoryFilter) {
       out = out.filter(t => (t.category || '(uncategorized)') === categoryFilter)
     }
+    if (accountFilter) {
+      out = out.filter(t => (t.account || '') === accountFilter)
+    }
     if (q) {
       out = out.filter(t =>
         (t.description || '').toLowerCase().includes(q) ||
@@ -210,14 +222,14 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
       return String(av).localeCompare(String(bv)) * mult
     })
     return out
-  }, [rows, search, typeFilter, categoryFilter, sort])
+  }, [rows, search, typeFilter, categoryFilter, accountFilter, sort])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const currentPage = Math.min(page, totalPages)
   const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1) }, [search, typeFilter, categoryFilter, rows])
+  useEffect(() => { setPage(1) }, [search, typeFilter, categoryFilter, accountFilter, rows])
 
   const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'desc' })
   const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
@@ -274,6 +286,15 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
               <span className="text-gray-500">Category:</span>
               <span className="font-semibold text-blue-700">{categoryFilter}</span>
               <button onClick={() => setCategoryFilter('')} className="ml-1 p-0.5 rounded hover:bg-blue-100 text-blue-600" title="Clear category filter">
+                <X size={12}/>
+              </button>
+            </div>
+          )}
+          {accountFilter && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
+              <span className="text-gray-500">Account:</span>
+              <span className="font-semibold text-emerald-700">{accountFilter}</span>
+              <button onClick={() => setAccountFilter('')} className="ml-1 p-0.5 rounded hover:bg-emerald-100 text-emerald-600" title="Clear account filter">
                 <X size={12}/>
               </button>
             </div>
@@ -1058,9 +1079,14 @@ export default function Dashboard({ user }) {
   const [selectedCats, setSelectedCats] = useState([])
   const [activeTab, setActiveTab] = useState('overview')
   const [pendingCategoryFilter, setPendingCategoryFilter] = useState(null)
+  const [pendingAccountFilter, setPendingAccountFilter] = useState(null)
 
   const jumpToCategory = (cat) => {
     setPendingCategoryFilter(cat)
+    setActiveTab('transactions')
+  }
+  const jumpToAccount = (acct) => {
+    setPendingAccountFilter(acct)
     setActiveTab('transactions')
   }
 
@@ -1442,12 +1468,13 @@ export default function Dashboard({ user }) {
                   <h3 className="text-sm font-semibold text-gray-700 mb-4">By Account</h3>
                   <ResponsiveContainer width="100%" height={260}>
                     <PieChart>
-                      <Pie data={accountData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({name,percent}) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} style={{fontSize:10}}>
-                        {accountData.map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
+                      <Pie data={accountData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({name,percent}) => `${name} ${(percent*100).toFixed(0)}%`} labelLine={false} style={{fontSize:10,cursor:'pointer'}} onClick={(d) => d && d.name && jumpToAccount(d.name)}>
+                        {accountData.map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} style={{cursor:'pointer'}} />)}
                       </Pie>
                       <Tooltip formatter={(v) => fmt(v)} />
                     </PieChart>
                   </ResponsiveContainer>
+                  <p className="text-[10px] text-gray-400 text-center mt-1">Click a slice to view transactions</p>
                 </div>
               </div>
 
@@ -1480,7 +1507,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} />
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} initialAccountFilter={pendingAccountFilter} onAccountFilterConsumed={() => setPendingAccountFilter(null)} />
           )}
 
           {activeTab === 'budget' && (
