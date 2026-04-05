@@ -318,12 +318,12 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, init
             <tr>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('date')}>Date{sortIcon('date')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('description')}>Description{sortIcon('description')}</th>
-              <th className="px-3 py-2 text-left">Type</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('type')}>Type{sortIcon('type')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('category')}>Category{sortIcon('category')}</th>
-              <th className="px-3 py-2 text-left">Sub</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('sub_category')}>Sub{sortIcon('sub_category')}</th>
               <th className="px-3 py-2 text-right cursor-pointer hover:text-gray-900" onClick={() => toggleSort('amount')}>Amount{sortIcon('amount')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('account')}>Account{sortIcon('account')}</th>
-              <th className="px-3 py-2 text-left">Member</th>
+              <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('member')}>Member{sortIcon('member')}</th>
               <th className="w-10 px-2"></th>
             </tr>
           </thead>

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Edit2, Check, X } from 'lucide-react'
+import { ArrowLeft, Edit2, Check, X, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
 
@@ -49,7 +49,12 @@ export default function AccountDetail({ account, onBack }) {
   const [editSubCategory, setEditSubCategory] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
   const { tree: catTree, categories: catList } = useCategoryTaxonomy()
+  const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === 'date' || col === 'amount' || col === 'running_balance' ? 'desc' : 'asc' })
+  const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
 
   const load = async () => {
     setLoading(true); setError('')
@@ -83,6 +88,30 @@ export default function AccountDetail({ account, onBack }) {
   }, [transactions, account.starting_balance, account.type])
 
   const currentBalance = rowsDesc.length > 0 ? rowsDesc[0].running_balance : (Number(account.starting_balance) || 0)
+
+  // Apply search + type filter + sort on top of rowsDesc (running_balance is preserved per row)
+  const displayRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let out = rowsDesc
+    if (q) {
+      out = out.filter(t =>
+        (t.description || '').toLowerCase().includes(q) ||
+        (t.category || '').toLowerCase().includes(q) ||
+        (t.sub_category || '').toLowerCase().includes(q) ||
+        (t.notes || '').toLowerCase().includes(q) ||
+        (t.member || '').toLowerCase().includes(q)
+      )
+    }
+    if (typeFilter !== 'all') out = out.filter(t => t.type === typeFilter)
+    const mult = sort.dir === 'asc' ? 1 : -1
+    out = [...out].sort((a, b) => {
+      const av = a[sort.col] ?? ''
+      const bv = b[sort.col] ?? ''
+      if (sort.col === 'amount' || sort.col === 'running_balance') return (Number(av) - Number(bv)) * mult
+      return String(av).localeCompare(String(bv)) * mult
+    })
+    return out
+  }, [rowsDesc, search, typeFilter, sort])
 
   // Sub-categories available for the currently-selected Category (cascades).
   const subCatOptions = useMemo(() => {
@@ -155,21 +184,49 @@ export default function AccountDetail({ account, onBack }) {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 flex-wrap">
+            <div className="relative flex-1 min-w-[220px] max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search description, category, notes…"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+              />
+            </div>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+            >
+              <option value="all">All types</option>
+              <option value="Income">Income</option>
+              <option value="Expense">Expense</option>
+              <option value="Refund">Refund</option>
+              <option value="Transfer">Transfer</option>
+            </select>
+            <div className="text-xs text-gray-500 ml-auto">
+              {displayRows.length.toLocaleString()} of {rowsDesc.length.toLocaleString()}
+            </div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-semibold">
                 <tr>
-                  <th className="text-left px-3 py-2">Date</th>
-                  <th className="text-left px-3 py-2">Description</th>
-                  <th className="text-left px-3 py-2">Category</th>
-                  <th className="text-left px-3 py-2">Type</th>
-                  <th className="text-right px-3 py-2">Amount</th>
-                  <th className="text-right px-3 py-2">Balance</th>
+                  <th className="text-left px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('date')}>Date{sortIcon('date')}</th>
+                  <th className="text-left px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('description')}>Description{sortIcon('description')}</th>
+                  <th className="text-left px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('category')}>Category{sortIcon('category')}</th>
+                  <th className="text-left px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('type')}>Type{sortIcon('type')}</th>
+                  <th className="text-right px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('amount')}>Amount{sortIcon('amount')}</th>
+                  <th className="text-right px-3 py-2 cursor-pointer hover:text-gray-900" onClick={() => toggleSort('running_balance')}>Balance{sortIcon('running_balance')}</th>
                   <th className="w-10 px-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {rowsDesc.map(t => {
+                {displayRows.length === 0 ? (
+                  <tr><td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">No transactions match.</td></tr>
+                ) : displayRows.map(t => {
                   const isEditing = editingId === t.id
                   const delta = txDelta(t, account.type)
                   return (
