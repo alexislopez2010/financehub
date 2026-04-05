@@ -93,6 +93,7 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
   const [editSubCategory, setEditSubCategory] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [matchModal, setMatchModal] = useState(null) // { patch, matches: [{id,date,amount,category,...}], selectedIds: Set }
   const { tree: catTree, categories: catList } = useCategoryTaxonomy()
   const subCatOptions = useMemo(() => (editCategory ? (catTree[editCategory] || []) : []), [editCategory, catTree])
   const startEdit = (t) => {
@@ -104,7 +105,7 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
   const cancelEdit = () => {
     setEditingId(null); setEditCategory(''); setEditSubCategory(''); setEditNotes('')
   }
-  const saveEdit = async (id) => {
+  const saveEdit = async (t) => {
     setSaving(true)
     try {
       const patch = {
@@ -112,15 +113,68 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
         sub_category: editSubCategory || null,
         notes:        editNotes.trim() || null,
       }
-      const { error } = await supabase.from('transactions').update(patch).eq('id', id)
+      const { error } = await supabase.from('transactions').update(patch).eq('id', t.id)
       if (error) throw error
-      if (onUpdate) onUpdate(id, patch)
+      if (onUpdate) onUpdate(t.id, patch)
+
+      // Look for other transactions in the same account with the exact same description
+      let similarQuery = supabase
+        .from('transactions')
+        .select('id, date, amount, description, type, category, sub_category, account, account_id')
+        .eq('description', t.description)
+        .neq('id', t.id)
+      if (t.account_id) {
+        similarQuery = similarQuery.eq('account_id', t.account_id)
+      } else if (t.account) {
+        similarQuery = similarQuery.eq('account', t.account)
+      }
+      const { data: similar, error: simErr } = await similarQuery.order('date', { ascending: false })
+      if (simErr) throw simErr
+
       cancelEdit()
+      if (similar && similar.length > 0) {
+        setMatchModal({
+          patch,
+          matches: similar,
+          selectedIds: new Set(similar.map(s => s.id)),
+        })
+      }
     } catch (e) {
       alert('Save failed: ' + (e.message || 'unknown error'))
     } finally {
       setSaving(false)
     }
+  }
+  const applyBulkUpdate = async () => {
+    if (!matchModal) return
+    const ids = Array.from(matchModal.selectedIds)
+    if (ids.length === 0) { setMatchModal(null); return }
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('transactions').update(matchModal.patch).in('id', ids)
+      if (error) throw error
+      if (onUpdate) ids.forEach(id => onUpdate(id, matchModal.patch))
+      setMatchModal(null)
+    } catch (e) {
+      alert('Bulk update failed: ' + (e.message || 'unknown error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+  const toggleMatchId = (id) => {
+    setMatchModal(m => {
+      if (!m) return m
+      const s = new Set(m.selectedIds)
+      if (s.has(id)) s.delete(id); else s.add(id)
+      return { ...m, selectedIds: s }
+    })
+  }
+  const toggleAllMatches = () => {
+    setMatchModal(m => {
+      if (!m) return m
+      const allChecked = m.selectedIds.size === m.matches.length
+      return { ...m, selectedIds: new Set(allChecked ? [] : m.matches.map(x => x.id)) }
+    })
   }
 
   const filtered = useMemo(() => {
@@ -293,7 +347,7 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
                       </label>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => saveEdit(t.id)}
+                          onClick={() => saveEdit(t)}
                           disabled={saving}
                           className="flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold"
                         >
@@ -324,6 +378,77 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">‹ Prev</button>
             <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Next ›</button>
             <button onClick={() => setPage(totalPages)} disabled={currentPage === totalPages} className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50">Last »</button>
+          </div>
+        </div>
+      )}
+      {matchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => !saving && setMatchModal(null)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200">
+              <h3 className="text-base font-semibold text-gray-900">Apply to similar transactions?</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Found {matchModal.matches.length} other {matchModal.matches.length === 1 ? 'transaction' : 'transactions'} with the same description in this account. Check the ones you'd like to update with{' '}
+                <span className="font-medium text-gray-700">{matchModal.patch.category || '—'}{matchModal.patch.sub_category ? ` / ${matchModal.patch.sub_category}` : ''}</span>.
+              </p>
+            </div>
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <button onClick={toggleAllMatches} className="text-xs font-semibold text-blue-600 hover:text-blue-800">
+                {matchModal.selectedIds.size === matchModal.matches.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <span className="text-xs text-gray-500">{matchModal.selectedIds.size} of {matchModal.matches.length} selected</span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-semibold sticky top-0">
+                  <tr>
+                    <th className="w-8 px-3 py-2"></th>
+                    <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-left px-3 py-2">Current Category</th>
+                    <th className="text-right px-3 py-2">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {matchModal.matches.map(m => (
+                    <tr key={m.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={matchModal.selectedIds.has(m.id)}
+                          onChange={() => toggleMatchId(m.id)}
+                          className="rounded border-gray-300 text-blue-600"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{m.date}</td>
+                      <td className="px-3 py-2 text-xs text-gray-700">
+                        {m.category ? (
+                          <>
+                            <span>{m.category}</span>
+                            {m.sub_category && <span className="text-gray-400"> / {m.sub_category}</span>}
+                          </>
+                        ) : <span className="text-gray-400 italic">uncategorized</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-xs whitespace-nowrap">{fmt(Number(m.amount) || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setMatchModal(null)}
+                disabled={saving}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Skip
+              </button>
+              <button
+                onClick={applyBulkUpdate}
+                disabled={saving || matchModal.selectedIds.size === 0}
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold"
+              >
+                {saving ? 'Applying…' : `Apply to ${matchModal.selectedIds.size} selected`}
+              </button>
+            </div>
           </div>
         </div>
       )}
