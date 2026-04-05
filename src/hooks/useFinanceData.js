@@ -48,5 +48,10 @@ export function useFinanceData() {
 
   useEffect(() => { load() }, [])
 
-  return { transactions, bills, budgets, debts, accounts, loading, error, reload: load }
+  // Optimistic local patch for a single transaction (used after inline edits)
+  const patchTransaction = (id, patch) => {
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+  }
+
+  return { transactions, bills, budgets, debts, accounts, loading, error, reload: load, patchTransaction }
 }

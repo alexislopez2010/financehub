@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
+import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
 import AccountsPage from '../Accounts/AccountsPage.jsx'
 
 const COLORS = ['#2563eb','#059669','#d97706','#dc2626','#7c3aed','#db2777','#0891b2','#65a30d','#ea580c','#6366f1','#14b8a6','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316']
@@ -81,12 +82,46 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-function TransactionsTab({ rows, fmt, MONTH_NAMES }) {
+function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
   const [page, setPage] = useState(1)
   const pageSize = 50
+  const [editingId, setEditingId] = useState(null)
+  const [editCategory, setEditCategory] = useState('')
+  const [editSubCategory, setEditSubCategory] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const { tree: catTree, categories: catList } = useCategoryTaxonomy()
+  const subCatOptions = useMemo(() => (editCategory ? (catTree[editCategory] || []) : []), [editCategory, catTree])
+  const startEdit = (t) => {
+    setEditingId(t.id)
+    setEditCategory(t.category || '')
+    setEditSubCategory(t.sub_category || '')
+    setEditNotes(t.notes || '')
+  }
+  const cancelEdit = () => {
+    setEditingId(null); setEditCategory(''); setEditSubCategory(''); setEditNotes('')
+  }
+  const saveEdit = async (id) => {
+    setSaving(true)
+    try {
+      const patch = {
+        category:     editCategory || null,
+        sub_category: editSubCategory || null,
+        notes:        editNotes.trim() || null,
+      }
+      const { error } = await supabase.from('transactions').update(patch).eq('id', id)
+      if (error) throw error
+      if (onUpdate) onUpdate(id, patch)
+      cancelEdit()
+    } catch (e) {
+      alert('Save failed: ' + (e.message || 'unknown error'))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -188,23 +223,96 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES }) {
               <th className="px-3 py-2 text-right cursor-pointer hover:text-gray-900" onClick={() => toggleSort('amount')}>Amount{sortIcon('amount')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('account')}>Account{sortIcon('account')}</th>
               <th className="px-3 py-2 text-left">Member</th>
+              <th className="w-10 px-2"></th>
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">No transactions match.</td></tr>
-            ) : pageRows.map((t) => (
-              <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">No transactions match.</td></tr>
+            ) : pageRows.map((t) => {
+              const isEditing = editingId === t.id
+              return (
+              <Fragment key={t.id}>
+              <tr className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="px-3 py-2 text-gray-600 tabular-nums whitespace-nowrap">{t.date}</td>
-                <td className="px-3 py-2 text-gray-900 max-w-[320px] truncate" title={t.description}>{t.description}</td>
+                <td className="px-3 py-2 text-gray-900 max-w-[320px] truncate" title={t.description}>
+                  <div className="truncate">{t.description}</div>
+                  {t.notes && !isEditing && <div className="text-[11px] text-gray-500 italic truncate" title={t.notes}>{t.notes}</div>}
+                </td>
                 <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeColor(t.type)}`}>{t.type || ''}</span></td>
                 <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{t.category || '—'}</td>
                 <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{t.sub_category || ''}</td>
                 <td className={`px-3 py-2 text-right tabular-nums font-medium ${amountColor(t.type)} whitespace-nowrap`}>{amountSign(t.type)}{fmt(Number(t.amount) || 0).replace('-','')}</td>
                 <td className="px-3 py-2 text-gray-600 whitespace-nowrap text-xs">{t.account || ''}</td>
                 <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{t.member || ''}</td>
+                <td className="px-2 py-2">
+                  {!isEditing && (
+                    <button onClick={() => startEdit(t)} className="p-1 rounded hover:bg-gray-200 text-gray-500" title="Edit category/notes">
+                      <Edit2 size={13}/>
+                    </button>
+                  )}
+                </td>
               </tr>
-            ))}
+              {isEditing && (
+                <tr className="bg-blue-50/40 border-b border-gray-100">
+                  <td colSpan={9} className="px-3 py-3">
+                    <div className="flex flex-col md:flex-row gap-2 md:items-end">
+                      <label className="flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Category</span>
+                        <select
+                          value={editCategory}
+                          onChange={e => { setEditCategory(e.target.value); setEditSubCategory('') }}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                          autoFocus
+                        >
+                          <option value="">— Select —</option>
+                          {catList.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Sub-category</span>
+                        <select
+                          value={editSubCategory}
+                          onChange={e => setEditSubCategory(e.target.value)}
+                          disabled={!editCategory || subCatOptions.length === 0}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          <option value="">{subCatOptions.length === 0 ? '—' : '— None —'}</option>
+                          {subCatOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex-[2]">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Notes</span>
+                        <input
+                          type="text"
+                          value={editNotes}
+                          onChange={e => setEditNotes(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                          placeholder="Optional notes"
+                        />
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveEdit(t.id)}
+                          disabled={saving}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold"
+                        >
+                          <Check size={13}/> Save
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          disabled={saving}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50"
+                        >
+                          <X size={13}/> Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
+            )})}
           </tbody>
         </table>
       </div>
@@ -797,7 +905,7 @@ function BudgetTab({ data, period, fmt }) {
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, debts, accounts: accountRecords, loading, error, reload } = useFinanceData()
+  const { transactions, bills, budgets, debts, accounts: accountRecords, loading, error, reload, patchTransaction } = useFinanceData()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
   const [selectedMembers, setSelectedMembers] = useState(null)
@@ -1219,7 +1327,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} />
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} />
           )}
 
           {activeTab === 'budget' && (
