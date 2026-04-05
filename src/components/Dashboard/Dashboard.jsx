@@ -84,7 +84,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilter, onCategoryFilterConsumed, initialAccountFilter, onAccountFilterConsumed }) {
+function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, initialCategoryFilter, onCategoryFilterConsumed, initialAccountFilter, onAccountFilterConsumed }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState(initialCategoryFilter || '')
@@ -112,6 +112,7 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
   const [editCategory, setEditCategory] = useState('')
   const [editSubCategory, setEditSubCategory] = useState('')
   const [editNotes, setEditNotes] = useState('')
+  const [editMember, setEditMember] = useState('')
   const [saving, setSaving] = useState(false)
   const [matchModal, setMatchModal] = useState(null) // { patch, matches: [{id,date,amount,category,...}], selectedIds: Set }
   const { tree: catTree, categories: catList } = useCategoryTaxonomy()
@@ -121,9 +122,10 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
     setEditCategory(t.category || '')
     setEditSubCategory(t.sub_category || '')
     setEditNotes(t.notes || '')
+    setEditMember(t.member || '')
   }
   const cancelEdit = () => {
-    setEditingId(null); setEditCategory(''); setEditSubCategory(''); setEditNotes('')
+    setEditingId(null); setEditCategory(''); setEditSubCategory(''); setEditNotes(''); setEditMember('')
   }
   const saveEdit = async (t) => {
     setSaving(true)
@@ -132,6 +134,7 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
         category:     editCategory || null,
         sub_category: editSubCategory || null,
         notes:        editNotes.trim() || null,
+        member:       editMember || null,
       }
       const { error } = await supabase.from('transactions').update(patch).eq('id', t.id)
       if (error) throw error
@@ -377,6 +380,17 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, initialCategoryFilt
                         >
                           <option value="">{subCatOptions.length === 0 ? '—' : '— None —'}</option>
                           {subCatOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex-1">
+                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Member</span>
+                        <select
+                          value={editMember}
+                          onChange={e => setEditMember(e.target.value)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                        >
+                          <option value="">— Unassigned —</option>
+                          {(familyMembers || []).map(m => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
                         </select>
                       </label>
                       <label className="flex-[2]">
@@ -1074,7 +1088,7 @@ function BudgetTab({ data, period, fmt }) {
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, debts, accounts: accountRecords, loading, error, reload, patchTransaction } = useFinanceData()
+  const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, loading, error, reload, patchTransaction } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
   const [period, setPeriod] = useState('ytd')
   const [selectedAccounts, setSelectedAccounts] = useState(null)
@@ -1097,7 +1111,11 @@ export default function Dashboard({ user }) {
 
   // Derived option lists
   const allAccounts = useMemo(() => [...new Set(transactions.map(t => t.account || ''))].sort(), [transactions])
-  const allMembers = useMemo(() => [...new Set(transactions.map(t => t.member || ''))].sort(), [transactions])
+  const allMembers = useMemo(() => {
+    const fromFamily = (familyMembers || []).map(f => f.name).filter(Boolean)
+    const fromTx = transactions.map(t => t.member || '')
+    return [...new Set([...fromFamily, ...fromTx])].sort()
+  }, [transactions, familyMembers])
   const allUsedCats = useMemo(() => [...new Set(transactions.filter(t => t.type === 'Expense').map(t => t.category || ''))].sort(), [transactions])
   const availableMonths = useMemo(() => {
     const set = new Set()
@@ -1512,7 +1530,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} initialAccountFilter={pendingAccountFilter} onAccountFilterConsumed={() => setPendingAccountFilter(null)} />
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} familyMembers={familyMembers} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} initialAccountFilter={pendingAccountFilter} onAccountFilterConsumed={() => setPendingAccountFilter(null)} />
           )}
 
           {activeTab === 'budget' && (

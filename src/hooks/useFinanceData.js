@@ -12,6 +12,7 @@ export function useFinanceData() {
   const [budgets, setBudgets] = useState([])
   const [debts, setDebts] = useState([])
   const [accounts, setAccounts] = useState([])
+  const [familyMembers, setFamilyMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -22,23 +23,26 @@ export function useFinanceData() {
       // Ensure current user is linked to the Lopez household (no-op if already a member).
       // Safe to call on every load: the RPC is idempotent and fast.
       await supabase.rpc('claim_lopez_household')
-      const [txRes, billRes, budgetRes, debtRes, accRes] = await Promise.all([
+      const [txRes, billRes, budgetRes, debtRes, accRes, famRes] = await Promise.all([
         supabase.from('transactions').select('*').order('date', { ascending: false }),
         supabase.from('bills').select('*').order('name', { ascending: true }),
         supabase.from('budgets').select('*').order('category', { ascending: true }),
         supabase.from('debts').select('*').order('balance', { ascending: false }),
         supabase.from('accounts').select('*').order('name', { ascending: true }),
+        supabase.from('family_members').select('*').order('name', { ascending: true }),
       ])
       if (txRes.error) throw txRes.error
       if (billRes.error) throw billRes.error
       if (budgetRes.error) throw budgetRes.error
       if (debtRes.error) throw debtRes.error
       if (accRes.error) throw accRes.error
+      if (famRes.error) throw famRes.error
       setTransactions(txRes.data || [])
       setBills(billRes.data || [])
       setBudgets(budgetRes.data || [])
       setDebts(debtRes.data || [])
       setAccounts(accRes.data || [])
+      setFamilyMembers(famRes.data || [])
     } catch (e) {
       setError(e.message || 'Failed to load data')
     } finally {
@@ -53,5 +57,5 @@ export function useFinanceData() {
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
   }
 
-  return { transactions, bills, budgets, debts, accounts, loading, error, reload: load, patchTransaction }
+  return { transactions, bills, budgets, debts, accounts, familyMembers, loading, error, reload: load, patchTransaction }
 }
