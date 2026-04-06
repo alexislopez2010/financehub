@@ -1724,34 +1724,80 @@ export default function Dashboard({ user }) {
   const incomePlanVsActual = useMemo(() => {
     const months = period !== 'ytd' ? [parseInt(period, 10)] : availableMonths.map(m => parseInt(m, 10))
     const monthSet = new Set(months)
-    // Planned: sum income_plan rows for selected months, keyed by member
-    const planMap = {} // member -> planned
+
+    // ── Planned: aggregate by source (combine all members under same source) ──
+    const planBySource = {} // source -> { source, members: Set, planned }
     ;(incomePlan || []).forEach(p => {
       if (p.year !== thisYear || !monthSet.has(p.month) || !p.is_active) return
-      const key = p.member || p.source || 'Other'
-      if (!planMap[key]) planMap[key] = { member: p.member || '', source: p.source || '', planned: 0 }
-      planMap[key].planned += toNum(p.expected_amount)
+      const src = p.source || 'Other'
+      if (!planBySource[src]) planBySource[src] = { source: src, members: new Set(), planned: 0 }
+      if (p.member) planBySource[src].members.add(p.member)
+      planBySource[src].planned += toNum(p.expected_amount)
     })
-    // Actual: Income transactions in the period, keyed by member
-    const actualMap = {}
+
+    // Build lowercase keywords from each source name for matching to tx descriptions
+    // e.g. "Omnicom Shared Services" → ["omnicom","shared","services"]
+    const sourceKeys = Object.keys(planBySource)
+    const sourceTokens = sourceKeys.map(s => s.toLowerCase().split(/\s+/).filter(w => w.length > 2))
+
+    // ── Actual: match Income transactions to plan sources by description ──
+    const actualBySource = {} // source -> amount
+    const unmatchedActual = {} // category -> amount (income txns that don't match any plan source)
     filtered.filter(t => t.type === 'Income').forEach(t => {
-      const key = t.member || t.category || 'Other Income'
-      actualMap[key] = (actualMap[key] || 0) + toNum(t.amount)
+      const desc = (t.description || '').toLowerCase()
+      const member = t.member || ''
+      // Try to match against a plan source (by keywords in description, or by member name)
+      let matched = false
+      for (let i = 0; i < sourceKeys.length; i++) {
+        const tokens = sourceTokens[i]
+        // Match if any significant keyword from the source appears in the description
+        if (tokens.length > 0 && tokens.some(tok => desc.includes(tok))) {
+          actualBySource[sourceKeys[i]] = (actualBySource[sourceKeys[i]] || 0) + toNum(t.amount)
+          matched = true
+          break
+        }
+        // Or match by member name
+        const members = planBySource[sourceKeys[i]].members
+        if (member && members.has(member)) {
+          actualBySource[sourceKeys[i]] = (actualBySource[sourceKeys[i]] || 0) + toNum(t.amount)
+          matched = true
+          break
+        }
+      }
+      if (!matched) {
+        const cat = t.category || 'Other Income'
+        unmatchedActual[cat] = (unmatchedActual[cat] || 0) + toNum(t.amount)
+      }
     })
-    const allKeys = [...new Set([...Object.keys(planMap), ...Object.keys(actualMap)])]
-    const rows = allKeys.map(k => {
-      const plan = planMap[k] || {}
-      const planned = Math.round(plan.planned || 0)
-      const actual = Math.round(actualMap[k] || 0)
-      return {
-        key: k,
-        member: plan.member || k,
-        source: plan.source || k,
+
+    // ── Build rows: one per plan source + one per unmatched category ──
+    const rows = []
+    sourceKeys.forEach(src => {
+      const plan = planBySource[src]
+      const planned = Math.round(plan.planned)
+      const actual = Math.round(actualBySource[src] || 0)
+      rows.push({
+        key: src,
+        member: [...plan.members].join(', '),
+        source: src,
         planned,
         actual,
         variance: actual - planned,
-      }
-    }).sort((a,b) => b.planned - a.planned || b.actual - a.actual)
+      })
+    })
+    Object.keys(unmatchedActual).forEach(cat => {
+      const actual = Math.round(unmatchedActual[cat])
+      rows.push({
+        key: `unmatched-${cat}`,
+        member: '',
+        source: cat,
+        planned: 0,
+        actual,
+        variance: actual,
+      })
+    })
+    rows.sort((a,b) => b.planned - a.planned || b.actual - a.actual)
+
     const totals = rows.reduce((acc, r) => ({
       planned: acc.planned + r.planned,
       actual: acc.actual + r.actual,
@@ -1760,7 +1806,6 @@ export default function Dashboard({ user }) {
       rows,
       totals: { ...totals, variance: totals.actual - totals.planned },
       monthCount: months.length,
-      // For forecast: planned income items with day_of_month
       planItems: (incomePlan || []).filter(p => p.year === thisYear && p.is_active),
     }
   }, [incomePlan, filtered, period, availableMonths, thisYear])
