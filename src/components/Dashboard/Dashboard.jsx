@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield, Plus } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield, Plus, ClipboardList, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
@@ -1520,6 +1520,121 @@ function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBud
   )
 }
 
+/* ───── Obligations Tab ───── */
+function ObligationsTab({ householdId, fmt }) {
+  const [obligations, setObligations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!householdId) return
+    setLoading(true)
+    supabase
+      .from('v_advisor_upcoming_obligations')
+      .select('*')
+      .eq('household_id', householdId)
+      .order('due_date', { ascending: true })
+      .then(({ data, error: err }) => {
+        if (err) setError(err.message)
+        else setObligations(data || [])
+        setLoading(false)
+      })
+  }, [householdId])
+
+  if (loading) return <div className="text-center text-gray-500 py-12">Loading obligations…</div>
+  if (error) return <div className="text-center text-red-500 py-12">Error: {error}</div>
+
+  const totalMonthly = obligations.reduce((s, o) => s + (Number(o.amount) || 0), 0)
+  const fromBills = obligations.filter(o => o.source === 'bill').reduce((s, o) => s + (Number(o.amount) || 0), 0)
+  const fromDebts = obligations.filter(o => o.source === 'debt').reduce((s, o) => s + (Number(o.amount) || 0), 0)
+
+  const today = new Date()
+  today.setHours(0,0,0,0)
+
+  const groupByWeek = () => {
+    const groups = {}
+    obligations.forEach(o => {
+      const d = new Date(o.due_date + 'T00:00:00')
+      const diffDays = Math.floor((d - today) / 86400000)
+      let label
+      if (diffDays < 0) label = 'Past due'
+      else if (diffDays <= 7) label = 'This week'
+      else if (diffDays <= 14) label = 'Next week'
+      else if (diffDays <= 30) label = 'This month'
+      else label = 'Next month+'
+      if (!groups[label]) groups[label] = []
+      groups[label].push(o)
+    })
+    return groups
+  }
+
+  const groups = groupByWeek()
+  const ORDER = ['Past due', 'This week', 'Next week', 'This month', 'Next month+']
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <KPICard title="Total Obligations" value={fmt(Math.round(totalMonthly))} icon={ClipboardList} color={ACCENT.blue} subtitle={`${obligations.length} items`} />
+        <KPICard title="From Bills" value={fmt(Math.round(fromBills))} icon={Wallet} color={ACCENT.green} subtitle={`${obligations.filter(o=>o.source==='bill').length} bills`} />
+        <KPICard title="From Debts" value={fmt(Math.round(fromDebts))} icon={Banknote} color={ACCENT.red} subtitle={`${obligations.filter(o=>o.source==='debt').length} debts`} />
+      </div>
+
+      {/* Info banner */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2.5">
+        <AlertCircle size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-blue-800">
+          <strong>What are obligations?</strong> These are the recurring bills and debt payments that Bill (your financial advisor) uses to project your cash flow. If something is missing or shouldn't be here, adjust it in the Bills or Debt tabs.
+        </div>
+      </div>
+
+      {/* Grouped list */}
+      {ORDER.filter(g => groups[g]?.length).map(group => (
+        <div key={group} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className={`px-4 py-2.5 border-b border-gray-100 flex items-center justify-between ${group === 'Past due' ? 'bg-red-50' : 'bg-gray-50'}`}>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${group === 'Past due' ? 'text-red-600' : 'text-gray-500'}`}>{group}</span>
+            <span className="text-xs font-semibold text-gray-500">{fmt(Math.round(groups[group].reduce((s, o) => s + (Number(o.amount) || 0), 0)))}</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {groups[group].map((o, i) => {
+              const isPastDue = group === 'Past due'
+              const dueDate = new Date(o.due_date + 'T00:00:00')
+              const dateStr = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              return (
+                <div key={`${o.name}-${i}`} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${o.source === 'bill' ? 'bg-green-50' : 'bg-red-50'}`}>
+                      {o.source === 'bill' ? <Wallet size={14} className="text-green-600" /> : <Banknote size={14} className="text-red-600" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">{o.name}</div>
+                      <div className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${o.source === 'bill' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{o.source}</span>
+                        <span>{o.category || '—'}</span>
+                        {o.frequency && o.frequency !== 'Monthly' && <span>· {o.frequency}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className={`text-sm font-bold ${isPastDue ? 'text-red-600' : 'text-gray-900'}`}>{fmt(Math.round(Number(o.amount) || 0))}</div>
+                    <div className={`text-[11px] ${isPastDue ? 'text-red-400' : 'text-gray-400'}`}>due {dateStr}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+
+      {obligations.length === 0 && (
+        <div className="text-center text-gray-500 py-12 bg-white rounded-xl border border-gray-200 border-dashed">
+          No obligations found. Add bills or debts to see them here.
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Dashboard({ user }) {
   const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, incomePlan, loading, error, reload, patchTransaction, removeBill, deleteBill, createBill } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
@@ -1942,7 +2057,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['debt','Debt',Banknote],['trends','Trends',BarChart3], ...(isOwner ? [['admin','Admin',Shield]] : [])].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['debt','Debt',Banknote],['obligations','Obligations',ClipboardList],['trends','Trends',BarChart3], ...(isOwner ? [['admin','Admin',Shield]] : [])].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -2262,6 +2377,10 @@ export default function Dashboard({ user }) {
 
           {activeTab === 'debt' && (
             <DebtTracker debts={debts} accounts={accountRecords} transactions={transactions} fmt={fmt} />
+          )}
+
+          {activeTab === 'obligations' && (
+            <ObligationsTab householdId={householdId} fmt={fmt} />
           )}
 
           {activeTab === 'trends' && (
