@@ -16,6 +16,23 @@ const fmtK = (n) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : fmt(n)
 const pct = (n) => `${(n*100).toFixed(1)}%`
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
+/** Clamp a nominal day-of-month (1-31) to the actual last day of the given month/year */
+const clampDay = (day, year, month /* 1-based */) => {
+  // new Date(year, month, 0) gives the last day of 'month' (0-indexed trick)
+  const lastDay = new Date(year, month, 0).getDate()
+  return Math.min(Math.max(1, day), lastDay)
+}
+
+/** Check if a nominal due day (1-31) falls on a specific date, accounting for short months */
+const isDueOn = (nominalDay, date) => {
+  if (!nominalDay) return false
+  const yr = date.getFullYear()
+  const mo = date.getMonth() + 1
+  const dom = date.getDate()
+  const clamped = clampDay(nominalDay, yr, mo)
+  return dom === clamped
+}
+
 const KPICard = ({ title, value, subtitle, icon: Icon, color, trend, trendLabel }) => (
   <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 flex flex-col gap-1 shadow-sm">
     <div className="flex items-center justify-between">
@@ -659,17 +676,20 @@ function BillsDetail({ bills, transactions, thisYear, fmt, onRemove, onDelete })
   // Next due date based on due_day + frequency (monthly cadence approximation)
   const nextDue = (b) => {
     if (!b.due_day) return null
-    const day = Math.min(28, Math.max(1, b.due_day))
     const f = (b.frequency || '').toLowerCase()
-    if (f === 'annual' || f === 'yearly') {
-      // Unknown month — show day of current month as anchor
-      const d = new Date(curYear, curMonth - 1, day)
-      if (d < today) d.setFullYear(curYear + 1)
-      return d
+    // Try current month first, clamping to its actual last day
+    let day = clampDay(b.due_day, curYear, curMonth)
+    let d = new Date(curYear, curMonth - 1, day)
+    if (d < today) {
+      // Move to next month and re-clamp for that month's length
+      const nextMo = curMonth === 12 ? 1 : curMonth + 1
+      const nextYr = curMonth === 12 ? curYear + 1 : curYear
+      day = clampDay(b.due_day, nextYr, nextMo)
+      d = new Date(nextYr, nextMo - 1, day)
     }
-    // Monthly/Biweekly/Weekly/Quarterly: approximate via monthly anchor
-    const d = new Date(curYear, curMonth - 1, day)
-    if (d < today) d.setMonth(d.getMonth() + 1)
+    if (f === 'annual' || f === 'yearly') {
+      if (d < today) d.setFullYear(curYear + 1)
+    }
     return d
   }
 
@@ -2488,13 +2508,13 @@ export default function Dashboard({ user }) {
                   const dom = dt.getDate()
                   const mo = dt.getMonth() + 1
                   const yr = dt.getFullYear()
-                  // Income arriving this day
+                  // Income arriving this day (clamp day_of_month to actual month length)
                   const dayIncome = (incomePlan || []).filter(p =>
-                    p.is_active && p.year === yr && p.month === mo && p.day_of_month === dom
+                    p.is_active && p.year === yr && p.month === mo && isDueOn(p.day_of_month, dt)
                   ).reduce((s, p) => s + (Number(p.expected_amount) || 0), 0)
-                  // Bills due this day
+                  // Bills due this day (clamp due_day to actual month length)
                   const dayBills = bills.filter(b =>
-                    b.is_active && b.due_day === dom
+                    b.is_active && isDueOn(b.due_day, dt)
                   ).reduce((s, b) => s + (Number(b.budget_amount) || 0), 0)
                   if (d > 0) runBal = runBal + dayIncome - dayBills
                   const label = `${mo}/${dom}`
