@@ -1156,6 +1156,7 @@ function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBud
   const editableMonth = period !== 'ytd' ? parseInt(period, 10) : null
   const canEdit = editableMonth !== null && !!householdId
   const [editing, setEditing] = useState(null) // { category, sub_category, value }
+  const [editingIncome, setEditingIncome] = useState(null) // { source, value }
   const [saving, setSaving] = useState(false)
   const [adding, setAdding] = useState(false)
   const [newRow, setNewRow] = useState({ category: '', sub_category: '', amount: '' })
@@ -1240,6 +1241,47 @@ function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBud
       setSaving(false)
     }
   }
+  const saveIncomeEdit = async () => {
+    if (!editingIncome || !canEdit) return
+    setSaving(true); setErr('')
+    try {
+      const newTotal = Number(editingIncome.value)
+      if (Number.isNaN(newTotal) || newTotal < 0) throw new Error('Amount must be a valid number')
+      // Fetch all income_plan rows for this source in the current month
+      const { data: rows, error: fetchErr } = await supabase.from('income_plan')
+        .select('id, expected_amount')
+        .eq('household_id', householdId)
+        .eq('year', thisYear)
+        .eq('month', editableMonth)
+        .eq('source', editingIncome.source)
+        .eq('is_active', true)
+      if (fetchErr) throw fetchErr
+      const oldTotal = rows.reduce((s, r) => s + (Number(r.expected_amount) || 0), 0)
+      if (oldTotal === 0 && rows.length > 0) {
+        // All zeros — distribute evenly
+        const each = newTotal / rows.length
+        for (const r of rows) {
+          const { error } = await supabase.from('income_plan').update({ expected_amount: each }).eq('id', r.id)
+          if (error) throw error
+        }
+      } else {
+        // Scale proportionally
+        const ratio = newTotal / oldTotal
+        for (const r of rows) {
+          const scaled = Math.round((Number(r.expected_amount) || 0) * ratio * 100) / 100
+          const { error } = await supabase.from('income_plan').update({ expected_amount: scaled }).eq('id', r.id)
+          if (error) throw error
+        }
+      }
+      setEditingIncome(null)
+      if (onBudgetChanged) await onBudgetChanged()
+    } catch (e) {
+      setErr(e.message || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const statusColor = (budget, actual) => {
     if (budget === 0 && actual === 0) return { bar: '#e5e7eb', text: 'text-gray-400' }
     if (budget === 0) return { bar: '#dc2626', text: 'text-red-600' }           // spent with no budget
@@ -1324,10 +1366,30 @@ function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBud
             const pctRcvd = r.planned > 0 ? Math.min((r.actual / r.planned) * 100, 150) : 0
             const varColor = r.variance >= 0 ? 'text-emerald-600' : 'text-red-600'
             const barColor = r.planned > 0 && r.actual >= r.planned ? '#059669' : r.actual >= r.planned * 0.9 ? '#d97706' : '#dc2626'
+            const isEditingThis = canEdit && editingIncome && editingIncome.source === r.source
             return (
-              <div key={r.key} className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm text-gray-700">
-                <div className="truncate">{r.member}{r.source && r.source !== r.member ? <span className="text-gray-400 text-xs ml-1">({r.source})</span> : ''}</div>
-                <div className="text-right tabular-nums">{fmt(r.planned)}</div>
+              <div key={r.key} className="group grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm text-gray-700">
+                <div className="truncate">{r.source}</div>
+                {isEditingThis ? (
+                  <div className="text-right" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="number" step="0.01" autoFocus
+                      value={editingIncome.value}
+                      onChange={e => setEditingIncome(prev => prev ? { ...prev, value: e.target.value } : prev)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveIncomeEdit(); if (e.key === 'Escape') setEditingIncome(null) }}
+                      onBlur={saveIncomeEdit}
+                      className="w-24 px-2 py-0.5 border border-emerald-500 rounded text-sm text-right tabular-nums focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    onClick={canEdit && r.planned > 0 ? () => { setErr(''); setEditingIncome({ source: r.source, value: String(r.planned) }) } : undefined}
+                    className={`text-right tabular-nums ${canEdit && r.planned > 0 ? 'cursor-pointer hover:bg-emerald-50 rounded px-2 -mx-2' : ''}`}
+                    title={canEdit && r.planned > 0 ? 'Click to edit' : undefined}
+                  >
+                    {fmt(r.planned)}
+                  </div>
+                )}
                 <div className="text-right tabular-nums">{fmt(r.actual)}</div>
                 <div className={`text-right tabular-nums font-medium ${varColor}`}>{fmt(r.variance)}</div>
                 <div className="flex items-center gap-2">
@@ -1778,7 +1840,6 @@ export default function Dashboard({ user }) {
       const actual = Math.round(actualBySource[src] || 0)
       rows.push({
         key: src,
-        member: [...plan.members].join(', '),
         source: src,
         planned,
         actual,
@@ -1789,7 +1850,6 @@ export default function Dashboard({ user }) {
       const actual = Math.round(unmatchedActual[cat])
       rows.push({
         key: `unmatched-${cat}`,
-        member: '',
         source: cat,
         planned: 0,
         actual,
