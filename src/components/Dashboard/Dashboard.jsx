@@ -2493,13 +2493,14 @@ export default function Dashboard({ user }) {
                   .reduce((s, a) => s + (Number(a.starting_balance) || 0), 0)
 
                 // Cash-basis past delta: only transactions on cash accounts
-                // Income/Refund add, Expense/Transfer subtract (transfers = card payments leaving checking)
+                // Income/Refund add, Expense subtracts, Transfer uses raw sign (negative=out, positive=in)
                 const pastDelta = transactions
                   .filter(t => t.date && t.date <= todayStr && cashAccts.has(t.account))
                   .reduce((s, t) => {
                     const amt = Number(t.amount) || 0
                     if (t.type === 'Income' || t.type === 'Refund') return s + amt
-                    if (t.type === 'Expense' || t.type === 'Transfer') return s - Math.abs(amt)
+                    if (t.type === 'Expense') return s - amt
+                    if (t.type === 'Transfer') return s + amt // already signed: negative=outflow, positive=inflow
                     return s
                   }, 0)
                 let runBal = startBalance + pastDelta
