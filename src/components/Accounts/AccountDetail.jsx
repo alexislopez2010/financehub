@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Edit2, Check, X, Search } from 'lucide-react'
+import { ArrowLeft, Edit2, Check, X, Search, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
 
@@ -52,6 +52,51 @@ export default function AccountDetail({ account, onBack }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sort, setSort] = useState({ col: 'date', dir: 'desc' })
+  // Promote-to-bill state
+  const [promoteTarget, setPromoteTarget] = useState(null)
+  const [promoteName, setPromoteName] = useState('')
+  const [promoteCategory, setPromoteCategory] = useState('')
+  const [promoteFrequency, setPromoteFrequency] = useState('Monthly')
+  const [promoteAmount, setPromoteAmount] = useState('')
+  const [promoteDueDay, setPromoteDueDay] = useState('')
+  const [promoteAccount, setPromoteAccount] = useState('')
+  const [promoteSaving, setPromoteSaving] = useState(false)
+  const [promoteError, setPromoteError] = useState('')
+  const startPromote = (t) => {
+    setPromoteTarget(t)
+    setPromoteName(t.description?.substring(0, 60) || '')
+    setPromoteCategory(t.sub_category || t.category || '')
+    setPromoteFrequency('Monthly')
+    setPromoteAmount(String(Number(t.amount) || 0))
+    setPromoteDueDay(t.date ? String(new Date(t.date + 'T12:00:00').getDate()) : '')
+    setPromoteAccount(account.name || '')
+    setPromoteError('')
+  }
+  const cancelPromote = () => { setPromoteTarget(null); setPromoteError('') }
+  const submitPromote = async () => {
+    if (!promoteName.trim()) { setPromoteError('Bill name is required'); return }
+    if (!promoteAmount || Number(promoteAmount) <= 0) { setPromoteError('Amount must be > 0'); return }
+    setPromoteSaving(true)
+    try {
+      const { error: err } = await supabase.from('bills').insert({
+        household_id: account.household_id || '00000000-0000-0000-0000-000000000001',
+        name: promoteName.trim(),
+        category: promoteCategory || null,
+        account: promoteAccount || null,
+        frequency: promoteFrequency,
+        budget_amount: Number(promoteAmount),
+        due_day: promoteDueDay ? Number(promoteDueDay) : null,
+        is_active: true,
+      })
+      if (err) throw err
+      setPromoteTarget(null)
+    } catch (e) {
+      setPromoteError(e.message || 'Failed to create bill')
+    } finally {
+      setPromoteSaving(false)
+    }
+  }
+
   const { tree: catTree, categories: catList } = useCategoryTaxonomy()
   const toggleSort = (col) => setSort(s => s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: col === 'date' || col === 'amount' || col === 'running_balance' ? 'desc' : 'asc' })
   const sortIcon = (col) => sort.col !== col ? null : <span className="text-[9px] ml-0.5">{sort.dir === 'asc' ? '▲' : '▼'}</span>
@@ -247,9 +292,16 @@ export default function AccountDetail({ account, onBack }) {
                         <td className="px-3 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">{fmtUSD(t.running_balance)}</td>
                         <td className="px-2 py-2">
                           {!isEditing && (
-                            <button onClick={() => startEdit(t)} className="p-1 rounded hover:bg-gray-200 text-gray-500" title="Edit category/notes">
-                              <Edit2 size={13}/>
-                            </button>
+                            <div className="flex items-center gap-0.5">
+                              <button onClick={() => startEdit(t)} className="p-1 rounded hover:bg-gray-200 text-gray-500" title="Edit category/notes">
+                                <Edit2 size={13}/>
+                              </button>
+                              {t.type === 'Expense' && (
+                                <button onClick={() => startPromote(t)} className="p-1 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-600" title="Promote to recurring bill">
+                                  <ArrowUpRight size={13}/>
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -316,6 +368,69 @@ export default function AccountDetail({ account, onBack }) {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Promote-to-bill modal */}
+      {promoteTarget && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={cancelPromote}>
+          <div className="bg-white rounded-xl max-w-md w-full shadow-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="font-semibold text-gray-900">Promote to Recurring Bill</h3>
+              <button onClick={cancelPromote} className="text-gray-400 hover:text-gray-600"><X size={18}/></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {promoteError && <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">{promoteError}</div>}
+              <label className="block">
+                <span className="block text-xs font-semibold text-gray-700 mb-1">Bill Name</span>
+                <input type="text" value={promoteName} onChange={e => setPromoteName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Category</span>
+                  <input type="text" value={promoteCategory} onChange={e => setPromoteCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+                </label>
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Account</span>
+                  <input type="text" value={promoteAccount} onChange={e => setPromoteAccount(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+                </label>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Amount</span>
+                  <input type="number" step="0.01" value={promoteAmount} onChange={e => setPromoteAmount(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+                </label>
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Frequency</span>
+                  <select value={promoteFrequency} onChange={e => setPromoteFrequency(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400">
+                    <option>Monthly</option>
+                    <option>Biweekly</option>
+                    <option>Weekly</option>
+                    <option>Quarterly</option>
+                    <option>Annual</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-700 mb-1">Due Day</span>
+                  <input type="number" min="1" max="31" value={promoteDueDay} onChange={e => setPromoteDueDay(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400" />
+                </label>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={cancelPromote} disabled={promoteSaving}
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submitPromote} disabled={promoteSaving}
+                  className="flex-1 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                  {promoteSaving ? 'Creating…' : 'Create Bill'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
