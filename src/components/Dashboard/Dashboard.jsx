@@ -1325,8 +1325,8 @@ function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBud
             const varColor = r.variance >= 0 ? 'text-emerald-600' : 'text-red-600'
             const barColor = r.planned > 0 && r.actual >= r.planned ? '#059669' : r.actual >= r.planned * 0.9 ? '#d97706' : '#dc2626'
             return (
-              <div key={r.source} className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm text-gray-700">
-                <div className="truncate">{r.source}</div>
+              <div key={r.key} className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm text-gray-700">
+                <div className="truncate">{r.member}{r.source && r.source !== r.member ? <span className="text-gray-400 text-xs ml-1">({r.source})</span> : ''}</div>
                 <div className="text-right tabular-nums">{fmt(r.planned)}</div>
                 <div className="text-right tabular-nums">{fmt(r.actual)}</div>
                 <div className={`text-right tabular-nums font-medium ${varColor}`}>{fmt(r.variance)}</div>
@@ -1724,25 +1724,34 @@ export default function Dashboard({ user }) {
   const incomePlanVsActual = useMemo(() => {
     const months = period !== 'ytd' ? [parseInt(period, 10)] : availableMonths.map(m => parseInt(m, 10))
     const monthSet = new Set(months)
-    // Planned: sum income_plan rows for selected months
-    const planMap = {} // source -> planned
+    // Planned: sum income_plan rows for selected months, keyed by member
+    const planMap = {} // member -> planned
     ;(incomePlan || []).forEach(p => {
       if (p.year !== thisYear || !monthSet.has(p.month) || !p.is_active) return
-      planMap[p.source] = (planMap[p.source] || 0) + toNum(p.expected_amount)
+      const key = p.member || p.source || 'Other'
+      if (!planMap[key]) planMap[key] = { member: p.member || '', source: p.source || '', planned: 0 }
+      planMap[key].planned += toNum(p.expected_amount)
     })
-    // Actual: Income transactions in the period (already filtered by account/member)
+    // Actual: Income transactions in the period, keyed by member
     const actualMap = {}
     filtered.filter(t => t.type === 'Income').forEach(t => {
-      const src = t.category || 'Other Income'
-      actualMap[src] = (actualMap[src] || 0) + toNum(t.amount)
+      const key = t.member || t.category || 'Other Income'
+      actualMap[key] = (actualMap[key] || 0) + toNum(t.amount)
     })
-    const allSources = [...new Set([...Object.keys(planMap), ...Object.keys(actualMap)])]
-    const rows = allSources.map(s => ({
-      source: s,
-      planned: Math.round(planMap[s] || 0),
-      actual: Math.round(actualMap[s] || 0),
-      variance: Math.round((actualMap[s] || 0) - (planMap[s] || 0)),
-    })).sort((a,b) => b.planned - a.planned || b.actual - a.actual)
+    const allKeys = [...new Set([...Object.keys(planMap), ...Object.keys(actualMap)])]
+    const rows = allKeys.map(k => {
+      const plan = planMap[k] || {}
+      const planned = Math.round(plan.planned || 0)
+      const actual = Math.round(actualMap[k] || 0)
+      return {
+        key: k,
+        member: plan.member || k,
+        source: plan.source || k,
+        planned,
+        actual,
+        variance: actual - planned,
+      }
+    }).sort((a,b) => b.planned - a.planned || b.actual - a.actual)
     const totals = rows.reduce((acc, r) => ({
       planned: acc.planned + r.planned,
       actual: acc.actual + r.actual,

@@ -154,13 +154,15 @@ export default function AdminTab({ householdId }) {
           title="Income Plan"
           table="income_plan"
           householdId={householdId}
-          orderBy={{ column: 'source', ascending: true }}
+          orderBy={{ column: 'member', ascending: true }}
           columns={[
+            { key: 'member', label: 'Member', type: 'text', required: true },
             { key: 'source', label: 'Source', type: 'text', required: true },
             { key: 'expected_amount', label: 'Amount', type: 'number', required: true, default: 0, step: 0.01 },
-            { key: 'frequency', label: 'Frequency', type: 'select', required: true, default: 'Monthly', options: [
+            { key: 'frequency', label: 'Frequency', type: 'select', required: true, default: 'Semi-monthly', options: [
               { value: 'Weekly', label: 'Weekly' },
               { value: 'Biweekly', label: 'Bi-weekly' },
+              { value: 'Semi-monthly', label: 'Semi-monthly' },
               { value: 'Monthly', label: 'Monthly' },
               { value: 'Quarterly', label: 'Quarterly' },
               { value: 'Annual', label: 'Annual' },
