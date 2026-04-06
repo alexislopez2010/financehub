@@ -869,6 +869,20 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
   const [extra, setExtra] = useState(0)
   // Per-card min-payment overrides (keyed by debt id). undefined means "use default".
   const [minOverrides, setMinOverrides] = useState({})
+  const [savingMin, setSavingMin] = useState({})
+  const saveTimers = useMemo(() => ({}), [])
+
+  // Persist min_payment to Supabase (debounced 1s after last keystroke)
+  const persistMinPayment = (debtId, value) => {
+    if (saveTimers[debtId]) clearTimeout(saveTimers[debtId])
+    saveTimers[debtId] = setTimeout(async () => {
+      const numVal = Number(value)
+      if (isNaN(numVal) || numVal < 0) return
+      setSavingMin(s => ({ ...s, [debtId]: true }))
+      await supabase.from('debts').update({ min_payment: numVal > 0 ? numVal : null }).eq('id', debtId)
+      setSavingMin(s => ({ ...s, [debtId]: false }))
+    }, 1000)
+  }
 
   // For account-linked debts, compute live balance from starting_balance + transactions.
   // Assumes liability-account convention: Expense adds debt, Income/Refund/Transfer reduce it.
@@ -1104,6 +1118,7 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
             <tbody>
               {tableRows.map(r => {
                 const isOverridden = minOverrides[r.id] != null && Number(minOverrides[r.id]) !== r.defaultMin
+                const isSaving = savingMin[r.id]
                 return (
                   <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-400 tabular-nums">{r.order}</td>
@@ -1122,13 +1137,13 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
                           min="0"
                           step="10"
                           value={Math.round(r.totalPayment)}
-                          onChange={(e) => setMinOverrides(o => ({ ...o, [r.id]: e.target.value }))}
+                          onChange={(e) => { setMinOverrides(o => ({ ...o, [r.id]: e.target.value })); persistMinPayment(r.id, e.target.value) }}
                           className={`w-20 px-1.5 py-1 text-xs text-right border rounded tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-300 ${isOverridden ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 text-gray-700'}`}
-                          title={isOverridden ? `Overridden (default: $${r.defaultMin})` : `Default: $${r.defaultMin}`}
+                          title={isSaving ? 'Saving…' : isOverridden ? `Overridden (default: $${r.defaultMin})` : `Default: $${r.defaultMin}`}
                         />
                         {isOverridden && (
                           <button
-                            onClick={() => setMinOverrides(o => { const n = { ...o }; delete n[r.id]; return n })}
+                            onClick={() => { setMinOverrides(o => { const n = { ...o }; delete n[r.id]; return n }); persistMinPayment(r.id, r.defaultMin) }}
                             className="text-[10px] text-gray-400 hover:text-gray-600"
                             title="Reset to default"
                           >↺</button>
