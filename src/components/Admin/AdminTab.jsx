@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Users, UserCircle, Tags, Building2, Wallet, Banknote } from 'lucide-react'
+import { Users, UserCircle, Tags, Building2, Wallet, Banknote, TrendingUp } from 'lucide-react'
 import AdminEntityManager from './AdminEntityManager.jsx'
 import AdminUsersManager from './AdminUsersManager.jsx'
 
@@ -10,6 +10,7 @@ const SECTIONS = [
   { key: 'accounts', label: 'Accounts', icon: Building2 },
   { key: 'bills', label: 'Bills', icon: Wallet },
   { key: 'debts', label: 'Debts', icon: Banknote },
+  { key: 'income', label: 'Income Plan', icon: TrendingUp },
 ]
 
 export default function AdminTab({ householdId }) {
@@ -142,6 +143,31 @@ export default function AdminTab({ householdId }) {
             { key: 'min_payment', label: 'Min payment', type: 'number', step: 0.01 },
             { key: 'due_day', label: 'Due day', type: 'number', step: 1, min: 1 },
             { key: 'account_id', label: 'Linked account ID', type: 'text' },
+            { key: 'is_active', label: 'Active', type: 'boolean', default: true },
+            { key: 'notes', label: 'Notes', type: 'text' },
+          ]}
+        />
+      )}
+
+      {section === 'income' && (
+        <AdminEntityManager
+          title="Income Plan"
+          table="income_plan"
+          householdId={householdId}
+          orderBy={{ column: 'source', ascending: true }}
+          columns={[
+            { key: 'source', label: 'Source', type: 'text', required: true },
+            { key: 'expected_amount', label: 'Amount', type: 'number', required: true, default: 0, step: 0.01 },
+            { key: 'frequency', label: 'Frequency', type: 'select', required: true, default: 'Monthly', options: [
+              { value: 'Weekly', label: 'Weekly' },
+              { value: 'Biweekly', label: 'Bi-weekly' },
+              { value: 'Monthly', label: 'Monthly' },
+              { value: 'Quarterly', label: 'Quarterly' },
+              { value: 'Annual', label: 'Annual' },
+            ] },
+            { key: 'year', label: 'Year', type: 'number', required: true, default: new Date().getFullYear(), step: 1 },
+            { key: 'month', label: 'Month (1-12)', type: 'number', required: true, default: new Date().getMonth() + 1, step: 1, min: 1 },
+            { key: 'day_of_month', label: 'Pay day', type: 'number', step: 1, min: 1 },
             { key: 'is_active', label: 'Active', type: 'boolean', default: true },
             { key: 'notes', label: 'Notes', type: 'text' },
           ]}

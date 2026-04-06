@@ -1150,7 +1150,7 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
   )
 }
 
-function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, categoryList }) {
+function BudgetTab({ data, incomeData, period, fmt, thisYear, householdId, onBudgetChanged, categoryList }) {
   const [expanded, setExpanded] = useState({})
   const toggle = (cat) => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))
   const editableMonth = period !== 'ytd' ? parseInt(period, 10) : null
@@ -1309,6 +1309,47 @@ function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, 
         </div>
       </div>
       {err && <div className="mx-4 mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{err}</div>}
+
+      {/* ── Income section ── */}
+      {incomeData && incomeData.rows.length > 0 && (
+        <>
+          <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 border-b border-emerald-200">
+            <div>Income Source</div>
+            <div className="text-right">Planned</div>
+            <div className="text-right">Actual</div>
+            <div className="text-right">Variance</div>
+            <div>% Received</div>
+          </div>
+          {incomeData.rows.map(r => {
+            const pctRcvd = r.planned > 0 ? Math.min((r.actual / r.planned) * 100, 150) : 0
+            const varColor = r.variance >= 0 ? 'text-emerald-600' : 'text-red-600'
+            const barColor = r.planned > 0 && r.actual >= r.planned ? '#059669' : r.actual >= r.planned * 0.9 ? '#d97706' : '#dc2626'
+            return (
+              <div key={r.source} className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 border-b border-gray-100 text-sm text-gray-700">
+                <div className="truncate">{r.source}</div>
+                <div className="text-right tabular-nums">{fmt(r.planned)}</div>
+                <div className="text-right tabular-nums">{fmt(r.actual)}</div>
+                <div className={`text-right tabular-nums font-medium ${varColor}`}>{fmt(r.variance)}</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-gray-200 rounded-full h-1.5 min-w-[40px] overflow-hidden">
+                    <div className="h-1.5 rounded-full" style={{ width: `${Math.min(pctRcvd, 100)}%`, backgroundColor: barColor }} />
+                  </div>
+                  <span className="text-xs tabular-nums w-12 text-right">{r.planned > 0 ? `${Math.round(pctRcvd)}%` : '—'}</span>
+                </div>
+              </div>
+            )
+          })}
+          <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-2 bg-emerald-50 text-sm font-bold text-gray-900 border-b-2 border-emerald-300">
+            <div className="pl-3">Total Income</div>
+            <div className="text-right tabular-nums">{fmt(incomeData.totals.planned)}</div>
+            <div className="text-right tabular-nums">{fmt(incomeData.totals.actual)}</div>
+            <div className={`text-right tabular-nums ${incomeData.totals.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(incomeData.totals.variance)}</div>
+            <div className="text-xs text-gray-500">{incomeData.totals.planned > 0 ? `${Math.round((incomeData.totals.actual / incomeData.totals.planned) * 100)}% received` : '—'}</div>
+          </div>
+        </>
+      )}
+
+      {/* ── Expense section ── */}
       <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 px-3 py-2 bg-gray-100 text-[10px] font-semibold uppercase tracking-wider text-gray-500 border-b border-gray-200">
         <div>Category</div>
         <div className="text-right">Budget</div>
@@ -1356,13 +1397,25 @@ function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, 
             </div>
           ))}
           <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-3 bg-gray-100 text-sm font-bold text-gray-900 border-t-2 border-gray-300">
-            <div className="pl-3">Total</div>
+            <div className="pl-3">Total Expenses</div>
             <div className="text-right tabular-nums">{fmt(data.totals.budget)}</div>
             <div className="text-right tabular-nums">{fmt(data.totals.actual)}</div>
             <div className={`text-right tabular-nums ${data.totals.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(data.totals.variance)}</div>
             <div className="text-xs text-gray-500">{data.totals.budget > 0 ? `${Math.round((data.totals.actual / data.totals.budget) * 100)}% used` : '—'}</div>
           </div>
         </>
+      )}
+      {/* Net summary when income data exists */}
+      {incomeData && incomeData.totals.planned > 0 && (
+        <div className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_1fr_1fr] gap-2 items-center px-3 py-3 bg-blue-50 text-sm font-bold text-gray-900 border-t-2 border-blue-300">
+          <div className="pl-3">Net (Income − Expenses)</div>
+          <div className="text-right tabular-nums">{fmt(incomeData.totals.planned - data.totals.budget)}</div>
+          <div className="text-right tabular-nums">{fmt(incomeData.totals.actual - data.totals.actual)}</div>
+          <div className={`text-right tabular-nums ${(incomeData.totals.actual - data.totals.actual) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {fmt((incomeData.totals.actual - data.totals.actual) - (incomeData.totals.planned - data.totals.budget))}
+          </div>
+          <div className="text-xs text-gray-500">Planned vs Actual</div>
+        </div>
       )}
       {canEdit && (
         <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
@@ -1406,7 +1459,7 @@ function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, 
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, loading, error, reload, patchTransaction, removeBill, deleteBill, createBill } = useFinanceData()
+  const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, incomePlan, loading, error, reload, patchTransaction, removeBill, deleteBill, createBill } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
   const { categories: dashCatList } = useCategoryTaxonomy()
   const [period, setPeriod] = useState('ytd')
@@ -1667,6 +1720,42 @@ export default function Dashboard({ user }) {
     'Regrid':                       ['regrid'],
   }
 
+  // Income plan vs actual — aggregate by source for selected period
+  const incomePlanVsActual = useMemo(() => {
+    const months = period !== 'ytd' ? [parseInt(period, 10)] : availableMonths.map(m => parseInt(m, 10))
+    const monthSet = new Set(months)
+    // Planned: sum income_plan rows for selected months
+    const planMap = {} // source -> planned
+    ;(incomePlan || []).forEach(p => {
+      if (p.year !== thisYear || !monthSet.has(p.month) || !p.is_active) return
+      planMap[p.source] = (planMap[p.source] || 0) + toNum(p.expected_amount)
+    })
+    // Actual: Income transactions in the period (already filtered by account/member)
+    const actualMap = {}
+    filtered.filter(t => t.type === 'Income').forEach(t => {
+      const src = t.category || 'Other Income'
+      actualMap[src] = (actualMap[src] || 0) + toNum(t.amount)
+    })
+    const allSources = [...new Set([...Object.keys(planMap), ...Object.keys(actualMap)])]
+    const rows = allSources.map(s => ({
+      source: s,
+      planned: Math.round(planMap[s] || 0),
+      actual: Math.round(actualMap[s] || 0),
+      variance: Math.round((actualMap[s] || 0) - (planMap[s] || 0)),
+    })).sort((a,b) => b.planned - a.planned || b.actual - a.actual)
+    const totals = rows.reduce((acc, r) => ({
+      planned: acc.planned + r.planned,
+      actual: acc.actual + r.actual,
+    }), { planned: 0, actual: 0 })
+    return {
+      rows,
+      totals: { ...totals, variance: totals.actual - totals.planned },
+      monthCount: months.length,
+      // For forecast: planned income items with day_of_month
+      planItems: (incomePlan || []).filter(p => p.year === thisYear && p.is_active),
+    }
+  }, [incomePlan, filtered, period, availableMonths, thisYear])
+
   // Bills: monthly spend against each bill's budget_amount
   const billsComparison = useMemo(() => {
     const months = period !== 'ytd' ? [period] : availableMonths
@@ -1787,6 +1876,38 @@ export default function Dashboard({ user }) {
                 <KPICard title="Net Cash Flow" value={fmt(netCashflow)} icon={DollarSign} color={netCashflow >= 0 ? ACCENT.green : ACCENT.red} subtitle={netCashflow >= 0 ? 'Positive' : 'Deficit'} />
                 <KPICard title="Savings Rate" value={pct(savingsRate)} icon={Wallet} color={ACCENT.purple} subtitle={savingsRate >= 0.2 ? 'On track' : 'Below 20% target'} />
               </div>
+              {incomePlanVsActual.totals.planned > 0 && (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                  <KPICard
+                    title="Planned Income"
+                    value={fmt(incomePlanVsActual.totals.planned)}
+                    icon={TrendingUp}
+                    color={ACCENT.green}
+                    subtitle={`${Math.round((incomePlanVsActual.totals.actual / incomePlanVsActual.totals.planned) * 100)}% received`}
+                  />
+                  <KPICard
+                    title="Projected Net"
+                    value={fmt(incomePlanVsActual.totals.planned - budgetVsActual.totals.budget)}
+                    icon={DollarSign}
+                    color={(incomePlanVsActual.totals.planned - budgetVsActual.totals.budget) >= 0 ? ACCENT.green : ACCENT.red}
+                    subtitle="Planned income − budgeted expenses"
+                  />
+                  <KPICard
+                    title="Target Savings"
+                    value={incomePlanVsActual.totals.planned > 0 ? pct((incomePlanVsActual.totals.planned - budgetVsActual.totals.budget) / incomePlanVsActual.totals.planned) : '—'}
+                    icon={Target}
+                    color={ACCENT.purple}
+                    subtitle={`Actual: ${pct(savingsRate)}`}
+                  />
+                  <KPICard
+                    title="Income Variance"
+                    value={fmt(incomePlanVsActual.totals.variance)}
+                    icon={TrendingUp}
+                    color={incomePlanVsActual.totals.variance >= 0 ? ACCENT.green : ACCENT.red}
+                    subtitle={incomePlanVsActual.totals.variance >= 0 ? 'Ahead of plan' : 'Behind plan'}
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                 <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
@@ -1852,6 +1973,82 @@ export default function Dashboard({ user }) {
                   </div>
                 </div>
               </div>
+
+              {/* Balance Forecast — 30-day projection using income + bills */}
+              {incomePlanVsActual.totals.planned > 0 && (() => {
+                const today = new Date()
+                const todayStr = today.toISOString().slice(0,10)
+                const curMonth = today.getMonth() + 1
+                const curYear = today.getFullYear()
+                // Starting balance: sum of all active account current balances
+                // We approximate current balances from accountRecords + their starting_balance + all historical transactions
+                // Simpler: use a naive sum from account starting_balance (user can refine)
+                const startBalance = accountRecords.filter(a => a.is_active && (a.type === 'checking' || a.type === 'savings'))
+                  .reduce((s, a) => s + (Number(a.starting_balance) || 0), 0)
+                // Add/subtract all past transactions to get today's balance
+                const pastDelta = transactions
+                  .filter(t => t.date && t.date <= todayStr)
+                  .reduce((s, t) => {
+                    const amt = Number(t.amount) || 0
+                    return s + (t.type === 'Income' || t.type === 'Refund' ? amt : t.type === 'Expense' ? -amt : 0)
+                  }, 0)
+                let runBal = startBalance + pastDelta
+
+                // Build 30-day forecast
+                const points = []
+                for (let d = 0; d <= 30; d++) {
+                  const dt = new Date(today)
+                  dt.setDate(dt.getDate() + d)
+                  const dom = dt.getDate()
+                  const mo = dt.getMonth() + 1
+                  const yr = dt.getFullYear()
+                  // Income arriving this day
+                  const dayIncome = (incomePlan || []).filter(p =>
+                    p.is_active && p.year === yr && p.month === mo && p.day_of_month === dom
+                  ).reduce((s, p) => s + (Number(p.expected_amount) || 0), 0)
+                  // Bills due this day
+                  const dayBills = bills.filter(b =>
+                    b.is_active && b.due_day === dom
+                  ).reduce((s, b) => s + (Number(b.budget_amount) || 0), 0)
+                  if (d > 0) runBal = runBal + dayIncome - dayBills
+                  const label = `${mo}/${dom}`
+                  points.push({ day: label, balance: Math.round(runBal), income: Math.round(dayIncome), bills: Math.round(dayBills) })
+                }
+                const minBal = Math.min(...points.map(p => p.balance))
+                return (
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-gray-700">30-Day Balance Forecast</h3>
+                      <span className="text-[11px] text-gray-400">Based on planned income + recurring bills</span>
+                    </div>
+                    {minBal < 0 && (
+                      <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                        Warning: projected balance drops below $0 during this period
+                      </div>
+                    )}
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={points}>
+                        <CartesianGrid {...GRID_STYLE} />
+                        <XAxis dataKey="day" tick={LABEL_STYLE} interval={4} />
+                        <YAxis tickFormatter={fmtK} tick={LABEL_STYLE} />
+                        <Tooltip content={({ active, payload, label }) => {
+                          if (!active || !payload?.length) return null
+                          const pt = payload[0].payload
+                          return (
+                            <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+                              <div className="font-semibold mb-1">{label}</div>
+                              <div>Balance: <span className="font-bold">{fmt(pt.balance)}</span></div>
+                              {pt.income > 0 && <div className="text-emerald-600">+{fmt(pt.income)} income</div>}
+                              {pt.bills > 0 && <div className="text-red-600">−{fmt(pt.bills)} bills</div>}
+                            </div>
+                          )
+                        }} />
+                        <Line type="monotone" dataKey="balance" name="Balance" stroke={ACCENT.blue} strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              })()}
             </>
           )}
 
@@ -1922,7 +2119,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'budget' && (
-            <BudgetTab data={budgetVsActual} period={period} fmt={fmt} thisYear={thisYear} householdId={householdId} onBudgetChanged={reload} categoryList={dashCatList} />
+            <BudgetTab data={budgetVsActual} incomeData={incomePlanVsActual} period={period} fmt={fmt} thisYear={thisYear} householdId={householdId} onBudgetChanged={reload} categoryList={dashCatList} />
           )}
 
           {activeTab === 'bills' && (
