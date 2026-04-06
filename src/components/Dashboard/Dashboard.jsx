@@ -84,7 +84,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, initialCategoryFilter, onCategoryFilterConsumed, initialAccountFilter, onAccountFilterConsumed }) {
+function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, initialCategoryFilter, onCategoryFilterConsumed, initialAccountFilter, onAccountFilterConsumed, onPromoteToBill, householdId }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState(initialCategoryFilter || '')
@@ -115,6 +115,49 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, init
   const [editMember, setEditMember] = useState('')
   const [saving, setSaving] = useState(false)
   const [matchModal, setMatchModal] = useState(null) // { patch, matches: [{id,date,amount,category,...}], selectedIds: Set }
+  // Promote-to-bill state
+  const [promoteTarget, setPromoteTarget] = useState(null) // transaction being promoted
+  const [promoteName, setPromoteName] = useState('')
+  const [promoteCategory, setPromoteCategory] = useState('')
+  const [promoteFrequency, setPromoteFrequency] = useState('Monthly')
+  const [promoteAmount, setPromoteAmount] = useState('')
+  const [promoteDueDay, setPromoteDueDay] = useState('')
+  const [promoteAccount, setPromoteAccount] = useState('')
+  const [promoteSaving, setPromoteSaving] = useState(false)
+  const [promoteError, setPromoteError] = useState('')
+  const startPromote = (t) => {
+    setPromoteTarget(t)
+    setPromoteName(t.description?.substring(0, 60) || '')
+    setPromoteCategory(t.sub_category || t.category || '')
+    setPromoteFrequency('Monthly')
+    setPromoteAmount(String(Number(t.amount) || 0))
+    setPromoteDueDay(t.date ? String(new Date(t.date + 'T12:00:00').getDate()) : '')
+    setPromoteAccount(t.account || '')
+    setPromoteError('')
+  }
+  const cancelPromote = () => { setPromoteTarget(null); setPromoteError('') }
+  const submitPromote = async () => {
+    if (!promoteName.trim()) { setPromoteError('Bill name is required'); return }
+    if (!promoteAmount || Number(promoteAmount) <= 0) { setPromoteError('Amount must be > 0'); return }
+    setPromoteSaving(true)
+    try {
+      await onPromoteToBill({
+        household_id: householdId,
+        name: promoteName.trim(),
+        category: promoteCategory || null,
+        account: promoteAccount || null,
+        frequency: promoteFrequency,
+        budget_amount: Number(promoteAmount),
+        due_day: promoteDueDay ? Number(promoteDueDay) : null,
+        is_active: true,
+      })
+      setPromoteTarget(null)
+    } catch (e) {
+      setPromoteError(e.message || 'Failed to create bill')
+    } finally {
+      setPromoteSaving(false)
+    }
+  }
   const { tree: catTree, categories: catList } = useCategoryTaxonomy()
   const subCatOptions = useMemo(() => (editCategory ? (catTree[editCategory] || []) : []), [editCategory, catTree])
   const startEdit = (t) => {
@@ -348,9 +391,16 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, init
                 <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{t.member || ''}</td>
                 <td className="px-2 py-2">
                   {!isEditing && (
-                    <button onClick={() => startEdit(t)} className="p-1 rounded hover:bg-gray-200 text-gray-500" title="Edit category/notes">
-                      <Edit2 size={13}/>
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => startEdit(t)} className="p-1 rounded hover:bg-gray-200 text-gray-500" title="Edit category/notes">
+                        <Edit2 size={13}/>
+                      </button>
+                      {t.type === 'Expense' && onPromoteToBill && (
+                        <button onClick={() => startPromote(t)} className="p-1 rounded hover:bg-blue-100 text-gray-400 hover:text-blue-600" title="Promote to recurring bill">
+                          <ArrowUpRight size={13}/>
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -510,12 +560,82 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, init
           </div>
         </div>
       )}
+
+      {/* Promote to Bill modal */}
+      {promoteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={cancelPromote}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200">
+              <h3 className="text-base font-semibold text-gray-900">Promote to Recurring Bill</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Create a recurring bill from this transaction. The bill will appear in your Bills tab.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {promoteError && <div className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200">{promoteError}</div>}
+              <label className="block">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Bill Name</span>
+                <input type="text" value={promoteName} onChange={e => setPromoteName(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Category</span>
+                  <input type="text" value={promoteCategory} onChange={e => setPromoteCategory(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Account</span>
+                  <input type="text" value={promoteAccount} onChange={e => setPromoteAccount(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
+                </label>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Amount</span>
+                  <input type="number" step="0.01" value={promoteAmount} onChange={e => setPromoteAmount(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none tabular-nums" />
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Frequency</span>
+                  <select value={promoteFrequency} onChange={e => setPromoteFrequency(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                    <option value="Monthly">Monthly</option>
+                    <option value="Biweekly">Biweekly</option>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Annual">Annual</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Due Day</span>
+                  <input type="number" min="1" max="31" value={promoteDueDay} onChange={e => setPromoteDueDay(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none tabular-nums"
+                    placeholder="1-31" />
+                </label>
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2 bg-gray-50">
+              <button onClick={cancelPromote} disabled={promoteSaving}
+                className="px-4 py-2 rounded border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={submitPromote} disabled={promoteSaving}
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold">
+                {promoteSaving ? 'Creating…' : 'Create Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function BillsDetail({ bills, transactions, thisYear, fmt }) {
+function BillsDetail({ bills, transactions, thisYear, fmt, onRemove, onDelete }) {
   const [sort, setSort] = useState({ col: 'due_day', dir: 'asc' })
+  const [confirmId, setConfirmId] = useState(null) // id of bill pending delete confirmation
+  const [actionError, setActionError] = useState('')
 
   const toNum = (n) => Number(n) || 0
   const today = new Date()
@@ -661,6 +781,12 @@ function BillsDetail({ bills, transactions, thisYear, fmt }) {
           )}
         </div>
       </div>
+      {actionError && (
+        <div className="mx-4 mt-2 px-3 py-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError('')} className="text-red-400 hover:text-red-600 ml-2">✕</button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
@@ -673,11 +799,12 @@ function BillsDetail({ bills, transactions, thisYear, fmt }) {
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('nextDueDate')}>Next Due{sortIcon('nextDueDate')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('lastPaidDate')}>Last Paid{sortIcon('lastPaidDate')}</th>
               <th className="px-3 py-2 text-left cursor-pointer hover:text-gray-900" onClick={() => toggleSort('pctUsed')}>% Used (this mo){sortIcon('pctUsed')}</th>
+              <th className="px-3 py-2 text-center w-20">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">No active bills.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">No active bills.</td></tr>
             ) : sorted.map(r => {
               const { bar, text } = pctColor(r.pctUsed)
               const width = Math.min(r.pctUsed * 100, 150)
@@ -708,6 +835,22 @@ function BillsDetail({ bills, transactions, thisYear, fmt }) {
                       </div>
                       <span className={`text-xs ${text} tabular-nums w-10 text-right`}>{r.monthly > 0 ? `${Math.round(r.pctUsed * 100)}%` : '—'}</span>
                     </div>
+                  </td>
+                  <td className="px-3 py-2 text-center whitespace-nowrap">
+                    {confirmId === r.id ? (
+                      <div className="flex items-center gap-1 justify-center">
+                        <button onClick={async () => { try { setActionError(''); await onDelete(r.id); setConfirmId(null) } catch(e) { setActionError(e.message) } }}
+                          className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-600 text-white rounded hover:bg-red-700" title="Permanently delete this bill">Delete</button>
+                        <button onClick={async () => { try { setActionError(''); await onRemove(r.id); setConfirmId(null) } catch(e) { setActionError(e.message) } }}
+                          className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500 text-white rounded hover:bg-amber-600" title="Deactivate (keep record)">Hide</button>
+                        <button onClick={() => setConfirmId(null)}
+                          className="px-1.5 py-0.5 text-[10px] text-gray-500 rounded hover:bg-gray-100">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmId(r.id)} className="text-gray-400 hover:text-red-500" title="Remove bill">
+                        <X size={14} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               )
@@ -1250,7 +1393,7 @@ function BudgetTab({ data, period, fmt, thisYear, householdId, onBudgetChanged, 
 }
 
 export default function Dashboard({ user }) {
-  const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, loading, error, reload, patchTransaction } = useFinanceData()
+  const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, loading, error, reload, patchTransaction, removeBill, deleteBill, createBill } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
   const { categories: dashCatList } = useCategoryTaxonomy()
   const [period, setPeriod] = useState('ytd')
@@ -1762,7 +1905,7 @@ export default function Dashboard({ user }) {
           )}
 
           {activeTab === 'transactions' && (
-            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} familyMembers={familyMembers} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} initialAccountFilter={pendingAccountFilter} onAccountFilterConsumed={() => setPendingAccountFilter(null)} />
+            <TransactionsTab rows={filtered} fmt={fmt} MONTH_NAMES={MONTH_NAMES} onUpdate={patchTransaction} familyMembers={familyMembers} initialCategoryFilter={pendingCategoryFilter} onCategoryFilterConsumed={() => setPendingCategoryFilter(null)} initialAccountFilter={pendingAccountFilter} onAccountFilterConsumed={() => setPendingAccountFilter(null)} onPromoteToBill={createBill} householdId={householdId} />
           )}
 
           {activeTab === 'budget' && (
@@ -1771,7 +1914,7 @@ export default function Dashboard({ user }) {
 
           {activeTab === 'bills' && (
             <>
-            <BillsDetail bills={bills} transactions={transactions} thisYear={thisYear} fmt={fmt} />
+            <BillsDetail bills={bills} transactions={transactions} thisYear={thisYear} fmt={fmt} onRemove={removeBill} onDelete={deleteBill} />
             <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Bills: Budget vs Actual ({period === 'ytd' ? 'YTD' : MONTH_NAMES[parseInt(period,10)-1]})</h3>
               {billsComparison.length === 0 ? (

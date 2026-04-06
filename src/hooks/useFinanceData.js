@@ -57,5 +57,27 @@ export function useFinanceData() {
     setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
   }
 
-  return { transactions, bills, budgets, debts, accounts, familyMembers, loading, error, reload: load, patchTransaction }
+  // Delete a bill (soft-delete: sets is_active = false)
+  const removeBill = async (id) => {
+    const { error: err } = await supabase.from('bills').update({ is_active: false }).eq('id', id)
+    if (err) throw err
+    setBills(prev => prev.map(b => b.id === id ? { ...b, is_active: false } : b))
+  }
+
+  // Hard-delete a bill row entirely
+  const deleteBill = async (id) => {
+    const { error: err } = await supabase.from('bills').delete().eq('id', id)
+    if (err) throw err
+    setBills(prev => prev.filter(b => b.id !== id))
+  }
+
+  // Create a new bill (e.g. promoted from a transaction)
+  const createBill = async (bill) => {
+    const { data, error: err } = await supabase.from('bills').insert(bill).select().single()
+    if (err) throw err
+    setBills(prev => [...prev, data].sort((a, b) => (a.name || '').localeCompare(b.name || '')))
+    return data
+  }
+
+  return { transactions, bills, budgets, debts, accounts, familyMembers, loading, error, reload: load, patchTransaction, removeBill, deleteBill, createBill }
 }
