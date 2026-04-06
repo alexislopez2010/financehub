@@ -350,6 +350,8 @@ function TransactionsTab({ rows, fmt, MONTH_NAMES, onUpdate, familyMembers, init
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{filtered.length.toLocaleString()} {filtered.length === 1 ? 'row' : 'rows'}</span>
+          <span className="text-gray-400">·</span>
+          <span>Sum: <span className="font-semibold text-gray-900">{fmt(Math.round(filtered.reduce((s, t) => s + (Number(t.amount) || 0), 0)))}</span></span>
           <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50" title="Export filtered rows to CSV">
             <Download size={14} /> Export CSV
           </button>

@@ -251,8 +251,10 @@ export default function AccountDetail({ account, onBack }) {
               <option value="Refund">Refund</option>
               <option value="Transfer">Transfer</option>
             </select>
-            <div className="text-xs text-gray-500 ml-auto">
-              {displayRows.length.toLocaleString()} of {rowsDesc.length.toLocaleString()}
+            <div className="text-xs text-gray-500 ml-auto flex items-center gap-2">
+              <span>{displayRows.length.toLocaleString()} of {rowsDesc.length.toLocaleString()}</span>
+              <span className="text-gray-400">·</span>
+              <span>Sum: <span className="font-semibold text-gray-900">{fmtUSD(displayRows.reduce((s, t) => s + (Number(t.amount) || 0), 0))}</span></span>
             </div>
           </div>
           <div className="overflow-x-auto">
