@@ -67,6 +67,8 @@ export default function AdminEntityManager({ title, table, householdId, columns,
         if (c.type === 'number') {
           v = v === '' || v === null || v === undefined ? null : Number(v)
           if (v !== null && Number.isNaN(v)) throw new Error(`${c.label} must be a number`)
+          if (v !== null && c.min !== undefined && v < c.min) throw new Error(`${c.label} must be at least ${c.min}`)
+          if (v !== null && c.max !== undefined && v > c.max) throw new Error(`${c.label} must be at most ${c.max}`)
         }
         if (c.type === 'date') {
           v = v === '' ? null : v
@@ -193,7 +195,7 @@ export default function AdminEntityManager({ title, table, householdId, columns,
                       {(c.options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   ) : c.type === 'number' ? (
-                    <input type="number" step={c.step || 'any'} min={c.min} value={editing[c.key] ?? ''} onChange={e => setEditing({ ...editing, [c.key]: e.target.value })}
+                    <input type="number" step={c.step || 'any'} min={c.min} max={c.max} value={editing[c.key] ?? ''} onChange={e => setEditing({ ...editing, [c.key]: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" />
                   ) : c.type === 'date' ? (
                     <input type="date" value={editing[c.key] ?? ''} onChange={e => setEditing({ ...editing, [c.key]: e.target.value })}

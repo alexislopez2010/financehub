@@ -144,7 +144,7 @@ export default function AdminTab({ householdId }) {
             { key: 'category', label: 'Category', type: 'text' },
             { key: 'account', label: 'Account', type: 'text' },
             { key: 'budget_amount', label: 'Amount', type: 'number', required: true, default: 0, step: 0.01 },
-            { key: 'due_day', label: 'Due day', type: 'number', step: 1, min: 1 },
+            { key: 'due_day', label: 'Due day (1–31)', type: 'number', step: 1, min: 1, max: 31 },
             { key: 'frequency', label: 'Frequency', type: 'select', options: [
               { value: 'Monthly', label: 'Monthly' },
               { value: 'Weekly', label: 'Weekly' },
@@ -178,7 +178,7 @@ export default function AdminTab({ householdId }) {
             { key: 'original_balance', label: 'Original balance', type: 'number', step: 0.01 },
             { key: 'apr', label: 'APR %', type: 'number', step: 0.01 },
             { key: 'min_payment', label: 'Min payment', type: 'number', step: 0.01 },
-            { key: 'due_day', label: 'Due day', type: 'number', step: 1, min: 1 },
+            { key: 'due_day', label: 'Due day (1–31)', type: 'number', step: 1, min: 1, max: 31 },
             { key: 'account_id', label: 'Linked account ID', type: 'text' },
             { key: 'is_active', label: 'Active', type: 'boolean', default: true },
             { key: 'notes', label: 'Notes', type: 'text' },
@@ -206,7 +206,7 @@ export default function AdminTab({ householdId }) {
             ] },
             { key: 'year', label: 'Year', type: 'number', required: true, default: new Date().getFullYear(), step: 1 },
             { key: 'month', label: 'Month (1-12)', type: 'number', required: true, default: new Date().getMonth() + 1, step: 1, min: 1 },
-            { key: 'day_of_month', label: 'Pay day', type: 'number', step: 1, min: 1 },
+            { key: 'day_of_month', label: 'Pay day (1–31)', type: 'number', step: 1, min: 1, max: 31 },
             { key: 'is_active', label: 'Active', type: 'boolean', default: true },
             { key: 'notes', label: 'Notes', type: 'text' },
           ]}
