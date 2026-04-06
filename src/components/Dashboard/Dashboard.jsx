@@ -2480,45 +2480,82 @@ export default function Dashboard({ user }) {
                 </div>
               </div>
 
-              {/* Balance Forecast — 30-day projection using income + bills */}
+              {/* Balance Forecast — 30-day cash-basis projection */}
               {incomePlanVsActual.totals.planned > 0 && (() => {
                 const today = new Date()
                 const todayStr = today.toISOString().slice(0,10)
-                const curMonth = today.getMonth() + 1
-                const curYear = today.getFullYear()
-                // Starting balance: sum of all active account current balances
-                // We approximate current balances from accountRecords + their starting_balance + all historical transactions
-                // Simpler: use a naive sum from account starting_balance (user can refine)
-                const startBalance = accountRecords.filter(a => a.is_active && (a.type === 'checking' || a.type === 'savings'))
+
+                // Cash accounts only (checking + savings)
+                const cashAccts = new Set(
+                  accountRecords.filter(a => a.is_active && (a.type === 'checking' || a.type === 'savings')).map(a => a.name)
+                )
+                const startBalance = accountRecords.filter(a => cashAccts.has(a.name))
                   .reduce((s, a) => s + (Number(a.starting_balance) || 0), 0)
-                // Add/subtract all past transactions to get today's balance
+
+                // Cash-basis past delta: only transactions on cash accounts
+                // Income/Refund add, Expense/Transfer subtract (transfers = card payments leaving checking)
                 const pastDelta = transactions
-                  .filter(t => t.date && t.date <= todayStr)
+                  .filter(t => t.date && t.date <= todayStr && cashAccts.has(t.account))
                   .reduce((s, t) => {
                     const amt = Number(t.amount) || 0
-                    return s + (t.type === 'Income' || t.type === 'Refund' ? amt : t.type === 'Expense' ? -amt : 0)
+                    if (t.type === 'Income' || t.type === 'Refund') return s + amt
+                    if (t.type === 'Expense' || t.type === 'Transfer') return s - Math.abs(amt)
+                    return s
                   }, 0)
                 let runBal = startBalance + pastDelta
+
+                // Collect active debts with due_days for projection
+                const activeDebts = (debts || []).filter(d => d.is_active && (Number(d.min_payment) || 0) > 0)
 
                 // Build 30-day forecast
                 const points = []
                 for (let d = 0; d <= 30; d++) {
                   const dt = new Date(today)
                   dt.setDate(dt.getDate() + d)
-                  const dom = dt.getDate()
                   const mo = dt.getMonth() + 1
                   const yr = dt.getFullYear()
-                  // Income arriving this day (clamp day_of_month to actual month length)
+
+                  // Income arriving this day
                   const dayIncome = (incomePlan || []).filter(p =>
                     p.is_active && p.year === yr && p.month === mo && isDueOn(p.day_of_month, dt)
                   ).reduce((s, p) => s + (Number(p.expected_amount) || 0), 0)
-                  // Bills due this day (clamp due_day to actual month length)
-                  const dayBills = bills.filter(b =>
-                    b.is_active && isDueOn(b.due_day, dt)
-                  ).reduce((s, b) => s + (Number(b.budget_amount) || 0), 0)
-                  if (d > 0) runBal = runBal + dayIncome - dayBills
+
+                  // Bills due this day (monthly + handle biweekly)
+                  let dayBills = 0
+                  bills.filter(b => b.is_active && b.due_day).forEach(b => {
+                    const freq = (b.frequency || '').toLowerCase()
+                    const amt = Number(b.budget_amount) || 0
+                    if (freq === 'biweekly') {
+                      // Biweekly: fires on due_day, then 14 days later, repeating
+                      const clamped = clampDay(b.due_day, yr, mo)
+                      const anchor = new Date(yr, mo - 1, clamped)
+                      const diff = Math.round((dt - anchor) / 86400000)
+                      if (diff >= 0 && diff % 14 === 0) dayBills += amt
+                      else if (diff < 0) {
+                        // Check from previous month's anchor
+                        const prevMo = mo === 1 ? 12 : mo - 1
+                        const prevYr = mo === 1 ? yr - 1 : yr
+                        const prevClamped = clampDay(b.due_day, prevYr, prevMo)
+                        const prevAnchor = new Date(prevYr, prevMo - 1, prevClamped)
+                        const prevDiff = Math.round((dt - prevAnchor) / 86400000)
+                        if (prevDiff >= 0 && prevDiff % 14 === 0) dayBills += amt
+                      }
+                    } else {
+                      // Monthly / Quarterly / Annual — use isDueOn for monthly anchor
+                      if (isDueOn(b.due_day, dt)) dayBills += amt
+                    }
+                  })
+
+                  // Debt min_payments due this day
+                  const dayDebts = activeDebts.filter(dd =>
+                    dd.due_day && isDueOn(dd.due_day, dt)
+                  ).reduce((s, dd) => s + (Number(dd.min_payment) || 0), 0)
+
+                  const totalOut = dayBills + dayDebts
+                  if (d > 0) runBal = runBal + dayIncome - totalOut
+                  const dom = dt.getDate()
                   const label = `${mo}/${dom}`
-                  points.push({ day: label, balance: Math.round(runBal), income: Math.round(dayIncome), bills: Math.round(dayBills) })
+                  points.push({ day: label, balance: Math.round(runBal), income: Math.round(dayIncome), bills: Math.round(totalOut) })
                 }
                 const minBal = Math.min(...points.map(p => p.balance))
                 return (
