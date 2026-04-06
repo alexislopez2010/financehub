@@ -903,7 +903,10 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
     const computedMin = storedMin > 0 ? storedMin
       : d.type === 'credit_card' ? Math.max(25, Math.round(balance * 0.02))
       : storedMin
-    const minPayment = minOverrides[d.id] != null ? Number(minOverrides[d.id]) : computedMin
+    const escrow = Number(d.escrow) || 0
+    const totalPayment = minOverrides[d.id] != null ? Number(minOverrides[d.id]) : computedMin
+    // P&I = total payment minus escrow (escrow doesn't reduce the loan balance)
+    const minPayment = Math.max(0, totalPayment - escrow)
     return {
       id: d.id,
       name: d.name,
@@ -911,13 +914,17 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
       balance,
       apr: Number(d.apr) || 0,
       minPayment,
+      totalPayment,
+      escrow,
       defaultMin: computedMin,
       linked,
     }
   }), [debts, liveBalances, minOverrides])
 
   const totalBalance = active.reduce((s, d) => s + d.balance, 0)
-  const totalMin = active.reduce((s, d) => s + d.minPayment, 0)
+  const totalMin = active.reduce((s, d) => s + d.totalPayment, 0)
+  const totalEscrow = active.reduce((s, d) => s + d.escrow, 0)
+  const totalPI = active.reduce((s, d) => s + d.minPayment, 0)
   const weightedApr = totalBalance > 0 ? active.reduce((s, d) => s + d.apr * d.balance, 0) / totalBalance : 0
 
   // Simulate a payoff plan given an ordering function and monthly extra.
@@ -1012,7 +1019,7 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <KPICard title="Total Balance" value={fmt(totalBalance)} icon={Banknote} color={ACCENT.red} subtitle={`${active.length} debt${active.length===1?'':'s'}`} />
         <KPICard title="Weighted APR" value={`${weightedApr.toFixed(2)}%`} icon={TrendingDown} color={ACCENT.amber} subtitle="blended rate" />
-        <KPICard title="Min Monthly" value={fmt(totalMin)} icon={Wallet} color={ACCENT.slate} subtitle="required /mo" />
+        <KPICard title="Min Monthly" value={fmt(totalMin)} icon={Wallet} color={ACCENT.slate} subtitle={totalEscrow > 0 ? `P&I ${fmt(totalPI)} · Escrow ${fmt(totalEscrow)}` : 'required /mo'} />
         <KPICard title="Debt-Free Date" value={debtFreeDate} icon={Target} color={ACCENT.green} subtitle={plan.capped ? '(capped)' : monthsToYears(plan.months)} />
       </div>
 
@@ -1087,7 +1094,9 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
                 <th className="px-3 py-2 text-left">Type</th>
                 <th className="px-3 py-2 text-right">Balance</th>
                 <th className="px-3 py-2 text-right">APR</th>
-                <th className="px-3 py-2 text-right">Min / mo</th>
+                <th className="px-3 py-2 text-right">Payment / mo</th>
+                <th className="px-3 py-2 text-right">Escrow</th>
+                <th className="px-3 py-2 text-right">P&I</th>
                 <th className="px-3 py-2 text-right">Payoff</th>
                 <th className="px-3 py-2 text-right">Interest</th>
               </tr>
@@ -1112,7 +1121,7 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
                           type="number"
                           min="0"
                           step="10"
-                          value={Math.round(r.minPayment)}
+                          value={Math.round(r.totalPayment)}
                           onChange={(e) => setMinOverrides(o => ({ ...o, [r.id]: e.target.value }))}
                           className={`w-20 px-1.5 py-1 text-xs text-right border rounded tabular-nums focus:outline-none focus:ring-1 focus:ring-blue-300 ${isOverridden ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-gray-200 text-gray-700'}`}
                           title={isOverridden ? `Overridden (default: $${r.defaultMin})` : `Default: $${r.defaultMin}`}
@@ -1126,6 +1135,8 @@ function DebtTracker({ debts, accounts, transactions, fmt }) {
                         )}
                       </div>
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-500">{r.escrow > 0 ? fmt(Math.round(r.escrow)) : '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700 font-medium">{fmt(Math.round(r.minPayment))}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-700">{r.paidMonth ? monthsToYears(r.paidMonth) : <span className="text-red-500">30+ yrs</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-amber-600">{fmt(Math.round(r.interestPaid))}</td>
                   </tr>
