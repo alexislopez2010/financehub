@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield, Plus, ClipboardList, AlertCircle } from 'lucide-react'
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, AreaChart, Area, ReferenceLine } from 'recharts'
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Filter, ChevronDown, X, Calendar, Users, Wallet, BarChart3, PieChart as PieIcon, LayoutDashboard, LogOut, RefreshCw, Building2, Target, Search, Download, List, Banknote, Edit2, Check, Shield, Plus, ClipboardList, AlertCircle, Eye, EyeOff, Activity } from 'lucide-react'
 import { supabase } from '../../lib/supabase.js'
 import { useFinanceData } from '../../hooks/useFinanceData.js'
 import { useCategoryTaxonomy } from '../../hooks/useCategoryTaxonomy.js'
@@ -1635,6 +1635,248 @@ function ObligationsTab({ householdId, fmt }) {
   )
 }
 
+/* ───── CFO View Tab ───── */
+function CFOView({ householdId, fmt }) {
+  const [obligations, setObligations] = useState([])
+  const [snapshotData, setSnapshotData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [excluded, setExcluded] = useState(new Set())
+
+  useEffect(() => {
+    if (!householdId) return
+    setLoading(true)
+    Promise.all([
+      supabase.from('v_advisor_upcoming_obligations').select('*').eq('household_id', householdId),
+      supabase.rpc('rpc_advisor_snapshot', { p_household_id: householdId }),
+    ]).then(([oblRes, snapRes]) => {
+      if (oblRes.data) setObligations(oblRes.data)
+      if (snapRes.data) setSnapshotData(snapRes.data)
+      setLoading(false)
+    })
+  }, [householdId])
+
+  // Expand a single obligation into all occurrences within the horizon
+  const expandObligation = (o, horizonDays) => {
+    const occurrences = []
+    const firstDue = new Date(o.due_date + 'T00:00:00')
+    const today = new Date(); today.setHours(0,0,0,0)
+    const endDate = new Date(today); endDate.setDate(endDate.getDate() + horizonDays)
+    const freq = (o.frequency || '').toLowerCase()
+
+    if (freq === 'monthly') {
+      for (let n = 0; n <= Math.ceil(horizonDays / 28); n++) {
+        const d = new Date(firstDue); d.setMonth(d.getMonth() + n)
+        if (d >= today && d <= endDate) occurrences.push({ date: new Date(d), amount: Number(o.amount) || 0 })
+      }
+    } else if (freq === 'biweekly') {
+      for (let n = 0; n <= Math.ceil(horizonDays / 14); n++) {
+        const d = new Date(firstDue); d.setDate(d.getDate() + n * 14)
+        if (d >= today && d <= endDate) occurrences.push({ date: new Date(d), amount: Number(o.amount) || 0 })
+      }
+    } else if (freq === 'weekly') {
+      for (let n = 0; n <= Math.ceil(horizonDays / 7); n++) {
+        const d = new Date(firstDue); d.setDate(d.getDate() + n * 7)
+        if (d >= today && d <= endDate) occurrences.push({ date: new Date(d), amount: Number(o.amount) || 0 })
+      }
+    } else {
+      if (firstDue >= today && firstDue <= endDate) occurrences.push({ date: firstDue, amount: Number(o.amount) || 0 })
+    }
+    return occurrences
+  }
+
+  // Run the full projection client-side using the same model as the RPC
+  const projection = useMemo(() => {
+    if (!snapshotData || !obligations.length) return null
+    const detail = snapshotData.projection_90d?.detail || {}
+    const dailyIncome = detail.daily_income_avg || 0
+    const dailyDiscretionary = detail.daily_discretionary_avg || 0
+    const liquid = snapshotData.projection_90d?.liquid_balance || 0
+    const horizonDays = 90
+    const today = new Date(); today.setHours(0,0,0,0)
+
+    // Build obligation-by-day map from enabled obligations
+    const oblByDay = {}
+    obligations.forEach((o, idx) => {
+      if (excluded.has(idx)) return
+      expandObligation(o, horizonDays).forEach(occ => {
+        const key = occ.date.toISOString().slice(0, 10)
+        oblByDay[key] = (oblByDay[key] || 0) + occ.amount
+      })
+    })
+
+    // Day-by-day walk
+    const days = []
+    let balance = Number(liquid)
+    let minBal = balance, minDate = today, totalIn = 0, totalOut = 0, totalObl = 0
+    for (let i = 0; i <= horizonDays; i++) {
+      const d = new Date(today); d.setDate(d.getDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      const obl = oblByDay[key] || 0
+      const inflow = dailyIncome
+      const outflow = dailyDiscretionary + obl
+      balance += (inflow - outflow)
+      totalIn += inflow
+      totalOut += outflow
+      totalObl += obl
+      if (balance < minBal) { minBal = balance; minDate = new Date(d) }
+      days.push({
+        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        rawDate: key,
+        balance: Math.round(balance),
+        inflow: Math.round(inflow),
+        outflow: Math.round(outflow),
+        obligations: Math.round(obl),
+      })
+    }
+    return { days, ending: Math.round(balance), lowPoint: Math.round(minBal), lowDate: minDate, totalIn: Math.round(totalIn), totalOut: Math.round(totalOut), totalObl: Math.round(totalObl), liquid: Math.round(Number(liquid)), dailyIncome: Math.round(dailyIncome), dailyDiscretionary: Math.round(dailyDiscretionary) }
+  }, [snapshotData, obligations, excluded])
+
+  const toggle = (idx) => {
+    setExcluded(prev => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (excluded.size === 0) {
+      setExcluded(new Set(obligations.map((_, i) => i)))
+    } else {
+      setExcluded(new Set())
+    }
+  }
+
+  if (loading) return <div className="text-center text-gray-500 py-12">Loading CFO View…</div>
+  if (!projection) return <div className="text-center text-gray-500 py-12">No projection data available.</div>
+
+  const oblTotalEnabled = obligations.reduce((s, o, i) => excluded.has(i) ? s : s + (Number(o.amount) || 0), 0)
+
+  const CfoTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null
+    const d = payload[0]?.payload
+    return (
+      <div className="bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg text-xs">
+        <p className="font-semibold mb-1">{d.date}</p>
+        <p>Balance: <span className="text-blue-300 font-semibold">{fmt(d.balance)}</span></p>
+        {d.obligations > 0 && <p>Obligations: <span className="text-red-300">{fmt(d.obligations)}</span></p>}
+        <p className="text-gray-400">In: {fmt(d.inflow)} · Out: {fmt(d.outflow)}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KPICard title="Liquid Now" value={fmt(projection.liquid)} icon={DollarSign} color={ACCENT.blue} subtitle="checking + savings" />
+        <KPICard title="90-Day Ending" value={fmt(projection.ending)} icon={projection.ending >= projection.liquid ? TrendingUp : TrendingDown} color={projection.ending >= projection.liquid ? ACCENT.green : ACCENT.red} subtitle={`${projection.ending >= projection.liquid ? '+' : ''}${fmt(projection.ending - projection.liquid)} net`} />
+        <KPICard title="Low Point" value={fmt(projection.lowPoint)} icon={ArrowDownRight} color={ACCENT.amber} subtitle={projection.lowDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
+        <KPICard title="Obligations (90d)" value={fmt(projection.totalObl)} icon={ClipboardList} color={ACCENT.purple} subtitle={`${obligations.length - excluded.size} of ${obligations.length} active`} />
+      </div>
+
+      {/* Income / Discretionary / Obligations daily breakdown */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Daily Income Avg</div>
+          <div className="text-xl font-bold text-emerald-600">{fmt(projection.dailyIncome)}<span className="text-xs text-gray-400 font-normal">/day</span></div>
+          <div className="text-[11px] text-gray-400 mt-1">Based on last 90 days of inflows</div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Daily Discretionary</div>
+          <div className="text-xl font-bold text-red-500">{fmt(projection.dailyDiscretionary)}<span className="text-xs text-gray-400 font-normal">/day</span></div>
+          <div className="text-[11px] text-gray-400 mt-1">Non-fixed spending avg (last 3 mo)</div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Monthly Obligations</div>
+          <div className="text-xl font-bold text-purple-600">{fmt(Math.round(oblTotalEnabled))}<span className="text-xs text-gray-400 font-normal">/mo</span></div>
+          <div className="text-[11px] text-gray-400 mt-1">{obligations.length - excluded.size} active items · {excluded.size} excluded</div>
+        </div>
+      </div>
+
+      {/* 90-Day Projection Chart */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <Activity size={16} className="text-blue-500" />
+            90-Day Cash Flow Projection
+          </h3>
+          <div className="flex items-center gap-3 text-[11px] text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Balance</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" /> Obligation days</span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <AreaChart data={projection.days} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+            <defs>
+              <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} interval={13} />
+            <YAxis tickFormatter={(v) => v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`} tick={{ fontSize: 10, fill: '#6b7280' }} />
+            <Tooltip content={<CfoTooltip />} />
+            <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 4" label={{ value: '$0', position: 'left', fontSize: 10, fill: '#ef4444' }} />
+            <ReferenceLine y={projection.lowPoint} stroke="#d97706" strokeDasharray="3 3" label={{ value: `Low: ${fmt(projection.lowPoint)}`, position: 'right', fontSize: 10, fill: '#d97706' }} />
+            <Area type="monotone" dataKey="balance" stroke="#2563eb" strokeWidth={2} fill="url(#balGrad)" dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Obligations Toggle Table */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <ClipboardList size={16} className="text-purple-500" />
+            Obligations — Toggle to Adjust Projection
+          </h3>
+          <button onClick={toggleAll} className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">
+            {excluded.size === 0 ? 'Exclude All' : excluded.size === obligations.length ? 'Include All' : `Reset (${excluded.size} excluded)`}
+          </button>
+        </div>
+        <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+          {obligations.map((o, idx) => {
+            const isOff = excluded.has(idx)
+            const amount = Number(o.amount) || 0
+            return (
+              <div key={`${o.name}-${idx}`} className={`px-4 py-2.5 flex items-center justify-between gap-3 transition-colors ${isOff ? 'bg-gray-50 opacity-60' : ''}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <button onClick={() => toggle(idx)} className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${isOff ? 'bg-gray-200 hover:bg-gray-300' : 'bg-blue-100 hover:bg-blue-200'}`}>
+                    {isOff ? <EyeOff size={13} className="text-gray-400" /> : <Eye size={13} className="text-blue-600" />}
+                  </button>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-medium truncate ${isOff ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{o.name}</div>
+                    <div className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${o.source === 'bill' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{o.source}</span>
+                      <span>{o.category || '—'}</span>
+                      <span>· {o.frequency || 'Monthly'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className={`text-sm font-bold ${isOff ? 'text-gray-400' : 'text-gray-900'}`}>{fmt(Math.round(amount))}</div>
+                  <div className="text-[11px] text-gray-400">
+                    {new Date(o.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        {excluded.size > 0 && (
+          <div className="px-4 py-2.5 border-t border-gray-100 bg-amber-50 text-xs text-amber-700 flex items-center gap-2">
+            <AlertCircle size={14} />
+            <span><strong>{excluded.size} obligation{excluded.size > 1 ? 's' : ''} excluded</strong> — the projection above reflects this. These toggles are for what-if analysis only; they don't change Bill's actual model.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard({ user }) {
   const { transactions, bills, budgets, debts, accounts: accountRecords, familyMembers, incomePlan, loading, error, reload, patchTransaction, removeBill, deleteBill, createBill } = useFinanceData()
   const { isOwner, householdId } = useIsOwner()
@@ -2057,7 +2299,7 @@ export default function Dashboard({ user }) {
 
           {/* Tabs */}
           <div className="flex gap-1 mb-3 overflow-x-auto -mx-1 px-1">
-            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['debt','Debt',Banknote],['obligations','Obligations',ClipboardList],['trends','Trends',BarChart3], ...(isOwner ? [['admin','Admin',Shield]] : [])].map(([key,label,Icon]) => (
+            {[['overview','Overview',LayoutDashboard],['accounts','Accounts',Building2],['transactions','Transactions',List],['spending','Spending',PieIcon],['budget','Budget',Target],['bills','Bills',Wallet],['debt','Debt',Banknote],['obligations','Obligations',ClipboardList],['cfo','CFO View',Activity],['trends','Trends',BarChart3], ...(isOwner ? [['admin','Admin',Shield]] : [])].map(([key,label,Icon]) => (
               <button key={key} onClick={() => setActiveTab(key)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-medium whitespace-nowrap ${activeTab===key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}>
                 <Icon size={14} />{label}
               </button>
@@ -2381,6 +2623,10 @@ export default function Dashboard({ user }) {
 
           {activeTab === 'obligations' && (
             <ObligationsTab householdId={householdId} fmt={fmt} />
+          )}
+
+          {activeTab === 'cfo' && (
+            <CFOView householdId={householdId} fmt={fmt} />
           )}
 
           {activeTab === 'trends' && (
