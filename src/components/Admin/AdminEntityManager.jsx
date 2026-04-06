@@ -14,12 +14,14 @@ import { Plus, Edit2, Trash2, X, Check } from 'lucide-react'
  *     render?(row) => string | JSX (overrides display in list)
  * - orderBy: { column, ascending }
  * - filter?: (row) => boolean (optional client-side filter after fetch)
+ * - onAfterSave?: (oldRow, newPayload) => Promise<void> — called after a successful update (not insert)
  */
-export default function AdminEntityManager({ title, table, householdId, columns, orderBy, filter, extraQuery }) {
+export default function AdminEntityManager({ title, table, householdId, columns, orderBy, filter, extraQuery, onAfterSave }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [editing, setEditing] = useState(null) // row being edited (or {} for new)
+  const [originalRow, setOriginalRow] = useState(null) // snapshot before editing
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
 
@@ -78,11 +80,15 @@ export default function AdminEntityManager({ title, table, householdId, columns,
       if (editing.id) {
         const { error } = await supabase.from(table).update(payload).eq('id', editing.id)
         if (error) throw error
+        if (onAfterSave && originalRow) {
+          await onAfterSave(originalRow, payload)
+        }
       } else {
         const { error } = await supabase.from(table).insert(payload)
         if (error) throw error
       }
       setEditing(null)
+      setOriginalRow(null)
       await load()
     } catch (e) {
       setErr(e.message || 'Save failed')
@@ -150,7 +156,7 @@ export default function AdminEntityManager({ title, table, householdId, columns,
                   ))}
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1 justify-end">
-                      <button onClick={() => setEditing({ ...row })} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Edit2 size={13} /></button>
+                      <button onClick={() => { setOriginalRow({ ...row }); setEditing({ ...row }) }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Edit"><Edit2 size={13} /></button>
                       <button onClick={() => setConfirmDelete(row)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Delete"><Trash2 size={13} /></button>
                     </div>
                   </td>
@@ -167,7 +173,7 @@ export default function AdminEntityManager({ title, table, householdId, columns,
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8">
             <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-800">{editing.id ? `Edit ${title}` : `New ${title}`}</h3>
-              <button onClick={() => setEditing(null)} className="p-1 text-gray-400 hover:text-gray-700 rounded"><X size={16} /></button>
+              <button onClick={() => { setEditing(null); setOriginalRow(null) }} className="p-1 text-gray-400 hover:text-gray-700 rounded"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
               {editableColumns.map(c => (
@@ -200,7 +206,7 @@ export default function AdminEntityManager({ title, table, householdId, columns,
               ))}
             </div>
             <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
-              <button onClick={() => setEditing(null)} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={() => { setEditing(null); setOriginalRow(null) }} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
               <button onClick={save} disabled={busy} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-medium rounded-lg">
                 <Check size={14} />{busy ? 'Saving…' : 'Save'}
               </button>

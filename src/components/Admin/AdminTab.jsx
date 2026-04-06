@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Users, UserCircle, Tags, Building2, Wallet, Banknote, TrendingUp } from 'lucide-react'
+import { supabase } from '../../lib/supabase.js'
 import AdminEntityManager from './AdminEntityManager.jsx'
 import AdminUsersManager from './AdminUsersManager.jsx'
 
@@ -15,6 +16,41 @@ const SECTIONS = [
 
 export default function AdminTab({ householdId }) {
   const [section, setSection] = useState('users')
+
+  // Cascade category/sub_category renames to transactions, budgets, and bills
+  const cascadeCategoryRename = useCallback(async (oldRow, newPayload) => {
+    const catChanged = oldRow.category && newPayload.category && oldRow.category !== newPayload.category
+    const subChanged = (oldRow.sub_category || null) !== (newPayload.sub_category || null)
+    if (!catChanged && !subChanged) return
+
+    const tables = ['transactions', 'budgets', 'bills']
+    for (const t of tables) {
+      if (catChanged) {
+        const update = { category: newPayload.category }
+        // Also update sub_category if it changed (for tables that have it)
+        if (subChanged && t !== 'bills') update.sub_category = newPayload.sub_category || null
+        let q = supabase.from(t).update(update)
+          .eq('household_id', householdId)
+          .eq('category', oldRow.category)
+        // For sub_category scoped renames, narrow to matching sub_category
+        if (oldRow.sub_category && t !== 'bills') {
+          q = q.eq('sub_category', oldRow.sub_category)
+        }
+        await q
+      } else if (subChanged && t !== 'bills') {
+        // Only sub_category changed, category stayed the same
+        let q = supabase.from(t).update({ sub_category: newPayload.sub_category || null })
+          .eq('household_id', householdId)
+          .eq('category', oldRow.category)
+        if (oldRow.sub_category) {
+          q = q.eq('sub_category', oldRow.sub_category)
+        } else {
+          q = q.is('sub_category', null)
+        }
+        await q
+      }
+    }
+  }, [householdId])
 
   return (
     <div className="space-y-4">
@@ -53,6 +89,7 @@ export default function AdminTab({ householdId }) {
           table="category_rules"
           householdId={householdId}
           orderBy={{ column: 'category', ascending: true }}
+          onAfterSave={cascadeCategoryRename}
           columns={[
             { key: 'category', label: 'Category', type: 'text', required: true },
             { key: 'sub_category', label: 'Sub-category', type: 'text' },
