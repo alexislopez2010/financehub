@@ -2327,7 +2327,7 @@ export default function Dashboard({ user }) {
               <Calendar size={14} className="text-gray-400" />
               <span className="text-xs font-medium text-gray-500 mr-1">Period:</span>
               <Pill label="YTD" active={period==='ytd'} onClick={()=>setPeriod('ytd')} />
-              {availableMonths.map(m => <Pill key={m} label={MONTH_NAMES[parseInt(m,10)-1]} active={period===m} onClick={()=>setPeriod(m)} />)}
+              {Array.from({ length: 12 }, (_, i) => { const m = String(i + 1).padStart(2, '0'); return <Pill key={m} label={MONTH_NAMES[i]} active={period===m} onClick={()=>setPeriod(m)} /> })}
             </div>
             <div className="hidden md:block w-px h-6 bg-gray-200" />
             <MultiSelect label="Accounts" options={allAccounts} selected={accounts} onChange={setSelectedAccounts} icon={CreditCard} />
