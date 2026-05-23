@@ -153,6 +153,59 @@ begin
   end loop;
 end $$;
 
+-- ── helper: is_household_owner() ──────────────────────────────────────
+create or replace function is_household_owner(h_id uuid) returns boolean
+  language sql security definer stable
+  set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1 from household_members
+    where user_id = auth.uid()
+      and household_id = h_id
+      and role = 'owner'
+  );
+$$;
+
+-- ── policies ──────────────────────────────────────────────────────────
+create policy "view own memberships" on household_members
+  for select
+  using (user_id = auth.uid() or is_household_member(household_id));
+
+create policy "no direct membership insert" on household_members
+  for insert
+  with check (false);
+
+create policy "update self or owner" on household_members
+  for update
+  using (user_id = auth.uid() or is_household_owner(household_id))
+  with check (user_id = auth.uid() or is_household_owner(household_id));
+
+create policy "owner deletes member" on household_members
+  for delete
+  using (is_household_owner(household_id) and user_id <> auth.uid());
+
+-- ── trigger: forbid changing user_id or household_id; non-owners cannot change role ──
+create or replace function household_members_update_guard() returns trigger
+  language plpgsql security definer
+  set search_path = public, pg_temp
+as $$
+begin
+  if old.household_id <> new.household_id then
+    raise exception 'household_id is immutable';
+  end if;
+  if old.user_id <> new.user_id then
+    raise exception 'user_id is immutable';
+  end if;
+  if old.role <> new.role and not is_household_owner(old.household_id) then
+    raise exception 'only an owner can change member role';
+  end if;
+  return new;
+end $$;
+
+create trigger household_members_update_guard
+  before update on household_members
+  for each row execute function household_members_update_guard();
+
 -- ════════════════════════════════════════════════════════════════════
 -- AUTO-ADD NEW USERS TO THE LOPEZ HOUSEHOLD
 -- (Replace the household_id below with your actual household id if you recreate it)
