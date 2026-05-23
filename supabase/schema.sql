@@ -136,10 +136,6 @@ $$;
 drop policy if exists "view own households" on households;
 create policy "view own households" on households for select using (is_household_member(id));
 
--- household_members policies
-drop policy if exists "view own memberships" on household_members;
-create policy "view own memberships" on household_members for select using (user_id = auth.uid() or is_household_member(household_id));
-
 -- Generic policy for all per-household tables
 do $$
 declare t text;
