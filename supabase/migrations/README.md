@@ -4,16 +4,25 @@ Numeric-prefixed SQL files in this directory are applied **in lexical order**.
 The existing `supabase/schema.sql` is the canonical fresh-install schema; it
 is updated to reflect the rolled-up state after every migration here.
 
+Migration files (`0001_…`, `0002_…`, etc.) are added by later tasks in the
+pre-rewrite plan (`docs/superpowers/plans/2026-05-23-financehub-pre-rewrite.md`).
+This README is the runbook for applying them once they exist.
+
 ## How to apply
+
+All commands run from the repo root.
 
 **Staging (preview branch):**
 
-    source ~/.config/financehub/staging.env
+    cd "$(git rev-parse --show-toplevel)"
+    source ~/.config/financehub/staging.env   # set up in the plan's Prerequisites step
     psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_household_members_policies.sql
 
-**Production:** apply via the Supabase SQL Editor (paste, Run). Always
-apply to staging first, smoke-test, then prod. Never edit a migration
-file after it has run in production — write a new file instead.
+**Production:** apply via the Supabase SQL Editor (paste, Run). The SQL Editor
+halts on the first error by default — the same safety guarantee as
+`ON_ERROR_STOP=1`. Always apply to staging first, smoke-test, then prod.
+Never edit a migration file after it has run in production — write a new
+file instead.
 
 ## File naming
 
