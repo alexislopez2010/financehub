@@ -42,9 +42,10 @@ create policy "owner deletes member" on household_members
   for delete
   using (is_household_owner(household_id) and user_id <> auth.uid());
 
--- ── trigger: forbid changing user_id or household_id; non-owners cannot change role ──
+-- ── trigger: forbid changing user_id or household_id; non-owners cannot change role;
+--    last owner cannot demote themselves ──
 create or replace function household_members_update_guard() returns trigger
-  language plpgsql security definer
+  language plpgsql
   set search_path = public, pg_temp
 as $$
 begin
@@ -56,6 +57,16 @@ begin
   end if;
   if old.role <> new.role and not is_household_owner(old.household_id) then
     raise exception 'only an owner can change member role';
+  end if;
+  if old.role = 'owner' and new.role <> 'owner' then
+    if not exists (
+      select 1 from household_members
+      where household_id = old.household_id
+        and role = 'owner'
+        and user_id <> old.user_id
+    ) then
+      raise exception 'cannot demote the last owner of a household';
+    end if;
   end if;
   return new;
 end $$;
