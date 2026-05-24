@@ -70,9 +70,20 @@ gh repo create lopez-finances --private --source=. --push
 - **Vercel → Project → Settings → Domains → Add** → enter your domain (e.g. `finances.lopezfamily.com`).
 - Vercel will show you DNS records. Add them at your registrar (GoDaddy, Namecheap, Cloudflare, etc.). SSL is auto-provisioned.
 
-### 7. Add Marilyn
+### 7. Add a household member
 
-Marilyn visits the deployed URL → **Create account** → confirms email → sets up her own TOTP. The database trigger `handle_new_user` auto-adds her to the Lopez household as a `member`. She immediately sees the same dashboard.
+Public signups are disabled. To add a new family member:
+
+1. Add their email to the allowlist:
+   ```sql
+   insert into household_signup_allowlist (email, household_id)
+     values ('newmember@example.com', '00000000-0000-0000-0000-000000000001');
+   ```
+2. Invite the user via the Supabase dashboard → Authentication → Users → Invite.
+3. They confirm the email, set up TOTP, and land on the dashboard.
+
+To remove access: delete them from Supabase dashboard → Authentication → Users
+*and* remove their row from `household_signup_allowlist`.
 
 ---
 
