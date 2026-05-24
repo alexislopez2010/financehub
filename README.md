@@ -82,8 +82,10 @@ Public signups are disabled. To add a new family member:
 2. Invite the user via the Supabase dashboard → Authentication → Users → Invite.
 3. They confirm the email, set up TOTP, and land on the dashboard.
 
-To remove access: delete them from Supabase dashboard → Authentication → Users
-*and* remove their row from `household_signup_allowlist`.
+To remove access: **first** remove their row from `household_signup_allowlist`,
+**then** delete them from Supabase dashboard → Authentication → Users. If the
+allowlist row is left behind, anyone who creates a new account with that email
+will immediately rejoin the household.
 
 ---
 
