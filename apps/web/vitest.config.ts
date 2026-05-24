@@ -13,6 +13,18 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     css: false,
     include: ['**/*.test.{ts,tsx}'],
-    exclude: ['node_modules', '.next', 'tests/**']
+    exclude: ['node_modules', '.next', 'tests/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'html'],
+      include: ['lib/finance/**/*.ts'],
+      exclude: ['lib/finance/**/*.test.ts', 'lib/finance/types.ts'],
+      thresholds: {
+        lines: 98,
+        branches: 95,
+        functions: 100,
+        statements: 98
+      }
+    }
   }
 })
