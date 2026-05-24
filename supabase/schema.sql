@@ -253,6 +253,12 @@ from transactions
 where category is not null
 group by household_id, extract(year from date), category, type;
 
+-- Re-grant SELECT on the views to authenticated (Supabase client role).
+-- DROP VIEW above wipes prior grants; without these the dashboard would
+-- silently return empty data when querying through PostgREST.
+grant select on v_monthly_summary to authenticated;
+grant select on v_category_ytd to authenticated;
+
 -- ════════════════════════════════════════════════════════════════════
 -- RPCs (migration 0002)
 -- Version-controls five previously-undocumented RPCs.
