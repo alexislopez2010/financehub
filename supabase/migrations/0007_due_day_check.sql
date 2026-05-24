@@ -8,5 +8,6 @@
 update bills set due_day = least(greatest(due_day, 1), 31)
   where due_day is not null and (due_day < 1 or due_day > 31);
 
+alter table bills drop constraint if exists bills_due_day_range;
 alter table bills
   add constraint bills_due_day_range check (due_day is null or (due_day between 1 and 31));

@@ -114,6 +114,7 @@ update bill_match_rules r
 -- Cross-column invariant: each rule_kind requires its semantically-relevant
 -- columns to be populated. Without this, a category_map row could be inserted
 -- with no category, or a name_keyword row with no keyword, both meaningless.
+alter table bill_match_rules drop constraint if exists bill_match_rules_kind_columns_match;
 alter table bill_match_rules
   add constraint bill_match_rules_kind_columns_match check (
     (rule_kind = 'category_map' and category is not null)

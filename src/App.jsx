@@ -57,12 +57,29 @@ export default function App() {
 
   const checkMFA = async () => {
     setLoading(true)
-    const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    const { data: factorData } = await supabase.auth.mfa.listFactors()
-    const verifiedTotp = factorData?.totp?.find(f => f.status === 'verified')
-    setAal(aalData)
-    setNeedsEnroll(!verifiedTotp)
-    setLoading(false)
+    try {
+      const { data: aalData, error: aalErr } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      const { data: factorData, error: factorErr } = await supabase.auth.mfa.listFactors()
+      if (aalErr || factorErr || !aalData) {
+        // Fail closed: force re-login if either MFA introspection call fails.
+        await supabase.auth.signOut()
+        setSession(null)
+        setAal(null)
+        setNeedsEnroll(false)
+        return
+      }
+      const verifiedTotp = factorData?.totp?.find(f => f.status === 'verified')
+      setAal(aalData)
+      setNeedsEnroll(!verifiedTotp)
+    } catch {
+      // Defense-in-depth: any exception → sign out and reset.
+      await supabase.auth.signOut()
+      setSession(null)
+      setAal(null)
+      setNeedsEnroll(false)
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (loading) return <Loading />

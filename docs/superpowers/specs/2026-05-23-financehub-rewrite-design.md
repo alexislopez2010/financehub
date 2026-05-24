@@ -168,8 +168,12 @@ Ordered tasks executed on the current app, before the Phase 2 branch starts.
 ### Phase 1 — Schema migrations
 
 6. **`transactions.category_id` FK** + **`budgets.category_id` FK** — add columns, backfill from text columns matching `(household_id, name, type)`, drop text columns. Renames cascade.
+
+   **Note:** Phase 1 only adds the FK columns and backfills them. The legacy text `category` columns are NOT dropped here — the legacy Vite app still reads them. Phase 2 reads `category_id`; the post-cutover cleanup migration drops the text columns.
 7. **`bills.due_day` CHECK** — `CHECK (due_day BETWEEN 1 AND 31)`. App still clamps to month length at query time.
 8. **Transfer pairs** — add `transactions.transfer_pair_id uuid references transactions(id)` nullable self-reference. Migration splits each `type='Transfer'` row into a debit/credit pair. New transfers go through an RPC `create_transfer(from_account, to_account, amount, date)` that wraps both inserts in a transaction.
+
+   **Note:** Phase 1 only adds the column and creates `create_transfer()`. Historical single-row Transfer rows are NOT split into debit/credit pairs here — that would confuse the legacy Vite app, which reads transfers as single rows. The backfill runs at Phase 2 startup, simultaneously with enabling the new pair-collapsing read path.
 9. **`bill_match_rules` table** — `(id, bill_id fk, keyword text, account_filter text nullable)`. Backfills hardcoded `BILL_TX_MAP` / `BILL_NAME_KW`.
 10. **Missing indexes** — explicit `household_id` indexes on `categories`, `bills`, `budgets`, `family_members`.
 11. **`account_balances` snapshot table** — created but unused in Phase 2 (Phase 3 will start populating it).
