@@ -452,6 +452,18 @@ grant execute on function admin_update_household_user(uuid, uuid, text, text) to
 grant execute on function admin_reset_user_mfa(uuid, uuid) to authenticated;
 grant execute on function admin_remove_household_user(uuid, uuid) to authenticated;
 
+-- Explicit anon revokes. revoke-from-public alone does not always clear
+-- Supabase's separate anon grant; without these, the security advisor
+-- flags anon_security_definer_function_executable on each function.
+revoke execute on function claim_lopez_household() from anon;
+revoke execute on function admin_list_household_users(uuid) from anon;
+revoke execute on function admin_update_household_user(uuid, uuid, text, text) from anon;
+revoke execute on function admin_reset_user_mfa(uuid, uuid) from anon;
+revoke execute on function admin_remove_household_user(uuid, uuid) from anon;
+revoke execute on function is_household_member(uuid) from public, anon;
+revoke execute on function is_household_owner(uuid) from public, anon;
+revoke execute on function handle_new_user() from public, anon, authenticated;
+
 -- ════════════════════════════════════════════════════════════════════
 -- SIGNUP ALLOWLIST + HARDENED handle_new_user (migration 0003)
 -- Public signups are disabled in the Supabase dashboard.
