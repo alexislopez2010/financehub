@@ -27,13 +27,24 @@ export default function App() {
         setRecovery(true)
         setRecoveryAal2(false)
         setSession(s)
-        // Detect whether MFA step-up is required to update password
-        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-        if (aalData?.nextLevel === 'aal2' && aalData?.currentLevel !== 'aal2') {
-          setRecoveryAal2(false)
-        } else {
-          setRecoveryAal2(true) // no MFA required — skip straight to reset form
+        // Detect whether MFA step-up is required. Default to requiring MFA
+        // if the check fails or returns null — fail closed, never open.
+        let mustChallenge = true
+        try {
+          const { data: aalData, error: aalErr } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+          if (aalErr || !aalData) {
+            mustChallenge = true
+          } else if (aalData.currentLevel === 'aal2') {
+            mustChallenge = false   // already stepped up
+          } else if (aalData.nextLevel !== 'aal2') {
+            mustChallenge = false   // no MFA enrolled at all — no factor to challenge
+          } else {
+            mustChallenge = true    // aal1 with aal2 available — must step up
+          }
+        } catch {
+          mustChallenge = true      // any error → fail closed
         }
+        setRecoveryAal2(!mustChallenge)
         setLoading(false)
         return
       }
