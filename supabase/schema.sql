@@ -125,7 +125,9 @@ alter table budgets enable row level security;
 
 -- Helper function: does the current user belong to this household?
 create or replace function is_household_member(h_id uuid) returns boolean
-language sql security definer stable as $$
+  language sql security definer stable
+  set search_path = public, pg_temp
+as $$
   select exists (
     select 1 from household_members
     where user_id = auth.uid() and household_id = h_id
