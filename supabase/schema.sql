@@ -118,6 +118,15 @@ create table if not exists budgets (
 
 create index if not exists budgets_category_id_idx on budgets(household_id, category_id);
 
+-- ── Phase 1.5 indexes — explicit household_id indexes ──
+-- Postgres does not auto-index FK columns; per-household queries
+-- (the entire app) were doing seq scans on these tables.
+create index if not exists categories_household_idx on categories(household_id);
+create index if not exists bills_household_idx on bills(household_id);
+create index if not exists budgets_household_idx on budgets(household_id);
+create index if not exists family_members_household_idx on family_members(household_id);
+create index if not exists accounts_household_idx on accounts(household_id);
+
 -- ════════════════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY
 -- Users can only see data for households they belong to.
