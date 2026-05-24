@@ -630,7 +630,12 @@ create table if not exists bill_match_rules (
   keyword text,               -- description keyword, lowercased; nullable
   account_filter text,        -- nullable, narrows by account name
   rule_kind text not null check (rule_kind in ('category_map','name_keyword')),
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  constraint bill_match_rules_kind_columns_match check (
+    (rule_kind = 'category_map' and category is not null)
+    or
+    (rule_kind = 'name_keyword' and keyword is not null)
+  )
 );
 
 create index if not exists bill_match_rules_household_idx

@@ -110,3 +110,13 @@ update bill_match_rules r
  where r.bill_id is null
    and r.household_id = b.household_id
    and r.bill_name = b.name;
+
+-- Cross-column invariant: each rule_kind requires its semantically-relevant
+-- columns to be populated. Without this, a category_map row could be inserted
+-- with no category, or a name_keyword row with no keyword, both meaningless.
+alter table bill_match_rules
+  add constraint bill_match_rules_kind_columns_match check (
+    (rule_kind = 'category_map' and category is not null)
+    or
+    (rule_kind = 'name_keyword' and keyword is not null)
+  );
