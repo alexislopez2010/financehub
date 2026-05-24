@@ -91,7 +91,7 @@ create table if not exists bills (
   name text not null,
   category text,
   account text,
-  due_day int,
+  due_day int check (due_day is null or (due_day between 1 and 31)),
   frequency text check (frequency in ('Monthly','Biweekly','Weekly','Quarterly','Annual')),
   budget_amount numeric(12,2) not null default 0,
   is_active boolean default true,
