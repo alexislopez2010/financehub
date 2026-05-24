@@ -609,3 +609,42 @@ end $$;
 
 revoke all on function create_transfer(uuid, uuid, uuid, numeric, date, text, text) from public;
 grant execute on function create_transfer(uuid, uuid, uuid, numeric, date, text, text) to authenticated;
+
+-- ════════════════════════════════════════════════════════════════════
+-- BILL MATCH RULES (migration 0009)
+-- Phase 1.4 — externalises BILL_TX_MAP and BILL_NAME_KW from Dashboard.jsx.
+-- Phase 2 reads from this table; the legacy Vite app keeps its hardcoded
+-- copy until cutover. Seed data and bill_id backfill live in
+-- supabase/migrations/0009_bill_match_rules.sql, not here.
+-- ════════════════════════════════════════════════════════════════════
+
+create table if not exists bill_match_rules (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid references households(id) on delete cascade not null,
+  bill_id uuid references bills(id) on delete cascade,
+  -- Either bill_id matches a single bill, OR bill_name + category match
+  -- the legacy BILL_TX_MAP pattern (bill referenced by name string).
+  bill_name text,             -- nullable, used when bill_id is null
+  category text,              -- target transaction category
+  sub_category text,          -- nullable, narrows within category
+  keyword text,               -- description keyword, lowercased; nullable
+  account_filter text,        -- nullable, narrows by account name
+  rule_kind text not null check (rule_kind in ('category_map','name_keyword')),
+  created_at timestamptz default now()
+);
+
+create index if not exists bill_match_rules_household_idx
+  on bill_match_rules(household_id);
+create index if not exists bill_match_rules_bill_idx
+  on bill_match_rules(household_id, bill_id)
+  where bill_id is not null;
+
+alter table bill_match_rules enable row level security;
+
+drop policy if exists "household read rules" on bill_match_rules;
+drop policy if exists "household write rules" on bill_match_rules;
+create policy "household read rules" on bill_match_rules
+  for select using (is_household_member(household_id));
+create policy "household write rules" on bill_match_rules
+  for all using (is_household_member(household_id))
+  with check (is_household_member(household_id));
