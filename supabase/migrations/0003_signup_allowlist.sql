@@ -45,12 +45,11 @@ create policy "owner writes allowlist" on household_signup_allowlist
   using (is_household_owner(household_id))
   with check (is_household_owner(household_id));
 
--- Seed Alexis + Marilyn.
--- !!! IMPORTANT: REPLACE marilyn@example.com WITH MARILYN'S ACTUAL EMAIL
--- !!! BEFORE APPLYING THIS MIGRATION.
+-- Seed Alexis only. Marilyn's address can be added later with a one-line INSERT:
+--   insert into household_signup_allowlist (email, household_id)
+--     values ('<her-email>', '00000000-0000-0000-0000-000000000001');
 insert into household_signup_allowlist (email, household_id)
-  values ('alexis.hiram@gmail.com', '00000000-0000-0000-0000-000000000001'),
-         ('marilyn@example.com',    '00000000-0000-0000-0000-000000000001')
+  values ('alexis.hiram@gmail.com', '00000000-0000-0000-0000-000000000001')
   on conflict (email) do nothing;
 
 -- Rewrite the trigger to enforce the allowlist
