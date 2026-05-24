@@ -21,3 +21,6 @@ playwright/.cache
 
 # Vitest
 coverage
+
+# TypeScript build info
+*.tsbuildinfo
