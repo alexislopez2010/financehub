@@ -10,10 +10,11 @@ alter table transactions
 alter table budgets
   add column if not exists category_id uuid references categories(id) on delete set null;
 
--- Backfill: match on (household_id, name, type) for transactions
--- transactions.type is 'Expense'/'Income'/'Transfer'/'Refund' but
--- categories.type is 'expense'/'income' (lowercase, only two values).
--- Map Income→income, everything else→expense for matching purposes.
+-- Backfill: only the unambiguous cases. Income transactions match
+-- categories.type = 'income'; Expense transactions match 'expense'.
+-- Transfer and Refund rows are deliberately left null — they are not
+-- category-bound semantically and any name collision with an expense
+-- category would be a false FK association.
 update transactions t
    set category_id = c.id
   from categories c
@@ -21,7 +22,11 @@ update transactions t
    and t.category is not null
    and c.household_id = t.household_id
    and c.name = t.category
-   and c.type = case when t.type = 'Income' then 'income' else 'expense' end;
+   and (
+     (t.type = 'Income'  and c.type = 'income')
+     or
+     (t.type = 'Expense' and c.type = 'expense')
+   );
 
 -- Budgets always represent expense categories
 update budgets b
