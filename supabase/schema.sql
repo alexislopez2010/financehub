@@ -68,6 +68,7 @@ create table if not exists transactions (
   amount numeric(12,2) not null,
   type text not null check (type in ('Expense','Income','Transfer','Refund')),
   category text,
+  category_id uuid references categories(id) on delete set null,
   account text,
   member text,
   payment_method text,
@@ -81,6 +82,7 @@ create index if not exists transactions_household_date_idx on transactions(house
 create index if not exists transactions_category_idx on transactions(household_id, category);
 create index if not exists transactions_account_idx on transactions(household_id, account);
 create index if not exists transactions_fingerprint_idx on transactions(household_id, fingerprint);
+create index if not exists transactions_category_id_idx on transactions(household_id, category_id);
 
 -- ── BILLS (recurring) ──
 create table if not exists bills (
@@ -102,12 +104,15 @@ create table if not exists budgets (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references households(id) on delete cascade not null,
   category text not null,
+  category_id uuid references categories(id) on delete set null,
   year int not null,
   month int not null check (month between 1 and 12),
   amount numeric(12,2) not null default 0,
   created_at timestamptz default now(),
   unique (household_id, category, year, month)
 );
+
+create index if not exists budgets_category_id_idx on budgets(household_id, category_id);
 
 -- ════════════════════════════════════════════════════════════════════
 -- ROW LEVEL SECURITY
