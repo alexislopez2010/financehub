@@ -123,7 +123,6 @@ create index if not exists budgets_category_id_idx on budgets(household_id, cate
 -- (the entire app) were doing seq scans on these tables.
 create index if not exists categories_household_idx on categories(household_id);
 create index if not exists bills_household_idx on bills(household_id);
-create index if not exists budgets_household_idx on budgets(household_id);
 create index if not exists family_members_household_idx on family_members(household_id);
 create index if not exists accounts_household_idx on accounts(household_id);
 
