@@ -1,140 +1,106 @@
 # Lopez Family Finances
 
-Private household finance dashboard for Alexis & Marilyn. React + Vite + Supabase, protected by email/password login + TOTP multi-factor auth. Deployed on Vercel.
+Private household finance dashboard for the Lopez family. Currently in mid-rewrite:
+
+- **`apps/legacy/`** — the original React + Vite app, live in production.
+- **`apps/web/`** — the in-progress Next.js 15 + TypeScript rewrite (Phase 2). Not yet deployed; cut over at the end of Phase 2.
+
+Both apps talk to the same Supabase project. Schema lives in [`supabase/`](./supabase/).
 
 ## Stack
 
-- **Frontend:** React 18 + Vite 5 + Tailwind + recharts + lucide-react
-- **Backend:** Supabase (Postgres + Auth + Row Level Security)
-- **Hosting:** Vercel (auto SSL, custom domain)
-- **Data shape:** one shared `households` row, both users belong to it via `household_members`. RLS guarantees only members can read/write.
+- **Frontend (web/)**: Next.js 15 (App Router, React 19), TypeScript strict, Tailwind v3, Radix primitives, TanStack Query (to be added), Vitest, Playwright.
+- **Frontend (legacy/)**: React 18 + Vite + Tailwind. Maintenance only.
+- **Backend**: Supabase (Postgres + Auth + RLS + TOTP MFA).
+- **Hosting**: Vercel.
 
----
+## Repo layout
 
-## Phase 1 setup — one-time
-
-### 1. Create the Supabase project
-
-1. Go to https://supabase.com → **New Project**. Pick a strong DB password; save it.
-2. Open **SQL Editor** → **New query** → paste the contents of `supabase/schema.sql` → **Run**.
-3. **Authentication → Providers → Email**: disable "Confirm email" for faster testing, or leave it on and confirm the signup emails.
-4. **Authentication → Policies → Multi-Factor Auth**: enable **TOTP**.
-5. **Project Settings → API**: copy the **Project URL** and the **anon public** key. You'll also need the **service_role** key for the data migration (keep it secret).
-
-### 2. Migrate existing Excel data
-
-```bash
-pip install openpyxl supabase
-export SUPABASE_URL=https://<your-project>.supabase.co
-export SUPABASE_SERVICE_ROLE_KEY=eyJ...   # service-role key, NOT the anon key
-python supabase/migrate_from_excel.py "/path/to/Family_Finance_Dashboard_2026.xlsx"
+```
+financehub/
+├── apps/
+│   ├── legacy/             # current Vite app (still production)
+│   └── web/                # new Next.js 15 app (rewrite in progress)
+├── supabase/
+│   ├── migrations/         # numeric-prefixed SQL files, applied in order
+│   ├── schema.sql          # canonical fresh-install schema
+│   └── migrate_from_excel.py
+├── docs/superpowers/
+│   ├── specs/              # design specs
+│   └── plans/              # implementation plans
+├── .github/workflows/ci.yml
+├── package.json            # npm workspaces root
+└── tsconfig.base.json      # shared TypeScript compiler options
 ```
 
-Add `--fresh` to wipe existing rows first. Re-run this any time you update the spreadsheet.
-
-### 3. Configure the frontend locally
+## Local development
 
 ```bash
-cd Lopez-Finances-App
-cp .env.example .env
-# edit .env:
-#   VITE_SUPABASE_URL=https://<your-project>.supabase.co
-#   VITE_SUPABASE_ANON_KEY=<anon public key>
+# Install everything (both workspaces)
 npm install
-npm run dev
+
+# Run the legacy Vite app on :5173
+npm run dev:legacy
+
+# Run the new Next.js app on :3000
+npm run dev:web
+
+# Build either
+npm run build:legacy
+npm run build:web
+
+# Workspace-wide
+npm run lint        # ESLint where configured
+npm run test        # Vitest where configured
+npm run typecheck   # tsc --noEmit where configured
 ```
 
-Open http://localhost:5173. Create your account, set up TOTP with Google Authenticator / Authy / 1Password, and you'll land on the dashboard.
+Both apps need a Supabase URL + anon key. Each has its own `.env`:
 
-### 4. Push to GitHub
-
-```bash
-cd Lopez-Finances-App
-git init
-git add .
-git commit -m "Initial commit — Lopez family finance dashboard"
-gh repo create lopez-finances --private --source=. --push
+```
+apps/legacy/.env       VITE_SUPABASE_URL=...      VITE_SUPABASE_ANON_KEY=...
+apps/web/.env.local    NEXT_PUBLIC_SUPABASE_URL=…  NEXT_PUBLIC_SUPABASE_ANON_KEY=…  (added in Phase 2B)
 ```
 
-### 5. Deploy to Vercel
+## Phase 2 progress
 
-1. Go to https://vercel.com → **Add New → Project** → import the `lopez-finances` repo.
-2. Framework preset: **Vite** (auto-detected).
-3. **Environment variables** (Production + Preview + Development):
-   - `VITE_SUPABASE_URL` = your Supabase project URL
-   - `VITE_SUPABASE_ANON_KEY` = your Supabase anon public key
-4. Deploy. You'll get `https://lopez-finances.vercel.app`.
+- [x] **Phase 0** — security hotfixes (privilege escalation, admin RPC owner guards, signup allowlist, RLS-aware views, search_path pinning, password-recovery null-AAL fix). Tagged `phase-0-complete`.
+- [x] **Phase 1** — schema additions (category_id FKs, due_day CHECK, transfer_pair_id + create_transfer RPC, bill_match_rules, household_id indexes, account_balances). Tagged `phase-1-complete`.
+- [ ] **Phase 2** — Next.js 15 rewrite. In progress on branch `phase-2-rewrite`.
+  - [x] 2A — monorepo + scaffold + design system
+  - [ ] 2B — auth flow + middleware
+  - [ ] 2C — app shell + bottom-tab nav + spotlight bar
+  - [ ] 2D — `lib/finance/*` pure modules + 100% unit coverage
+  - [ ] 2E — TanStack Query data layer
+  - [ ] 2F — Briefing surface
+  - [ ] 2G — Ledger surface
+  - [ ] 2H — Plan surface
+  - [ ] 2I — Bills surface
+  - [ ] 2J — Accounts surface
+  - [ ] 2K — Spotlight search (Cmd-K)
+  - [ ] 2L — Admin
+  - [ ] 2M — Playwright E2E + pgTAP schema tests
+  - [ ] 2N — Cleanup migrations (transfer-row split, drop legacy text columns)
+  - [ ] 2O — Cutover (Vercel branch merge, decommission Vite)
 
-### 6. Custom domain
+## Adding a household member
 
-- **Vercel → Project → Settings → Domains → Add** → enter your domain (e.g. `finances.lopezfamily.com`).
-- Vercel will show you DNS records. Add them at your registrar (GoDaddy, Namecheap, Cloudflare, etc.). SSL is auto-provisioned.
-
-### 7. Add a household member
-
-Public signups are disabled. To add a new family member:
+Public signups are disabled. To grant a new family member access:
 
 1. Add their email to the allowlist:
    ```sql
    insert into household_signup_allowlist (email, household_id)
      values ('newmember@example.com', '00000000-0000-0000-0000-000000000001');
    ```
-2. Invite the user via the Supabase dashboard → Authentication → Users → Invite.
+2. Invite the user via Supabase Dashboard → Authentication → Users → Invite.
 3. They confirm the email, set up TOTP, and land on the dashboard.
 
-To remove access: **first** remove their row from `household_signup_allowlist`,
-**then** delete them from Supabase dashboard → Authentication → Users. If the
-allowlist row is left behind, anyone who creates a new account with that email
-will immediately rejoin the household.
-
----
-
-## Local development
-
-```bash
-npm run dev       # dev server on :5173
-npm run build     # production build in dist/
-npm run preview   # preview the production build locally
-```
-
-## Project layout
-
-```
-Lopez-Finances-App/
-├── index.html
-├── package.json
-├── vite.config.js
-├── tailwind.config.js
-├── postcss.config.js
-├── .env.example
-├── supabase/
-│   ├── schema.sql              # run this in Supabase SQL editor
-│   └── migrate_from_excel.py   # imports xlsx → Supabase
-└── src/
-    ├── main.jsx
-    ├── App.jsx                 # auth router: login → MFA enroll → MFA challenge → dashboard
-    ├── index.css
-    ├── lib/supabase.js
-    ├── hooks/useFinanceData.js
-    └── components/
-        ├── Auth/
-        │   ├── AuthShell.jsx
-        │   ├── Login.jsx
-        │   ├── Signup.jsx
-        │   ├── MFAEnroll.jsx
-        │   └── MFAChallenge.jsx
-        └── Dashboard/
-            └── Dashboard.jsx
-```
+To remove access: **first** delete the allowlist row, **then** delete the auth user. Reverse order would briefly allow re-registration.
 
 ## Security model
 
-- **Row Level Security** on every table. `is_household_member()` is the gate.
-- Clients hold the **anon key** only — it gives no DB access without an authenticated session.
-- The **service_role key** is used only by the migration script on your machine; it never leaves your laptop.
-- **TOTP MFA is required** for every session (enforced in `App.jsx` — if `aal1` and `nextLevel = aal2`, the user is routed to `MFAChallenge`).
-- To remove a family member's access: delete them from **Supabase → Authentication → Users**. They're immediately locked out; data stays intact.
+- **Row Level Security** on every table. `is_household_member()` and `is_household_owner()` are the gates, both `SECURITY DEFINER` with pinned `search_path`.
+- **MFA (TOTP) required** for every session (AAL2 enforced in `apps/legacy/src/App.jsx` and — in Phase 2B — Next.js middleware). Fail-closed on MFA-introspection errors.
+- Admin RPCs are owner-only at the database layer, not just UI-gated.
 
-## Phase 2 — Claude natural-language layer (next)
-
-Planned but not built yet. Will add a `/api/ask` Vercel Edge Function that takes a prompt, queries Supabase with the user's JWT (so RLS still applies), passes the results to Claude Sonnet 4.6, and streams the answer back. Questions like "what did we spend on groceries in March?" or "where can we trim to save $2k?" will work end-to-end.
+See `supabase/migrations/` for the audit trail.
