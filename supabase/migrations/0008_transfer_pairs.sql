@@ -32,8 +32,11 @@ begin
   if not is_household_member(p_household_id) then
     raise exception 'not authorized';
   end if;
-  if p_amount <= 0 then
+  if p_amount is null or p_amount <= 0 then
     raise exception 'transfer amount must be positive';
+  end if;
+  if p_date is null then
+    raise exception 'transfer date is required';
   end if;
   if p_from_account_id = p_to_account_id then
     raise exception 'source and destination accounts must differ';
