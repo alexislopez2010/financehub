@@ -4,8 +4,11 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Search, ArrowRight, Settings } from 'lucide-react'
+import { Search, ArrowRight, Settings, Receipt, FileText, Wallet, Tag } from 'lucide-react'
 import { useSpotlight } from './SpotlightProvider'
+import { SpotlightResultGroup } from './SpotlightResultGroup'
+import { useSpotlightSearch } from '@/lib/spotlight/useSpotlightSearch'
+import type { SpotlightHit } from '@/lib/spotlight/search'
 import { TABS } from '@/components/nav/tabs'
 import { cn } from '@/lib/cn'
 
@@ -15,6 +18,7 @@ export function SpotlightDialog() {
   const { open, setOpen, closeSpotlight } = useSpotlight()
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const { groups } = useSpotlightSearch(search)
 
   // Reset search input whenever the dialog closes.
   useEffect(() => {
@@ -24,6 +28,11 @@ export function SpotlightDialog() {
   function jumpTo(href: string) {
     closeSpotlight()
     router.push(href)
+  }
+
+  function onHitSelect(hit: SpotlightHit) {
+    closeSpotlight()
+    router.push(hit.href)
   }
 
   return (
@@ -50,7 +59,7 @@ export function SpotlightDialog() {
             Search the app or jump to a surface.
           </Dialog.Description>
 
-          <Command label="Spotlight" shouldFilter className="overflow-hidden rounded-xl">
+          <Command label="Spotlight" shouldFilter={false} className="overflow-hidden rounded-xl">
             <div className="flex items-center gap-2 border-b border-rule px-3 py-2.5">
               <Search size={14} className="shrink-0 text-muted" aria-hidden="true" />
               <Command.Input
@@ -124,23 +133,30 @@ export function SpotlightDialog() {
                 </Command.Item>
               </Command.Group>
 
-              <Command.Group
-                heading="Find"
-                className={cn(
-                  '[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:mt-2',
-                  '[&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase',
-                  '[&_[cmdk-group-heading]]:tracking-[0.18em] [&_[cmdk-group-heading]]:italic',
-                  '[&_[cmdk-group-heading]]:text-muted'
-                )}
-              >
-                <Command.Item
-                  disabled
-                  value="find placeholder coming soon"
-                  className="px-3 py-2 text-sm text-muted italic mx-2 cursor-not-allowed"
-                >
-                  Search transactions, bills, accounts — coming in Phase 2K
-                </Command.Item>
-              </Command.Group>
+              <SpotlightResultGroup
+                heading="Transactions"
+                hits={groups.transactions}
+                Icon={Receipt}
+                onSelect={onHitSelect}
+              />
+              <SpotlightResultGroup
+                heading="Bills"
+                hits={groups.bills}
+                Icon={FileText}
+                onSelect={onHitSelect}
+              />
+              <SpotlightResultGroup
+                heading="Accounts"
+                hits={groups.accounts}
+                Icon={Wallet}
+                onSelect={onHitSelect}
+              />
+              <SpotlightResultGroup
+                heading="Categories"
+                hits={groups.categories}
+                Icon={Tag}
+                onSelect={onHitSelect}
+              />
             </Command.List>
           </Command>
         </Dialog.Content>

@@ -32,10 +32,13 @@ export function AccountRow({ balance, onEditName, onArchive }: AccountRowProps) 
     : balance.currentBalance < 0 ? 'text-red-600' : 'text-ink'
 
   return (
-    <div className={cn(
-      'grid grid-cols-[1fr_100px_120px_28px] sm:grid-cols-[1fr_120px_140px_28px] gap-3 items-center',
-      'px-4 py-3 text-sm hover:bg-gray-50 transition-colors'
-    )}>
+    <div
+      data-account-id={balance.accountId}
+      className={cn(
+        'grid grid-cols-[1fr_100px_120px_28px] sm:grid-cols-[1fr_120px_140px_28px] gap-3 items-center',
+        'px-4 py-3 text-sm hover:bg-gray-50 transition-colors'
+      )}
+    >
       <div className="min-w-0">
         {onEditName ? (
           <EditableCell

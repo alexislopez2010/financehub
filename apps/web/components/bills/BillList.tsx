@@ -1,7 +1,8 @@
 'use client'
 
 import { ArrowDown, ArrowUpDown } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { Tables } from '@/lib/supabase/database.types'
 import { billComparator, type BillSortKey } from '@/lib/bills/sort'
 import { BillRow } from './BillRow'
@@ -39,12 +40,23 @@ export function BillList({
   onEditName, onEditDueDay, onEditAmount, onDelete
 }: BillListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const focusId = searchParams?.get('focus') ?? null
 
   const sorted = useMemo(() => {
     const copy = [...bills].filter(b => b.is_active !== false)
     copy.sort(billComparator(sortKey, today))
     return copy
   }, [bills, sortKey, today])
+
+  // Spotlight deep link: scroll the focused bill row into view once it renders.
+  useEffect(() => {
+    if (!focusId) return
+    if (typeof document === 'undefined') return
+    if (!sorted.some(b => b.id === focusId)) return
+    const el = document.querySelector<HTMLElement>(`[data-bill-id="${focusId}"]`)
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusId, sorted])
 
   if (sorted.length === 0) {
     return (

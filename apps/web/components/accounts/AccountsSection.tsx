@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Plus, Wallet } from 'lucide-react'
 import { useAccounts, useCreateAccount, useUpdateAccount } from '@/lib/data/accounts'
 import { useTransactions } from '@/lib/data/transactions'
@@ -30,6 +31,18 @@ export function AccountsSection() {
     }),
     [accountsQ.data, txsQ.data]
   )
+
+  const searchParams = useSearchParams()
+  const focusId = searchParams?.get('focus') ?? null
+
+  // Spotlight deep link: scroll the focused account row into view once it renders.
+  useEffect(() => {
+    if (!focusId) return
+    if (typeof document === 'undefined') return
+    if (!summary.accounts.some(a => a.accountId === focusId)) return
+    const el = document.querySelector<HTMLElement>(`[data-account-id="${focusId}"]`)
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [focusId, summary.accounts])
 
   function handleCreate(input: { name: string; type: string; institution: string | null; starting_balance: number }) {
     createAccount.mutate({

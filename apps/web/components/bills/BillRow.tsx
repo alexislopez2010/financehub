@@ -57,11 +57,14 @@ export function BillRow({
   })()
 
   return (
-    <div className={cn(
-      'grid gap-3 items-center px-4 py-3 text-sm transition-colors',
-      expanded ? 'bg-blue-50/40' : 'hover:bg-gray-50',
-      cols
-    )}>
+    <div
+      data-bill-id={bill.id}
+      className={cn(
+        'grid gap-3 items-center px-4 py-3 text-sm transition-colors',
+        expanded ? 'bg-blue-50/40' : 'hover:bg-gray-50',
+        cols
+      )}
+    >
       {showToggle && (
         <button
           type="button"
