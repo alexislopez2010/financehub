@@ -103,8 +103,8 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills: [bill()], categories: [category()] })
 
     // Assert
-    expect(out[0].billId).toBeNull()
-    expect(out[0].categoryId).toBeNull()
+    expect(out[0]?.billId).toBeNull()
+    expect(out[0]?.categoryId).toBeNull()
   })
 
   it('sets billId + categoryId on a matching name_keyword rule', () => {
@@ -118,8 +118,8 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].billId).toBe('b1')
-    expect(out[0].categoryId).toBe('c1')
+    expect(out[0]?.billId).toBe('b1')
+    expect(out[0]?.categoryId).toBe('c1')
   })
 
   it('returns null categoryId when bill has no category and rule provides none', () => {
@@ -133,8 +133,8 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].billId).toBe('b1')
-    expect(out[0].categoryId).toBeNull()
+    expect(out[0]?.billId).toBe('b1')
+    expect(out[0]?.categoryId).toBeNull()
   })
 
   it('falls back to rule.category when bill has no category', () => {
@@ -148,7 +148,7 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].categoryId).toBe('c1')
+    expect(out[0]?.categoryId).toBe('c1')
   })
 
   it('first matching rule wins', () => {
@@ -165,7 +165,7 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].billId).toBe('b1')
+    expect(out[0]?.billId).toBe('b1')
   })
 
   it('resolves bill via bill_name when bill_id is null', () => {
@@ -179,7 +179,7 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].billId).toBe('b1')
+    expect(out[0]?.billId).toBe('b1')
   })
 
   it('preserves input order in output', () => {
@@ -214,8 +214,8 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills: [bill()], categories: [category()] })
 
     // Assert
-    expect(out[0].billId).toBeNull()
-    expect(out[0].categoryId).toBeNull()
+    expect(out[0]?.billId).toBeNull()
+    expect(out[0]?.categoryId).toBeNull()
   })
 
   it('category lookup is case-insensitive', () => {
@@ -229,6 +229,6 @@ describe('categorize', () => {
     const out = categorize({ rows, rules, bills, categories })
 
     // Assert
-    expect(out[0].categoryId).toBe('c1')
+    expect(out[0]?.categoryId).toBe('c1')
   })
 })

@@ -148,8 +148,8 @@ describe('chase adapter', () => {
     const { parsed } = chase.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].type).toBe('Refund')
-    expect(parsed[0].amount).toBe(500)
+    expect(parsed[0]?.type).toBe('Refund')
+    expect(parsed[0]?.amount).toBe(500)
   })
 
   it('falls back to amount-based type when Type cell is blank', () => {
@@ -163,8 +163,8 @@ describe('chase adapter', () => {
     const { parsed } = chase.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].type).toBe('Expense')
-    expect(parsed[1].type).toBe('Income')
+    expect(parsed[0]?.type).toBe('Expense')
+    expect(parsed[1]?.type).toBe('Income')
   })
 
   it('skips rows with bad dates', () => {
@@ -177,7 +177,7 @@ describe('chase adapter', () => {
     // Assert
     expect(parsed).toHaveLength(0)
     expect(skipped).toHaveLength(1)
-    expect(skipped[0].reason).toMatch(/Invalid date/)
+    expect(skipped[0]?.reason).toMatch(/Invalid date/)
   })
 
   it('skips rows with missing description', () => {
@@ -189,7 +189,7 @@ describe('chase adapter', () => {
 
     // Assert
     expect(parsed).toHaveLength(0)
-    expect(skipped[0].reason).toBe('Missing description')
+    expect(skipped[0]?.reason).toBe('Missing description')
   })
 
   it('skips rows with bad amount', () => {
@@ -201,7 +201,7 @@ describe('chase adapter', () => {
 
     // Assert
     expect(parsed).toHaveLength(0)
-    expect(skipped[0].reason).toMatch(/Invalid amount/)
+    expect(skipped[0]?.reason).toMatch(/Invalid amount/)
   })
 
   it('handles two-digit years', () => {
@@ -212,7 +212,7 @@ describe('chase adapter', () => {
     const { parsed } = chase.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].date).toBe('2026-01-15')
+    expect(parsed[0]?.date).toBe('2026-01-15')
   })
 })
 
@@ -256,8 +256,8 @@ describe('capitalOne adapter', () => {
     const { parsed } = capitalOne.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(300)
-    expect(parsed[0].type).toBe('Income')
+    expect(parsed[0]?.amount).toBe(300)
+    expect(parsed[0]?.type).toBe('Income')
   })
 
   it('skips row with both debit and credit blank', () => {
@@ -294,7 +294,7 @@ describe('capitalOne adapter', () => {
     // Assert
     expect(parsed).toHaveLength(0)
     expect(skipped).toHaveLength(1)
-    expect(skipped[0].reason).toMatch(/Invalid amount/)
+    expect(skipped[0]?.reason).toMatch(/Invalid amount/)
   })
 
   it('handles currency formatting in debit/credit cells', () => {
@@ -305,7 +305,23 @@ describe('capitalOne adapter', () => {
     const { parsed } = capitalOne.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(-1234.56)
+    expect(parsed[0]?.amount).toBe(-1234.56)
+  })
+
+  it('treats parens in debit column as positive magnitude (Excel re-save defense)', () => {
+    // Arrange — if a CSV is re-saved through Excel it may pick up accounting paren
+    // notation. parseMoney("(42.50)") returns -42.50, which without Math.abs would
+    // flip the sign: amount = 0 - (-42.50) = +42.50, mislabeled as Income.
+    const rows = [
+      ['04/15/2026', '04/16/2026', '1234', 'TARGET', 'Shopping', '(42.50)', '']
+    ]
+
+    // Act
+    const { parsed } = capitalOne.parse(headers, rows)
+
+    // Assert — must stay an Expense.
+    expect(parsed[0]?.amount).toBe(-42.5)
+    expect(parsed[0]?.type).toBe('Expense')
   })
 })
 
@@ -349,8 +365,8 @@ describe('discover adapter', () => {
     const { parsed } = discover.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(10)
-    expect(parsed[0].type).toBe('Refund')
+    expect(parsed[0]?.amount).toBe(10)
+    expect(parsed[0]?.type).toBe('Refund')
   })
 
   it('skips bad rows', () => {
@@ -387,9 +403,9 @@ describe('amex adapter', () => {
     const { parsed } = amex.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(-87.32)
-    expect(parsed[0].type).toBe('Expense')
-    expect(parsed[0].source).toBe('American Express')
+    expect(parsed[0]?.amount).toBe(-87.32)
+    expect(parsed[0]?.type).toBe('Expense')
+    expect(parsed[0]?.source).toBe('American Express')
   })
 
   it('parses refund (negative CSV → positive Refund)', () => {
@@ -400,8 +416,8 @@ describe('amex adapter', () => {
     const { parsed } = amex.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(15)
-    expect(parsed[0].type).toBe('Refund')
+    expect(parsed[0]?.amount).toBe(15)
+    expect(parsed[0]?.type).toBe('Refund')
   })
 
   it('skips bad rows', () => {
@@ -438,9 +454,9 @@ describe('generic adapter', () => {
     const { parsed } = generic.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].amount).toBe(-5)
-    expect(parsed[0].type).toBe('Expense')
-    expect(parsed[0].source).toBe('Generic CSV')
+    expect(parsed[0]?.amount).toBe(-5)
+    expect(parsed[0]?.type).toBe('Expense')
+    expect(parsed[0]?.source).toBe('Generic CSV')
   })
 
   it('treats positive amount as Income', () => {
@@ -452,7 +468,7 @@ describe('generic adapter', () => {
     const { parsed } = generic.parse(headers, rows)
 
     // Assert
-    expect(parsed[0].type).toBe('Income')
+    expect(parsed[0]?.type).toBe('Income')
   })
 
   it('skips bad rows', () => {

@@ -1,13 +1,15 @@
 /**
  * Stable transaction fingerprint matching the Python importer's algorithm:
  *
- *   raw = `${date}|${desc}|${amount}|${account}`.toLowerCase()
- *   fingerprint = sha256(raw).hex.slice(0, 16)
+ *   raw = f"{date}|{desc}|{amount}|{account}".lower()
+ *   fingerprint = sha256(raw).hexdigest()[:16]
  *
  * Why this exact format: the legacy `supabase/migrate_from_excel.py` script
  * writes fingerprints in this shape, and we need to dedup against rows it
- * inserted. `String(amount)` mirrors Python's default repr — `-12.34` not
- * `"-12.34000"`, `0` not `"0.0"`.
+ * inserted. The Python script reads amounts from Excel as floats, so
+ * `f"{amount}"` emits `"100.0"` for whole-dollar amounts, `"0.0"` for zero,
+ * and `"15.99"` for non-trivial decimals. JS's `String(n)` drops the `".0"`
+ * for whole numbers, so we must mirror Python's float repr explicitly.
  *
  * Uses Web Crypto's subtle.digest, which is async.
  */
@@ -21,8 +23,22 @@ export interface FingerprintInput {
   account: string
 }
 
+/**
+ * Mirror Python's f"{x}" where x is a float:
+ * - 100 → "100.0"
+ * - 0 → "0.0"
+ * - -15.99 → "-15.99"
+ *
+ * JS's String(n) drops the ".0" for whole numbers — this helper fixes the
+ * integer case explicitly while leaving non-integer numbers untouched.
+ */
+function pythonFloatStr(n: number): string {
+  if (Number.isInteger(n)) return `${n}.0`
+  return String(n)
+}
+
 export async function computeFingerprint(input: FingerprintInput): Promise<string> {
-  const raw = `${input.date}|${input.description}|${input.amount}|${input.account}`.toLowerCase()
+  const raw = `${input.date}|${input.description}|${pythonFloatStr(input.amount)}|${input.account}`.toLowerCase()
   const data = new TextEncoder().encode(raw)
   const hash = await crypto.subtle.digest('SHA-256', data)
   return toHex(hash).slice(0, 16)

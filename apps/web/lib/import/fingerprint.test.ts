@@ -87,16 +87,43 @@ describe('computeFingerprint', () => {
     expect(a).not.toBe(b)
   })
 
-  it('uses String(amount) — integer 0 stringifies as "0" not "0.0"', async () => {
-    // Arrange — the legacy Python importer would emit "0" for an integer 0,
-    // because Python's repr does too. JS String(0) also gives "0".
-    const input = { date: '2026-01-01', description: 'X', amount: 0, account: 'A' }
+  it('matches Python float repr for whole-dollar amounts', async () => {
+    // Arrange — Python reads Excel amounts as floats, so f"{-300.0}" → "-300.0".
+    // JS's String(-300) gives "-300" (no ".0"), which would silently break dedup
+    // against rows the Python importer inserted. The pythonFloatStr helper fixes this.
+    // Fixture: echo -n "2026-04-01|chase payment|-300.0|chase sapphire" | shasum -a 256 | head -c 16
+    const input = {
+      date: '2026-04-01',
+      description: 'CHASE PAYMENT',
+      amount: -300,
+      account: 'Chase Sapphire'
+    }
+    const expected = '731a59c2f74db220'
 
     // Act
     const fp = await computeFingerprint(input)
 
-    // Assert — fixture: echo -n "2026-01-01|x|0|a" | shasum -a 256 | head -c 16
-    expect(fp).toMatch(/^[0-9a-f]{16}$/)
+    // Assert
+    expect(fp).toBe(expected)
+  })
+
+  it('matches Python float repr for zero amount', async () => {
+    // Arrange — Python's f"{0.0}" → "0.0", not "0". The Python importer reads
+    // Excel amounts as floats and would emit "0.0" for a zero-amount adjustment.
+    // Fixture: echo -n "2026-01-01|adjustment|0.0|test" | shasum -a 256 | head -c 16
+    const input = {
+      date: '2026-01-01',
+      description: 'ADJUSTMENT',
+      amount: 0,
+      account: 'Test'
+    }
+    const expected = '74d5078063874c56'
+
+    // Act
+    const fp = await computeFingerprint(input)
+
+    // Assert
+    expect(fp).toBe(expected)
   })
 })
 

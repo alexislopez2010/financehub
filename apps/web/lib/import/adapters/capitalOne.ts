@@ -43,18 +43,24 @@ export const capitalOne: Adapter = {
         return
       }
 
-      const debit = debitRaw.trim() ? parseMoney(debitRaw) : 0
-      const credit = creditRaw.trim() ? parseMoney(creditRaw) : 0
-      if (debit == null || credit == null) {
+      const debitParsed = debitRaw.trim() ? parseMoney(debitRaw) : 0
+      const creditParsed = creditRaw.trim() ? parseMoney(creditRaw) : 0
+      if (debitParsed == null || creditParsed == null) {
         skipped.push({ rowIndex: i, reason: `Invalid amount: debit="${debitRaw}" credit="${creditRaw}"` })
         return
       }
+      // Capital One convention: charges populate Debit, payments populate Credit.
+      // Both columns are non-negative by contract. If the CSV has been re-saved
+      // through Excel and picked up accounting paren notation (e.g. "(42.50)"),
+      // parseMoney returns -42.50; Math.abs recovers the intended magnitude so
+      // the sign of `amount` is driven only by which column is populated.
+      const debit = Math.abs(debitParsed)
+      const credit = Math.abs(creditParsed)
       if (debit === 0 && credit === 0) {
         skipped.push({ rowIndex: i, reason: 'Both debit and credit are empty' })
         return
       }
 
-      // Capital One convention: charges populate Debit (positive), payments populate Credit (positive).
       // Net amount: credit - debit. Negative = expense.
       const amount = credit - debit
 
