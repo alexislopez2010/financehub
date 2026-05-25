@@ -1,10 +1,11 @@
 'use client'
 
 import { ArrowDown, ArrowUpDown } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { billComparator, type BillSortKey } from '@/lib/bills/sort'
 import { BillRow } from './BillRow'
+import { BillExpanded } from './BillExpanded'
 import { cn } from '@/lib/cn'
 
 type Bill = Tables<'bills'>
@@ -37,6 +38,8 @@ export function BillList({
   bills, sortKey, onSortChange, today,
   onEditName, onEditDueDay, onEditAmount, onDelete
 }: BillListProps) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
   const sorted = useMemo(() => {
     const copy = [...bills].filter(b => b.is_active !== false)
     copy.sort(billComparator(sortKey, today))
@@ -52,9 +55,11 @@ export function BillList({
   }
 
   const showDelete = onDelete !== undefined
+
+  // Header grid (includes 24px slot for chevron + optional 28px trailing slot for delete)
   const headerCols = showDelete
-    ? 'grid-cols-[1fr_90px_110px_28px] sm:grid-cols-[1fr_140px_120px_140px_28px]'
-    : 'grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px]'
+    ? 'grid-cols-[24px_1fr_90px_110px_28px] sm:grid-cols-[24px_1fr_140px_120px_140px_28px]'
+    : 'grid-cols-[24px_1fr_90px_110px] sm:grid-cols-[24px_1fr_140px_120px_140px]'
 
   return (
     <section className="bg-surface border border-rule rounded-xl shadow-sm overflow-hidden">
@@ -63,6 +68,7 @@ export function BillList({
         'text-[10px] uppercase tracking-[0.12em] font-semibold text-muted bg-gray-50 border-b border-rule',
         headerCols
       )}>
+        <span />
         {HEADERS.map(h => {
           const active = sortKey === h.key
           const Icon = active ? ArrowDown : ArrowUpDown
@@ -86,18 +92,24 @@ export function BillList({
       </div>
 
       <ul className="divide-y divide-gray-100">
-        {sorted.map(b => (
-          <li key={b.id} className="group">
-            <BillRow
-              bill={b}
-              today={today}
-              {...(onEditName ? { onEditName: (next: string) => onEditName(b.id, next) } : {})}
-              {...(onEditDueDay ? { onEditDueDay: (next: number) => onEditDueDay(b.id, next) } : {})}
-              {...(onEditAmount ? { onEditAmount: (next: number) => onEditAmount(b.id, next) } : {})}
-              {...(onDelete ? { onDelete: () => onDelete(b.id, b.name) } : {})}
-            />
-          </li>
-        ))}
+        {sorted.map(b => {
+          const isExpanded = expandedId === b.id
+          return (
+            <li key={b.id} className="group">
+              <BillRow
+                bill={b}
+                today={today}
+                expanded={isExpanded}
+                onToggleExpanded={() => setExpandedId(isExpanded ? null : b.id)}
+                {...(onEditName ? { onEditName: (next: string) => onEditName(b.id, next) } : {})}
+                {...(onEditDueDay ? { onEditDueDay: (next: number) => onEditDueDay(b.id, next) } : {})}
+                {...(onEditAmount ? { onEditAmount: (next: number) => onEditAmount(b.id, next) } : {})}
+                {...(onDelete ? { onDelete: () => onDelete(b.id, b.name) } : {})}
+              />
+              {isExpanded && <BillExpanded bill={b} today={today} />}
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

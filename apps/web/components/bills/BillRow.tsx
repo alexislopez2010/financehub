@@ -1,6 +1,6 @@
 'use client'
 
-import { Trash2 } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { daysUntilDue } from '@/lib/finance/dueDate'
 import { nextDueDate } from '@/lib/bills/sort'
@@ -12,6 +12,8 @@ type BillRow = Tables<'bills'>
 export interface BillRowProps {
   bill: BillRow
   today: { year: number; month: number; day: number }
+  expanded?: boolean
+  onToggleExpanded?: () => void
   onEditName?: (next: string) => void
   onEditDueDay?: (next: number) => void
   onEditAmount?: (next: number) => void
@@ -32,23 +34,45 @@ function dueLabel(days: number | null): { text: string; tone: string } {
 }
 
 export function BillRow({
-  bill, today,
+  bill, today, expanded, onToggleExpanded,
   onEditName, onEditDueDay, onEditAmount, onDelete
 }: BillRowProps) {
   const days = bill.due_day == null ? null : daysUntilDue({ due_day: bill.due_day }, today)
   const due = dueLabel(days)
   const nextDate = nextDueDate(bill, today)
   const showDelete = onDelete !== undefined
+  const showToggle = onToggleExpanded !== undefined
 
-  const cols = showDelete
-    ? 'grid-cols-[1fr_90px_110px_28px] sm:grid-cols-[1fr_140px_120px_140px_28px]'
-    : 'grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px]'
+  const cols = (() => {
+    if (showToggle && showDelete) {
+      return 'grid-cols-[24px_1fr_90px_110px_28px] sm:grid-cols-[24px_1fr_140px_120px_140px_28px]'
+    }
+    if (showToggle) {
+      return 'grid-cols-[24px_1fr_90px_110px] sm:grid-cols-[24px_1fr_140px_120px_140px]'
+    }
+    if (showDelete) {
+      return 'grid-cols-[1fr_90px_110px_28px] sm:grid-cols-[1fr_140px_120px_140px_28px]'
+    }
+    return 'grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px]'
+  })()
 
   return (
     <div className={cn(
-      'grid gap-3 items-center px-4 py-3 text-sm hover:bg-gray-50 transition-colors',
+      'grid gap-3 items-center px-4 py-3 text-sm transition-colors',
+      expanded ? 'bg-blue-50/40' : 'hover:bg-gray-50',
       cols
     )}>
+      {showToggle && (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-label={expanded ? 'Collapse matched transactions' : 'Expand matched transactions'}
+          className="p-1 -ml-1 rounded text-muted hover:text-ink hover:bg-gray-100"
+        >
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      )}
+
       <div className="min-w-0">
         {onEditName ? (
           <EditableCell
