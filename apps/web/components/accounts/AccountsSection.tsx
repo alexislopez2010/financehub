@@ -40,7 +40,7 @@ export function AccountsSection() {
     if (!focusId) return
     if (typeof document === 'undefined') return
     if (!summary.accounts.some(a => a.accountId === focusId)) return
-    const el = document.querySelector<HTMLElement>(`[data-account-id="${focusId}"]`)
+    const el = document.querySelector<HTMLElement>(`[data-account-id="${CSS.escape(focusId)}"]`)
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focusId, summary.accounts])
 

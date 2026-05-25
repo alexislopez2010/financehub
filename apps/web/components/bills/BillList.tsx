@@ -54,7 +54,7 @@ export function BillList({
     if (!focusId) return
     if (typeof document === 'undefined') return
     if (!sorted.some(b => b.id === focusId)) return
-    const el = document.querySelector<HTMLElement>(`[data-bill-id="${focusId}"]`)
+    const el = document.querySelector<HTMLElement>(`[data-bill-id="${CSS.escape(focusId)}"]`)
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [focusId, sorted])
 

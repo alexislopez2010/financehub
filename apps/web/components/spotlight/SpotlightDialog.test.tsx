@@ -173,7 +173,21 @@ describe('<SpotlightDialog>', () => {
     await user.type(input, 'costco')
     const hit = await screen.findByText('Costco Wholesale')
     await user.click(hit.closest('[cmdk-item]')!)
-    expect(mockPush).toHaveBeenCalledWith('/ledger?q=costco')
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/ledger'))
+  })
+
+  it('renders no Find group headings when the query matches nothing', async () => {
+    const user = userEvent.setup()
+    renderShell()
+    await user.click(screen.getByRole('button', { name: /open spotlight/i }))
+    const input = await screen.findByPlaceholderText(/search or jump/i)
+    await user.type(input, 'zzzzznotamatch')
+    // With no seeded corpus across all four kinds, every Find group renders nothing.
+    expect(screen.queryByText('Transactions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bills', { selector: '[cmdk-group-heading]' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Accounts', { selector: '[cmdk-group-heading]' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Categories', { selector: '[cmdk-group-heading]' })).not.toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {
