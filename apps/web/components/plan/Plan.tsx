@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { currentPeriod, parsePeriod, type PlanPeriod } from '@/lib/plan/period'
 import { PeriodSelector } from './PeriodSelector'
 import { BudgetSection } from './BudgetSection'
+import { IncomeSection } from './IncomeSection'
 
 export function Plan() {
   const router = useRouter()
@@ -33,6 +34,7 @@ export function Plan() {
       </header>
 
       <BudgetSection period={period} />
+      <IncomeSection period={period} />
     </div>
   )
 }
