@@ -3,7 +3,14 @@ import { buildLead } from './headline'
 import type { BriefingKpis } from './kpis'
 
 function mkKpis(thisMonthNet: number, cash: number, debt: number): BriefingKpis {
-  return { thisMonthNet, cash, debt }
+  return {
+    thisMonthNet,
+    cash,
+    debt,
+    savingsRate: 0,
+    burnRate30Day: 0,
+    monthsOfRunway: 99
+  }
 }
 
 describe('buildLead', () => {

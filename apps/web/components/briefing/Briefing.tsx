@@ -77,7 +77,7 @@ export function Briefing() {
 
   // Derive
   const kpis = useMemo(
-    () => deriveKpis({ accounts, transactions: txs, today: { year: today.year, month: today.month } }),
+    () => deriveKpis({ accounts, transactions: txs, today }),
     [accounts, txs, today]
   )
 

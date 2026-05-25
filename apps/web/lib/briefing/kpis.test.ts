@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveKpis } from './kpis'
+import { deriveKpis, deriveKpisAndExtras } from './kpis'
 import type { DeriveKpisInput } from './kpis'
 
 // Minimal account fixture — only the four fields deriveKpis needs.
@@ -22,12 +22,12 @@ function mkTx(
   return { amount, type, date, account_id }
 }
 
-const TODAY = { year: 2025, month: 5 }
+const TODAY = { year: 2025, month: 5, day: 15 }
 
 describe('deriveKpis', () => {
   it('returns all zeros for empty inputs', () => {
     const result = deriveKpis({ accounts: [], transactions: [], today: TODAY })
-    expect(result).toEqual({ cash: 0, debt: 0, thisMonthNet: 0 })
+    expect(result).toMatchObject({ cash: 0, debt: 0, thisMonthNet: 0 })
   })
 
   it('returns all zeros when all accounts are inactive', () => {
@@ -36,7 +36,7 @@ describe('deriveKpis', () => {
       mkAccount('a2', 'credit', null, -500),
     ]
     const result = deriveKpis({ accounts, transactions: [], today: TODAY })
-    expect(result).toEqual({ cash: 0, debt: 0, thisMonthNet: 0 })
+    expect(result).toMatchObject({ cash: 0, debt: 0, thisMonthNet: 0 })
   })
 
   it('returns starting_balance for a single active checking account with no transactions', () => {
@@ -196,5 +196,108 @@ describe('deriveKpis', () => {
     const result = deriveKpis({ accounts, transactions: [], today: TODAY })
     expect(result.cash).toBe(0)
     expect(result.debt).toBe(0)
+  })
+
+  it('savingsRate is positive when income > expense', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [
+      mkTx(5000, 'Income', '2025-05-01', 'a1'),
+      mkTx(2000, 'Expense', '2025-05-10', 'a1'),
+    ]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // (5000 - 2000) / 5000 = 0.6
+    expect(result.savingsRate).toBe(0.6)
+  })
+
+  it('savingsRate is 0 when income is 0', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 1000)]
+    const transactions = [mkTx(300, 'Expense', '2025-05-10', 'a1')]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    expect(result.savingsRate).toBe(0)
+  })
+
+  it('savingsRate can be negative when expense exceeds income', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [
+      mkTx(1000, 'Income', '2025-05-01', 'a1'),
+      mkTx(1500, 'Expense', '2025-05-10', 'a1'),
+    ]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // (1000 - 1500) / 1000 = -0.5
+    expect(result.savingsRate).toBe(-0.5)
+  })
+
+  it('burnRate30Day includes transaction within the 30-day window', () => {
+    // today = 2025-05-15. Cutoff = 2025-04-15. A transaction on 2025-04-15
+    // (exactly 30 days back) should be included.
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [mkTx(300, 'Expense', '2025-04-15', 'a1')]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // 300 / 30 = 10/day
+    expect(result.burnRate30Day).toBe(10)
+  })
+
+  it('burnRate30Day excludes transaction older than 30 days', () => {
+    // today = 2025-05-15. Cutoff = 2025-04-15. A transaction on 2025-04-14
+    // (31 days back) should be excluded.
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [mkTx(300, 'Expense', '2025-04-14', 'a1')]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    expect(result.burnRate30Day).toBe(0)
+  })
+
+  it('burnRate30Day averages multiple Expense transactions across 30 days', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [
+      mkTx(150, 'Expense', '2025-05-01', 'a1'),
+      mkTx(150, 'Expense', '2025-05-10', 'a1'),
+      mkTx(300, 'Expense', '2025-05-15', 'a1'),
+      // Income should not affect burn rate
+      mkTx(1000, 'Income', '2025-05-12', 'a1'),
+    ]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // (150 + 150 + 300) / 30 = 20
+    expect(result.burnRate30Day).toBe(20)
+  })
+
+  it('monthsOfRunway = cash / (burnRate * 30) for the happy path', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 6000)]
+    const transactions = [
+      // 300 of expense in 30 days → burnRate = 10/d → monthly burn = 300
+      mkTx(300, 'Expense', '2025-05-01', 'a1'),
+    ]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // cash after Expense: 6000 - 300 = 5700; burn = 10 * 30 = 300 → 5700/300 = 19.0
+    expect(result.monthsOfRunway).toBe(19)
+  })
+
+  it('monthsOfRunway is capped at 99 when burnRate is 0', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 10000)]
+    const result = deriveKpis({ accounts, transactions: [], today: TODAY })
+    expect(result.burnRate30Day).toBe(0)
+    expect(result.monthsOfRunway).toBe(99)
+  })
+
+  it('monthsOfRunway is 0 when cash is 0 (and burnRate > 0)', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [mkTx(300, 'Expense', '2025-05-01', 'a1')]
+    const result = deriveKpis({ accounts, transactions, today: TODAY })
+    // cash = 0 - 300 = -300; -300 / 300 = -1.0
+    expect(result.monthsOfRunway).toBe(-1)
+  })
+
+  it('deriveKpisAndExtras returns matching monthIncome and monthExpense', () => {
+    const accounts = [mkAccount('a1', 'checking', true, 0)]
+    const transactions = [
+      mkTx(3000, 'Income', '2025-05-01', 'a1'),
+      mkTx(200, 'Refund', '2025-05-10', 'a1'),
+      mkTx(800, 'Expense', '2025-05-15', 'a1'),
+      // wrong month — excluded from extras
+      mkTx(5000, 'Income', '2025-04-15', 'a1'),
+    ]
+    const { kpis, extras } = deriveKpisAndExtras({ accounts, transactions, today: TODAY })
+    expect(extras.monthIncome).toBe(3200) // 3000 + 200
+    expect(extras.monthExpense).toBe(800)
+    expect(kpis.thisMonthNet).toBe(2400)
   })
 })
