@@ -7,19 +7,29 @@ import {
   TrendingUp,
   TrendingDown,
   Coins,
-  Calendar
+  Calendar,
+  PiggyBank,
+  Flame
 } from 'lucide-react'
 import { useAccounts } from '@/lib/data/accounts'
 import { useBills } from '@/lib/data/bills'
 import { useTransactions } from '@/lib/data/transactions'
 import { useIncomePlan } from '@/lib/data/incomePlan'
+import { useBudgets } from '@/lib/data/budgets'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { RulerList, type RulerListItem } from '@/components/ui/RulerList'
 import { Sparkline } from '@/components/charts/Sparkline'
-import { deriveKpis } from '@/lib/briefing/kpis'
+import { deriveKpisAndExtras } from '@/lib/briefing/kpis'
 import { comingDueWithin } from '@/lib/briefing/comingDue'
 import { notableCallouts } from '@/lib/briefing/notable'
 import { buildLead } from '@/lib/briefing/headline'
+import { deriveSpendByCategory } from '@/lib/briefing/spendByCategory'
+import { deriveBudgetSnapshot } from '@/lib/briefing/budgetSnapshot'
+import { deriveTopMerchants } from '@/lib/briefing/topMerchants'
+import { SpendByCategoryCard } from '@/components/briefing/SpendByCategoryCard'
+import { BudgetSnapshotCard } from '@/components/briefing/BudgetSnapshotCard'
+import { IncomeVsExpenseCard } from '@/components/briefing/IncomeVsExpenseCard'
+import { TopMerchantsCard } from '@/components/briefing/TopMerchantsCard'
 import { forecast30Day } from '@/lib/finance/forecast'
 import type {
   TransactionRow as FinanceTransactionRow,
@@ -59,25 +69,42 @@ export function Briefing() {
     return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) + ' · all accounts'
   }, [])
 
+  const monthLabel = useMemo(
+    () =>
+      new Date(today.year, today.month - 1, 1).toLocaleDateString(undefined, {
+        month: 'long',
+        year: 'numeric'
+      }),
+    [today]
+  )
+
   // Pull data
   const accountsQ = useAccounts()
   const billsQ = useBills()
   const txsQ = useTransactions()
   const incomeQ = useIncomePlan({ year: today.year })
+  const budgetsQ = useBudgets({ year: today.year, month: today.month })
 
   const EMPTY_ACCOUNTS = useMemo(() => [] as const, [])
   const EMPTY_BILLS = useMemo(() => [] as const, [])
   const EMPTY_TXS = useMemo(() => [] as const, [])
   const EMPTY_INCOME = useMemo(() => [] as const, [])
+  const EMPTY_BUDGETS = useMemo(() => [] as const, [])
 
   const accounts = accountsQ.data ?? EMPTY_ACCOUNTS
   const bills = billsQ.data ?? EMPTY_BILLS
   const txs = txsQ.data ?? EMPTY_TXS
   const incomePlan = incomeQ.data ?? EMPTY_INCOME
+  const budgets = budgetsQ.data ?? EMPTY_BUDGETS
 
   // Derive
-  const kpis = useMemo(
-    () => deriveKpis({ accounts, transactions: txs, today }),
+  const { kpis, extras } = useMemo(
+    () =>
+      deriveKpisAndExtras({
+        accounts,
+        transactions: txs,
+        today: { year: today.year, month: today.month, day: today.day }
+      }),
     [accounts, txs, today]
   )
 
@@ -89,6 +116,36 @@ export function Briefing() {
   const notable = useMemo(
     () => notableCallouts({ transactions: txs, bills, today, top: 3 }),
     [txs, bills, today]
+  )
+
+  const categorySpend = useMemo(
+    () =>
+      deriveSpendByCategory({
+        transactions: txs,
+        today: { year: today.year, month: today.month },
+        top: 7
+      }),
+    [txs, today]
+  )
+
+  const budgetSnap = useMemo(
+    () =>
+      deriveBudgetSnapshot({
+        budgets,
+        transactions: txs,
+        today: { year: today.year, month: today.month }
+      }),
+    [budgets, txs, today]
+  )
+
+  const merchantSpend = useMemo(
+    () =>
+      deriveTopMerchants({
+        transactions: txs,
+        today: { year: today.year, month: today.month },
+        top: 5
+      }),
+    [txs, today]
   )
 
   // Suppress unused — lead is computed so buildLead stays exercised with real data
@@ -127,8 +184,14 @@ export function Briefing() {
 
   const forecastPoints = useMemo(() => forecast.map(p => p.balance), [forecast])
 
-  const anyError = accountsQ.error ?? billsQ.error ?? txsQ.error ?? incomeQ.error
-  const allLoading = accountsQ.isLoading && billsQ.isLoading && txsQ.isLoading && incomeQ.isLoading
+  const anyError =
+    accountsQ.error ?? billsQ.error ?? txsQ.error ?? incomeQ.error ?? budgetsQ.error
+  const allLoading =
+    accountsQ.isLoading &&
+    billsQ.isLoading &&
+    txsQ.isLoading &&
+    incomeQ.isLoading &&
+    budgetsQ.isLoading
 
   if (anyError) {
     return (
@@ -167,6 +230,29 @@ export function Briefing() {
   const netWorth = kpis.cash - kpis.debt
   const thisMonthPositive = kpis.thisMonthNet >= 0
 
+  const savingsRatePct = Math.round(kpis.savingsRate * 100)
+  const savingsRateCaption =
+    kpis.savingsRate >= 0.2
+      ? 'on target'
+      : kpis.savingsRate >= 0.1
+        ? 'below target'
+        : 'aggressive'
+  const savingsRateTone: 'positive' | 'neutral' | 'negative' =
+    kpis.savingsRate >= 0.2
+      ? 'positive'
+      : kpis.savingsRate >= 0.1
+        ? 'neutral'
+        : 'negative'
+
+  const burnRateRounded = Math.round(kpis.burnRate30Day).toLocaleString('en-US')
+  const runwayCaption = `${kpis.monthsOfRunway.toFixed(1)}mo runway`
+  const runwayTone: 'positive' | 'neutral' | 'negative' =
+    kpis.monthsOfRunway >= 6
+      ? 'positive'
+      : kpis.monthsOfRunway >= 3
+        ? 'neutral'
+        : 'negative'
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -178,8 +264,8 @@ export function Briefing() {
         <div className="text-xs text-muted">{periodLabel}</div>
       </header>
 
-      {/* KPI tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI tiles (6) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KpiTile
           label="Cash"
           value={formatUSDCompact(kpis.cash)}
@@ -211,9 +297,40 @@ export function Briefing() {
           icon={Coins}
           iconTone="purple"
         />
+        <KpiTile
+          label="Savings Rate"
+          value={`${savingsRatePct}%`}
+          caption={savingsRateCaption}
+          captionTone={savingsRateTone}
+          icon={PiggyBank}
+          iconTone="emerald"
+        />
+        <KpiTile
+          label="Burn Rate"
+          value={`$${burnRateRounded}/d`}
+          caption={runwayCaption}
+          captionTone={runwayTone}
+          icon={Flame}
+          iconTone="red"
+        />
       </div>
 
-      {/* Coming Due + Forecast */}
+      {/* Row 1: where money went */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SpendByCategoryCard rows={categorySpend} />
+        <TopMerchantsCard rows={merchantSpend} />
+      </div>
+
+      {/* Row 2: this-month big picture */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <BudgetSnapshotCard snapshot={budgetSnap} monthLabel={monthLabel} />
+        <IncomeVsExpenseCard
+          monthIncome={extras.monthIncome}
+          monthExpense={extras.monthExpense}
+        />
+      </div>
+
+      {/* Row 3: forward-looking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <section className="bg-surface border border-rule rounded-xl p-5 shadow-sm">
           <div className="flex items-baseline justify-between mb-3">
@@ -297,9 +414,9 @@ function BriefingSkeleton() {
         <div className="h-3 w-32 rounded bg-gray-200" />
       </div>
 
-      {/* KPI tiles skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {([0, 1, 2, 3] as const).map(i => (
+      {/* KPI tiles skeleton (6) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {([0, 1, 2, 3, 4, 5] as const).map(i => (
           <div key={i} className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
             <div className="flex items-start justify-between">
               <div className="h-2.5 w-16 rounded bg-gray-200" />
@@ -310,17 +427,22 @@ function BriefingSkeleton() {
         ))}
       </div>
 
-      {/* Cards row skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {([0, 1] as const).map(i => (
-          <div key={i} className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
-            <div className="h-4 w-36 rounded bg-gray-200" />
-            <div className="h-5 w-full rounded bg-gray-200" />
-            <div className="h-5 w-full rounded bg-gray-200" />
-            <div className="h-5 w-4/5 rounded bg-gray-200" />
-          </div>
-        ))}
-      </div>
+      {/* Cards rows skeleton (3 rows of 2) */}
+      {([0, 1, 2] as const).map(row => (
+        <div key={row} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {([0, 1] as const).map(i => (
+            <div
+              key={i}
+              className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3"
+            >
+              <div className="h-4 w-36 rounded bg-gray-200" />
+              <div className="h-5 w-full rounded bg-gray-200" />
+              <div className="h-5 w-full rounded bg-gray-200" />
+              <div className="h-5 w-4/5 rounded bg-gray-200" />
+            </div>
+          ))}
+        </div>
+      ))}
 
       {/* Notable skeleton */}
       <div className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
