@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminSectionNav, type AdminSection } from './AdminSectionNav'
 import { MembersSection } from './members/MembersSection'
+import { CategoriesSection } from './categories/CategoriesSection'
 
 function parseSection(v: string | null): AdminSection {
   if (v === 'categories' || v === 'rules') return v
@@ -45,7 +46,7 @@ export function Admin() {
       </header>
 
       {section === 'members' && <MembersSection />}
-      {section === 'categories' && <PlaceholderCard label="Coming in Phase 2L.T2" />}
+      {section === 'categories' && <CategoriesSection />}
       {section === 'rules' && <PlaceholderCard label="Coming in Phase 2L.T3" />}
     </div>
   )
