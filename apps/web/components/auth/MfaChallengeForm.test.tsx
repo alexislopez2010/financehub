@@ -104,4 +104,32 @@ describe('<MfaChallengeForm>', () => {
     })
     expect(mockRouterReplace).not.toHaveBeenCalled()
   })
+
+  it('falls back to a friendly 422 message when Supabase returns no error message', async () => {
+    mockListFactors.mockResolvedValueOnce(FACTORS_OK)
+    // Real-world: Supabase 422 on stale TOTP sometimes returns empty message.
+    mockChallengeAndVerify.mockResolvedValueOnce({ data: null, error: { message: '', status: 422 } })
+    render(<MfaChallengeForm />)
+    await screen.findByLabelText(/6-digit code/i)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/6-digit code/i), '111111')
+    await user.click(screen.getByRole('button', { name: /verify/i }))
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/invalid or expired code/i)
+    })
+    expect(mockRouterReplace).not.toHaveBeenCalled()
+  })
+
+  it('falls back to a generic message when verify throws with empty message', async () => {
+    mockListFactors.mockResolvedValueOnce(FACTORS_OK)
+    mockChallengeAndVerify.mockRejectedValueOnce(new Error(''))
+    render(<MfaChallengeForm />)
+    await screen.findByLabelText(/6-digit code/i)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/6-digit code/i), '222222')
+    await user.click(screen.getByRole('button', { name: /verify/i }))
+    await waitFor(() => {
+      expect(screen.getAllByRole('alert')[0]).toHaveTextContent(/verification failed/i)
+    })
+  })
 })

@@ -70,13 +70,24 @@ export function MfaChallengeForm() {
         code: values.code
       })
       if (error) {
-        setVerifyError(error.message)
+        // Some Supabase MFA errors come back with empty/missing message.
+        // Always surface SOMETHING actionable so the user isn't stuck.
+        const fallback =
+          'status' in error && typeof (error as { status?: number }).status === 'number' &&
+          (error as { status: number }).status === 422
+            ? 'Invalid or expired code. Try a fresh code from your authenticator (watch the 30-second timer).'
+            : 'Verification failed. Try a fresh code from your authenticator.'
+        setVerifyError(error.message?.trim() || fallback)
         return
       }
       router.refresh()
       router.replace(next)
     } catch (e: unknown) {
-      setVerifyError(e instanceof Error ? e.message : 'Verification failed')
+      setVerifyError(
+        e instanceof Error && e.message.trim().length > 0
+          ? e.message
+          : 'Verification failed. Try a fresh code from your authenticator.'
+      )
     } finally {
       setIsVerifying(false)
     }
