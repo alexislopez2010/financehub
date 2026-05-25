@@ -16,17 +16,30 @@ describe('<KpiStone>', () => {
 
   it('renders caption when provided', () => {
     render(<KpiStone label="Cash" value="$42,180" caption="+$620" tone="positive" />)
-    expect(screen.getByText('+$620')).toBeInTheDocument()
+    // Caption is two text nodes (glyph + value) — match by partial content
+    expect(screen.getByText(/\+\$620/)).toBeInTheDocument()
   })
 
-  it('applies the positive tone class on the caption', () => {
+  it('applies the positive tone class on the caption + renders the up-arrow glyph', () => {
     render(<KpiStone label="Cash" value="$42,180" caption="+$620" tone="positive" />)
-    expect(screen.getByText('+$620')).toHaveClass('text-accent')
+    const captionEl = screen.getByText(/\+\$620/)
+    expect(captionEl).toHaveClass('text-accent')
+    expect(captionEl.textContent).toContain('▲')
   })
 
-  it('applies the negative tone class on the caption', () => {
+  it('applies the negative tone class on the caption + renders the down-arrow glyph', () => {
     render(<KpiStone label="Cash" value="$42,180" caption="-$300" tone="negative" />)
-    expect(screen.getByText('-$300')).toHaveClass('text-warn')
+    const captionEl = screen.getByText(/-\$300/)
+    expect(captionEl).toHaveClass('text-warn')
+    expect(captionEl.textContent).toContain('▼')
+  })
+
+  it('neutral tone caption has no arrow glyph', () => {
+    render(<KpiStone label="Cash" value="$42,180" caption="net" tone="neutral" />)
+    const captionEl = screen.getByText(/net/)
+    expect(captionEl.textContent).not.toContain('▲')
+    expect(captionEl.textContent).not.toContain('▼')
+    expect(captionEl).toHaveClass('text-muted')
   })
 
   it('value uses tabular figures', () => {

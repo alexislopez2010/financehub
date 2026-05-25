@@ -18,6 +18,12 @@ const toneClass: Record<NonNullable<KpiStoneProps['tone']>, string> = {
   negative: 'text-warn'
 }
 
+const toneGlyph: Record<NonNullable<KpiStoneProps['tone']>, string> = {
+  neutral: '',
+  positive: '▲ ',
+  negative: '▼ '
+}
+
 export function KpiStone({ label, value, caption, tone = 'neutral', className }: KpiStoneProps) {
   return (
     <div className={cn('flex flex-col', className)}>
@@ -26,8 +32,8 @@ export function KpiStone({ label, value, caption, tone = 'neutral', className }:
         {value}
       </div>
       {caption !== undefined && (
-        <div className={cn('text-[10px] italic', toneClass[tone])}>
-          {caption}
+        <div className={cn('text-xs font-medium tabular tracking-tight', toneClass[tone])}>
+          {toneGlyph[tone]}{caption}
         </div>
       )}
     </div>
