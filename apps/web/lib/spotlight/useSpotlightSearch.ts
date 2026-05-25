@@ -54,6 +54,12 @@ const EMPTY_CORPUS: CorpusSnapshot = {
   categories: EMPTY_CATEGORIES
 }
 
+const EMPTY_CORPUS_SNAPSHOT: CorpusSnapshot = EMPTY_CORPUS
+
+function getServerSnapshot(): CorpusSnapshot {
+  return EMPTY_CORPUS_SNAPSHOT
+}
+
 /**
  * Reads the four spotlight corpus slots from TanStack Query and returns the
  * scored, grouped hits for `query`.
@@ -120,7 +126,7 @@ function useCorpusSnapshot(queryClient: QueryClient): CorpusSnapshot {
     [queryClient]
   )
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
 function readCorpus(

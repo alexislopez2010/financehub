@@ -213,6 +213,28 @@ describe('useSpotlightSearch', () => {
     expect(result.current.groups.transactions.some(h => h.id === 't1')).toBe(true)
   })
 
+  it('reactively clears results when cache slot is removed', () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    client.setQueryData(queryKeys.transactions(), [
+      makeTx({ id: 't1', description: 'Costco Wholesale' })
+    ])
+
+    const { result } = renderHook(() => useSpotlightSearch('costco'), { wrapper })
+    expect(result.current.isEmpty).toBe(false)
+    expect(result.current.groups.transactions.some(h => h.id === 't1')).toBe(true)
+
+    act(() => {
+      client.removeQueries({ queryKey: queryKeys.transactions() })
+    })
+
+    expect(result.current.isEmpty).toBe(true)
+    expect(result.current.groups.transactions).toEqual([])
+    expect(result.current.groups.bills).toEqual([])
+    expect(result.current.groups.accounts).toEqual([])
+    expect(result.current.groups.categories).toEqual([])
+  })
+
   it('maintains the consistency invariant: group sums equal hits length', () => {
     const client = makeClient()
     const wrapper = makeWrapper(client)
