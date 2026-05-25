@@ -2,19 +2,37 @@
 
 import { groupByMonth, type TransactionRow as TxRow } from '@/lib/ledger/groupByMonth'
 import { TransactionRow } from './TransactionRow'
+import type { SelectOption } from './EditableCell'
 import { cn } from '@/lib/cn'
 
 export interface TransactionListProps {
   transactions: ReadonlyArray<TxRow>
   selectedIds?: ReadonlySet<string>
   onToggleSelect?: (id: string, selected: boolean) => void
+  categoryOptions?: ReadonlyArray<SelectOption>
+  /** Edit handlers — called with the tx id + new value. */
+  onEditDescription?: (id: string, next: string) => void
+  onEditAmount?: (id: string, next: number) => void
+  onEditCategory?: (id: string, next: string) => void
+  onPromote?: (tx: TxRow) => void
+  onDelete?: (id: string) => void
 }
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 }
 
-export function TransactionList({ transactions, selectedIds, onToggleSelect }: TransactionListProps) {
+export function TransactionList({
+  transactions,
+  selectedIds,
+  onToggleSelect,
+  categoryOptions,
+  onEditDescription,
+  onEditAmount,
+  onEditCategory,
+  onPromote,
+  onDelete
+}: TransactionListProps) {
   const groups = groupByMonth(transactions)
 
   if (groups.length === 0) {
@@ -54,6 +72,12 @@ export function TransactionList({ transactions, selectedIds, onToggleSelect }: T
                         onSelectChange: (sel: boolean) => onToggleSelect(tx.id, sel)
                       }
                     : {})}
+                  {...(categoryOptions ? { categoryOptions } : {})}
+                  {...(onEditDescription ? { onEditDescription: (next: string) => onEditDescription(tx.id, next) } : {})}
+                  {...(onEditAmount ? { onEditAmount: (next: number) => onEditAmount(tx.id, next) } : {})}
+                  {...(onEditCategory ? { onEditCategory: (next: string) => onEditCategory(tx.id, next) } : {})}
+                  {...(onPromote ? { onPromote: () => onPromote(tx) } : {})}
+                  {...(onDelete ? { onDelete: () => onDelete(tx.id) } : {})}
                 />
               </li>
             ))}

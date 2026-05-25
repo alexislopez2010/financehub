@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransactions } from '@/lib/data/transactions'
+import { useTransactions, useUpdateTransaction, useDeleteTransaction } from '@/lib/data/transactions'
+import { useCategories } from '@/lib/data/categories'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
 import { FilterChips } from './FilterChips'
 import { FilterSheet } from './FilterSheet'
 import { TransactionList } from './TransactionList'
 import { LedgerFooter } from './LedgerFooter'
 import { BulkActionsBar } from './BulkActionsBar'
+import { PromoteToBillDialog } from './PromoteToBillDialog'
+import type { Tables } from '@/lib/supabase/database.types'
+
+type TxRow = Tables<'transactions'>
 
 export function Ledger() {
   const router = useRouter()
@@ -18,6 +23,7 @@ export function Ledger() {
   const [filters, setFilters] = useState<LedgerFilters>(initial)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [promotingTx, setPromotingTx] = useState<TxRow | null>(null)
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -32,12 +38,18 @@ export function Ledger() {
   }, [filters])
 
   const txQ = useTransactions(toDataFilters(filters))
+  const categoriesQ = useCategories()
+  const updateTx = useUpdateTransaction()
+  const deleteTx = useDeleteTransaction()
 
   // Client-side q filter on the description.
   const filtered = (txQ.data ?? []).filter(tx => {
     if (!filters.q) return true
     return (tx.description ?? '').toLowerCase().includes(filters.q.toLowerCase())
   })
+
+  // Category options for the inline select
+  const categoryOptions = (categoriesQ.data ?? []).map(c => ({ value: c.id, label: c.name }))
 
   function toggleSelect(id: string, selected: boolean) {
     setSelectedIds(prev => {
@@ -50,6 +62,37 @@ export function Ledger() {
 
   function clearSelection() {
     setSelectedIds(new Set())
+  }
+
+  function handleEditDescription(id: string, next: string) {
+    updateTx.mutate({ id, patch: { description: next } })
+  }
+
+  function handleEditAmount(id: string, next: number) {
+    // Store the magnitude; type determines sign convention for display.
+    updateTx.mutate({ id, patch: { amount: next } })
+  }
+
+  function handleEditCategory(id: string, next: string) {
+    const cat = categoriesQ.data?.find(c => c.id === next)
+    updateTx.mutate({
+      id,
+      patch: next === ''
+        ? { category_id: null, category: null }
+        : { category_id: next, category: cat?.name ?? null }
+    })
+  }
+
+  function handleDelete(id: string) {
+    deleteTx.mutate(id)
+    // Clear selection entry if the deleted row was selected
+    if (selectedIds.has(id)) {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
   }
 
   return (
@@ -80,6 +123,12 @@ export function Ledger() {
           transactions={filtered}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          categoryOptions={categoryOptions}
+          onEditDescription={handleEditDescription}
+          onEditAmount={handleEditAmount}
+          onEditCategory={handleEditCategory}
+          onPromote={tx => setPromotingTx(tx)}
+          onDelete={handleDelete}
         />
       )}
 
@@ -96,6 +145,11 @@ export function Ledger() {
         onOpenChange={setSheetOpen}
         filters={filters}
         onChange={setFilters}
+      />
+
+      <PromoteToBillDialog
+        tx={promotingTx}
+        onClose={() => setPromotingTx(null)}
       />
     </div>
   )
