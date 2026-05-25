@@ -2,15 +2,13 @@
   "name": "financehub",
   "private": true,
   "version": "0.0.0",
-  "description": "Lopez Family Finances monorepo (apps/legacy = current Vite app, apps/web = Next.js 15 rewrite in progress).",
+  "description": "Lopez Family Finances — Next.js 15 + Supabase household finance dashboard.",
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev:legacy": "npm run dev --workspace=@financehub/legacy",
-    "dev:web": "npm run dev --workspace=@financehub/web",
-    "build:legacy": "npm run build --workspace=@financehub/legacy",
-    "build:web": "npm run build --workspace=@financehub/web",
+    "dev": "npm run dev --workspace=@financehub/web",
+    "build": "npm run build --workspace=@financehub/web",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
