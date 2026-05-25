@@ -26,9 +26,13 @@ export function Admin() {
   const [section, setSection] = useState<AdminSection>(initial)
 
   useEffect(() => {
+    const current = searchParams?.get('section') ?? null
+    // Don't replace URL when our state already matches the URL.
+    if (section === 'members' && current === null) return
+    if (current === section) return
     const url = section === 'members' ? '/admin' : `/admin?section=${section}`
     router.replace(url, { scroll: false })
-  }, [section, router])
+  }, [section, searchParams, router])
 
   return (
     <div className="space-y-4 pb-4">

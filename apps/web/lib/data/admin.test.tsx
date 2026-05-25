@@ -194,6 +194,19 @@ describe('useResetMfa', () => {
     const factors = await result.current.mutateAsync({ target_user: 'u2' })
     expect(factors).toBe(0)
   })
+
+  it('invalidates householdMembers on settle so mfa_factors refreshes', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    mockRpc.mockResolvedValueOnce({ data: 1, error: null })
+
+    const { result } = renderHook(() => useResetMfa(), { wrapper })
+    await result.current.mutateAsync({ target_user: 'u2' })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.householdMembers() })
+  })
 })
 
 describe('useRemoveHouseholdMember', () => {

@@ -23,12 +23,18 @@ export default async function AdminPage() {
     redirect('/login?next=/admin')
   }
 
-  const { data: membership } = await supabase
+  // Fail closed on DB error — but log so transient failures are visible in server logs.
+  const { data: membership, error: membershipError } = await supabase
     .from('household_members')
     .select('role')
     .eq('user_id', user.id)
     .eq('household_id', LOPEZ_HOUSEHOLD_ID)
     .maybeSingle()
+
+  if (membershipError) {
+    console.error('Admin owner check failed:', membershipError.message)
+    redirect('/')
+  }
 
   if (!membership || membership.role !== 'owner') {
     redirect('/')
