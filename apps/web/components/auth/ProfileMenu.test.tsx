@@ -36,6 +36,15 @@ describe('<ProfileMenu>', () => {
     expect(screen.getByText('alex@example.com')).toBeInTheDocument()
   })
 
+  it('exposes an Admin link pointing to /admin', async () => {
+    const user = userEvent.setup()
+    render(<ProfileMenu email="alex@example.com" />)
+    await user.click(screen.getByRole('button'))
+    const link = screen.getByRole('menuitem', { name: 'Admin' })
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveAttribute('href', '/admin')
+  })
+
   it('signs the user out and redirects to /login', async () => {
     mockSignOut.mockResolvedValueOnce({ error: null })
     const user = userEvent.setup()

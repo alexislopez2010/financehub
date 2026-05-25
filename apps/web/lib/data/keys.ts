@@ -43,6 +43,7 @@ export const queryKeys = {
   accounts: () => ['accounts'] as const,
   categories: () => ['categories'] as const,
   incomePlan: (period: IncomePlanPeriod) => ['incomePlan', period] as const,
+  householdMembers: () => ['householdMembers'] as const,
 
   /** Helper used by mutations to invalidate "all transactions" regardless of filters. */
   allTransactions: () => ['transactions'] as const

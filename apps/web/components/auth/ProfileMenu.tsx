@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
 import { cn } from '@/lib/cn'
@@ -66,6 +67,17 @@ export function ProfileMenu({ email, className }: ProfileMenuProps) {
               <div className="text-[10px] uppercase tracking-widest text-muted">Signed in as</div>
               <div className="mt-0.5 text-sm font-medium text-ink truncate">{email}</div>
             </div>
+            <Link
+              role="menuitem"
+              href="/admin"
+              onClick={() => setOpen(false)}
+              className={cn(
+                'block w-full px-4 py-2.5 text-left text-sm text-ink',
+                'hover:bg-surface'
+              )}
+            >
+              Admin
+            </Link>
             <button
               role="menuitem"
               type="button"
