@@ -7,6 +7,8 @@ import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerF
 import { FilterChips } from './FilterChips'
 import { FilterSheet } from './FilterSheet'
 import { TransactionList } from './TransactionList'
+import { LedgerFooter } from './LedgerFooter'
+import { BulkActionsBar } from './BulkActionsBar'
 
 export function Ledger() {
   const router = useRouter()
@@ -15,6 +17,7 @@ export function Ledger() {
 
   const [filters, setFilters] = useState<LedgerFilters>(initial)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -22,6 +25,11 @@ export function Ledger() {
     const url = params.toString().length > 0 ? `/ledger?${params.toString()}` : '/ledger'
     router.replace(url, { scroll: false })
   }, [filters, router])
+
+  // Clear selection whenever filters change so we don't operate on hidden rows.
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [filters])
 
   const txQ = useTransactions(toDataFilters(filters))
 
@@ -31,11 +39,24 @@ export function Ledger() {
     return (tx.description ?? '').toLowerCase().includes(filters.q.toLowerCase())
   })
 
+  function toggleSelect(id: string, selected: boolean) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (selected) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-4">
       <header className="space-y-2">
         <h1 className="text-2xl font-bold text-ink">Ledger</h1>
-        <p className="text-sm text-muted">All transactions, filterable. Inline edit + bulk actions coming in the next pass.</p>
+        <p className="text-sm text-muted">All transactions, filterable. Bulk select + delete enabled.</p>
       </header>
 
       <div className="bg-surface border border-rule rounded-xl p-3 sm:p-4 shadow-sm">
@@ -55,8 +76,20 @@ export function Ledger() {
           Failed to load: {txQ.error.message}
         </div>
       ) : (
-        <TransactionList transactions={filtered} />
+        <TransactionList
+          transactions={filtered}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+        />
       )}
+
+      <LedgerFooter transactions={filtered} />
+
+      <BulkActionsBar
+        selectedIds={[...selectedIds]}
+        onCancel={clearSelection}
+        onCompleted={clearSelection}
+      />
 
       <FilterSheet
         open={sheetOpen}

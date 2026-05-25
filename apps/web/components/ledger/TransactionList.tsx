@@ -6,13 +6,15 @@ import { cn } from '@/lib/cn'
 
 export interface TransactionListProps {
   transactions: ReadonlyArray<TxRow>
+  selectedIds?: ReadonlySet<string>
+  onToggleSelect?: (id: string, selected: boolean) => void
 }
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 }
 
-export function TransactionList({ transactions }: TransactionListProps) {
+export function TransactionList({ transactions, selectedIds, onToggleSelect }: TransactionListProps) {
   const groups = groupByMonth(transactions)
 
   if (groups.length === 0) {
@@ -44,7 +46,15 @@ export function TransactionList({ transactions }: TransactionListProps) {
           <ul className="divide-y divide-gray-100">
             {g.items.map(tx => (
               <li key={tx.id}>
-                <TransactionRow tx={tx} />
+                <TransactionRow
+                  tx={tx}
+                  {...(selectedIds !== undefined && onToggleSelect !== undefined
+                    ? {
+                        selected: selectedIds.has(tx.id),
+                        onSelectChange: (sel: boolean) => onToggleSelect(tx.id, sel)
+                      }
+                    : {})}
+                />
               </li>
             ))}
           </ul>
