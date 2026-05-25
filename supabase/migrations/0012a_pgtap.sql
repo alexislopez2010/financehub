@@ -1,0 +1,12 @@
+-- supabase/migrations/0012a_pgtap.sql
+-- Phase 2M.T1 — enable pgTAP so supabase/tests/*.sql can run schema-level
+-- assertions (RLS policies, triggers, constraints, RPC contracts).
+--
+-- pgTAP is a test-only extension: it adds the ok()/is()/throws_ok()/etc.
+-- assertion family and is harmless in prod when nothing calls it.
+-- All test files wrap themselves in BEGIN; ... ROLLBACK; so no data is
+-- ever mutated by a run.
+--
+-- Suffix `a` so this slots in between 0012 (reserved for the upcoming
+-- dev_grant_aal2 migration in T3) and 0013 without renumbering.
+create extension if not exists pgtap with schema extensions;
