@@ -5,18 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { AdminSectionNav, type AdminSection } from './AdminSectionNav'
 import { MembersSection } from './members/MembersSection'
 import { CategoriesSection } from './categories/CategoriesSection'
+import { RulesSection } from './rules/RulesSection'
 
 function parseSection(v: string | null): AdminSection {
   if (v === 'categories' || v === 'rules') return v
   return 'members'
-}
-
-function PlaceholderCard({ label }: { label: string }) {
-  return (
-    <section className="bg-surface border border-rule rounded-xl shadow-sm px-4 py-12 text-center">
-      <p className="text-sm text-muted">{label}</p>
-    </section>
-  )
 }
 
 export function Admin() {
@@ -47,7 +40,7 @@ export function Admin() {
 
       {section === 'members' && <MembersSection />}
       {section === 'categories' && <CategoriesSection />}
-      {section === 'rules' && <PlaceholderCard label="Coming in Phase 2L.T3" />}
+      {section === 'rules' && <RulesSection />}
     </div>
   )
 }
