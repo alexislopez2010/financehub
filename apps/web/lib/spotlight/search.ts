@@ -295,7 +295,9 @@ function formatMonthDay(isoDate: string): string {
   const day = Number(parts[2])
   if (!Number.isFinite(monthIdx) || monthIdx < 0 || monthIdx > 11) return isoDate
   if (!Number.isFinite(day)) return isoDate
-  return `${MONTH_NAMES[monthIdx]} ${day}`
+  const monthName = MONTH_NAMES[monthIdx]
+  if (monthName === undefined) return isoDate
+  return `${monthName} ${day}`
 }
 
 function formatSignedAmount(amount: number): string {

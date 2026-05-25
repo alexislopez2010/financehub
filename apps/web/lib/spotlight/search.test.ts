@@ -246,6 +246,23 @@ describe('searchEverything', () => {
       expect(result[0]!.href).toBe('/ledger?q=groceries')
     })
 
+    it('transaction href falls back to encoded full query for multi-token match across other fields', () => {
+      // Query "walmart groceries" — neither token hits description ("Costco"),
+      // but tokens AND-match across category + account.
+      const tx = makeTx({
+        description: 'Costco',
+        category: 'Groceries',
+        account: 'Walmart Visa',
+        member: ''
+      })
+      const result = searchEverything(
+        emptyCorpus({ transactions: [tx] }),
+        'walmart groceries'
+      )
+      expect(result).toHaveLength(1)
+      expect(result[0]!.href).toBe('/ledger?q=walmart%20groceries')
+    })
+
     it('bill href uses focus=<id>', () => {
       const result = searchEverything(
         emptyCorpus({ bills: [makeBill({ id: 'bill-uuid', name: 'Netflix' })] }),
@@ -312,6 +329,18 @@ describe('searchEverything', () => {
         'cash'
       )
       expect(withoutInst[0]!.detail).toBe('cash')
+    })
+
+    it('transaction detail falls back to raw isoDate when date is malformed', () => {
+      // Month "99" fails the bounds check in formatMonthDay; the function
+      // should degrade by returning the raw ISO date instead of "undefined".
+      const result = searchEverything(
+        emptyCorpus({
+          transactions: [makeTx({ description: 'Netflix', date: '2026-99-15', amount: -10 })]
+        }),
+        'netflix'
+      )
+      expect(result[0]!.detail).toBe('2026-99-15 · -$10.00')
     })
 
     it('category detail is omitted', () => {
