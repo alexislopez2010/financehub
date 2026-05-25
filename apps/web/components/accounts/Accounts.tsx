@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { SectionNav, type AccountsSection as Sec } from './SectionNav'
 import { AccountsSection } from './AccountsSection'
 import { DebtSection } from './DebtSection'
+import { CfoSection } from './CfoSection'
 
 function parseSection(v: string | null): Sec {
   if (v === 'debt' || v === 'cfo') return v
@@ -35,11 +36,7 @@ export function Accounts() {
 
       {section === 'accounts' && <AccountsSection />}
       {section === 'debt' && <DebtSection />}
-      {section === 'cfo' && (
-        <div className="bg-surface border border-rule rounded-xl p-8 shadow-sm text-center text-sm text-muted">
-          CFO view lands in 2J.T3.
-        </div>
-      )}
+      {section === 'cfo' && <CfoSection />}
     </div>
   )
 }
