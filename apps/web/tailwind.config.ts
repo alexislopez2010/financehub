@@ -11,7 +11,8 @@ const config: Config = {
         muted: 'var(--color-muted)',
         rule: 'var(--color-rule)',
         accent: 'var(--color-accent)',
-        warn: 'var(--color-warn)'
+        warn: 'var(--color-warn)',
+        brand: 'var(--color-brand)'
       },
       fontFamily: {
         system: 'var(--font-system)'

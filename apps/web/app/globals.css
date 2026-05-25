@@ -3,13 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --color-bg: oklch(97% 0.012 80);
-  --color-surface: oklch(94% 0.01 80);
-  --color-ink: oklch(18% 0.005 60);
-  --color-muted: oklch(45% 0.005 60);
-  --color-rule: oklch(89% 0.01 75);
-  --color-accent: oklch(48% 0.22 145);
-  --color-warn: oklch(50% 0.24 28);
+  /* Dashboard aesthetic — white with Tailwind-aligned greys + vibrant accents */
+  --color-bg:      #f9fafb;  /* gray-50 — page background */
+  --color-surface: #ffffff;  /* pure white cards */
+  --color-ink:     #111827;  /* gray-900 — primary text */
+  --color-muted:   #6b7280;  /* gray-500 — secondary text */
+  --color-rule:    #e5e7eb;  /* gray-200 — borders + dividers */
+  --color-accent:  #059669;  /* emerald-600 — positive tone */
+  --color-warn:    #dc2626;  /* red-600 — negative tone */
+  --color-brand:   #2563eb;  /* blue-600 — primary brand / active states */
+
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI",
                  Roboto, "Helvetica Neue", Arial, sans-serif;
 }

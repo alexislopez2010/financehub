@@ -8,8 +8,7 @@ const PUBLIC_PATHS = new Set<string>([
   '/signup',
   '/forgot-password',
   '/reset-password',
-  '/design-system',
-  '/design-compare'
+  '/design-system'
 ])
 
 // Routes that require a session but do NOT require AAL2 (these are how users get to AAL2).

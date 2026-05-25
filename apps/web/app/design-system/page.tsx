@@ -1,8 +1,9 @@
+import { TrendingUp, TrendingDown, Wallet, CreditCard, Coins, Calendar } from 'lucide-react'
 import { Masthead } from '@/components/ui/Masthead'
 import { Headline } from '@/components/ui/Headline'
 import { Standfirst } from '@/components/ui/Standfirst'
 import { SectionLabel } from '@/components/ui/SectionLabel'
-import { KpiStone } from '@/components/ui/KpiStone'
+import { KpiTile } from '@/components/ui/KpiTile'
 import { RulerList, type RulerListItem } from '@/components/ui/RulerList'
 
 // ─── Token metadata ───────────────────────────────────────────────────────────
@@ -14,13 +15,14 @@ interface Swatch {
 }
 
 const swatches: ReadonlyArray<Swatch> = [
-  { name: 'bg',      varName: '--color-bg',      description: 'Page background' },
-  { name: 'surface', varName: '--color-surface',  description: 'Card / panel surface' },
-  { name: 'ink',     varName: '--color-ink',      description: 'Primary text' },
-  { name: 'muted',   varName: '--color-muted',    description: 'Secondary / caption text' },
-  { name: 'rule',    varName: '--color-rule',     description: 'Dividers + borders' },
-  { name: 'accent',  varName: '--color-accent',   description: 'Positive delta / highlight' },
-  { name: 'warn',    varName: '--color-warn',     description: 'Negative delta / alert' },
+  { name: 'bg',      varName: '--color-bg',      description: 'Page background (gray-50)' },
+  { name: 'surface', varName: '--color-surface',  description: 'White cards' },
+  { name: 'ink',     varName: '--color-ink',      description: 'Primary text (gray-900)' },
+  { name: 'muted',   varName: '--color-muted',    description: 'Secondary text (gray-500)' },
+  { name: 'rule',    varName: '--color-rule',     description: 'Borders + dividers (gray-200)' },
+  { name: 'accent',  varName: '--color-accent',   description: 'Positive / emerald-600' },
+  { name: 'warn',    varName: '--color-warn',     description: 'Negative / red-600' },
+  { name: 'brand',   varName: '--color-brand',    description: 'Primary brand / blue-600' },
 ]
 
 // ─── Coming-due list data ─────────────────────────────────────────────────────
@@ -38,25 +40,6 @@ const largePayments: ReadonlyArray<RulerListItem> = [
   { key: 'car-insurance', label: 'Auto Insurance (6-month)', value: '$892.00' },
 ]
 
-// ─── Composition-frame helper ─────────────────────────────────────────────────
-
-function PhoneFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <article
-      aria-label="Briefing phone frame"
-      className="
-        w-full max-w-[380px] mx-auto
-        bg-surface rounded-3xl
-        px-5 py-6 space-y-5
-        border border-rule
-        shadow-[0_4px_24px_rgba(0,0,0,0.06)]
-      "
-    >
-      {children}
-    </article>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DesignSystemPage() {
@@ -67,10 +50,8 @@ export default function DesignSystemPage() {
       <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight text-ink">Design system</h1>
         <p className="text-[15px] text-muted max-w-prose">
-          Editorial primitives + design tokens. Iterate here against realistic
-          Lopez-household data before touching production surfaces. Both mobile
-          and desktop compositions are shown side-by-side so breakpoint
-          regressions are visible at a glance.
+          Dashboard primitives + design tokens. Iterate here against realistic
+          Lopez-household data before touching production surfaces.
         </p>
       </div>
 
@@ -79,7 +60,7 @@ export default function DesignSystemPage() {
         <div id="lbl-tokens" className="mb-4">
           <SectionLabel>Color tokens</SectionLabel>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
           {swatches.map((s) => (
             <div key={s.name} className="flex flex-col gap-2">
               <div
@@ -99,6 +80,118 @@ export default function DesignSystemPage() {
         </div>
       </section>
 
+      {/* ── KpiTile ────────────────────────────────────────────────────────── */}
+      <section aria-labelledby="lbl-kpitile" className="space-y-6">
+        <div id="lbl-kpitile">
+          <SectionLabel>KpiTile</SectionLabel>
+        </div>
+        <p className="text-[13px] text-muted">
+          Props: <code className="font-mono">label</code>,{' '}
+          <code className="font-mono">value</code>,{' '}
+          <code className="font-mono">caption</code>,{' '}
+          <code className="font-mono">captionTone</code> (positive | negative | neutral),{' '}
+          <code className="font-mono">icon</code>,{' '}
+          <code className="font-mono">iconTone</code> (emerald | red | purple | blue | amber | gray)
+        </p>
+
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-widest text-muted">Dashboard KPI row — icon tones</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiTile
+              label="Cash"
+              value="$42,180"
+              caption="+$620 this month"
+              captionTone="positive"
+              icon={Wallet}
+              iconTone="emerald"
+            />
+            <KpiTile
+              label="Debt"
+              value="$18,902"
+              caption="-$340 paid down"
+              captionTone="positive"
+              icon={CreditCard}
+              iconTone="red"
+            />
+            <KpiTile
+              label="This Month"
+              value="+$1,840"
+              caption="net positive"
+              captionTone="positive"
+              icon={TrendingUp}
+              iconTone="emerald"
+            />
+            <KpiTile
+              label="Net Worth"
+              value="$23,278"
+              caption="positive position"
+              captionTone="positive"
+              icon={Coins}
+              iconTone="purple"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-widest text-muted">Negative month</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiTile
+              label="Cash"
+              value="$39,120"
+              caption="-$3,060 this month"
+              captionTone="negative"
+              icon={Wallet}
+              iconTone="emerald"
+            />
+            <KpiTile
+              label="Debt"
+              value="$19,480"
+              caption="+$578 added"
+              captionTone="negative"
+              icon={CreditCard}
+              iconTone="red"
+            />
+            <KpiTile
+              label="This Month"
+              value="−$980"
+              caption="net negative"
+              captionTone="negative"
+              icon={TrendingDown}
+              iconTone="red"
+            />
+            <KpiTile
+              label="Net Worth"
+              value="$19,640"
+              caption="positive position"
+              captionTone="positive"
+              icon={Coins}
+              iconTone="purple"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-widest text-muted">All icon tones (no caption)</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <KpiTile label="Emerald" value="$1,200" icon={TrendingUp} iconTone="emerald" />
+            <KpiTile label="Red" value="$900" icon={TrendingDown} iconTone="red" />
+            <KpiTile label="Purple" value="$5,400" icon={Coins} iconTone="purple" />
+            <KpiTile label="Blue" value="7" icon={Calendar} iconTone="blue" />
+            <KpiTile label="Amber" value="3" icon={Wallet} iconTone="amber" />
+            <KpiTile label="Gray" value="12" icon={CreditCard} iconTone="gray" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-widest text-muted">No icon</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg">
+            <KpiTile label="Accounts" value="4" />
+            <KpiTile label="Open Bills" value="7" />
+            <KpiTile label="Days Left" value="8" />
+          </div>
+        </div>
+      </section>
+
       {/* ── Masthead ───────────────────────────────────────────────────────── */}
       <section aria-labelledby="lbl-masthead" className="space-y-4">
         <div id="lbl-masthead">
@@ -106,9 +199,9 @@ export default function DesignSystemPage() {
         </div>
         <p className="text-[13px] text-muted">
           Props: <code className="font-mono">volume</code>,{' '}
-          <code className="font-mono">date</code>
+          <code className="font-mono">date</code>. Retains editorial character — useful inside cards for section headers.
         </p>
-        <div className="max-w-[380px]">
+        <div className="max-w-[380px] bg-surface border border-rule rounded-xl p-5 shadow-sm">
           <Masthead volume="VOL. III · BRIEFING" date="SAT, MAY 24" />
         </div>
       </section>
@@ -120,9 +213,9 @@ export default function DesignSystemPage() {
         </div>
         <p className="text-[13px] text-muted">
           Props: <code className="font-mono">children</code>,{' '}
-          <code className="font-mono">as</code> (h1 | h2 | h3)
+          <code className="font-mono">as</code> (h1 | h2 | h3). Works inside cards for bold section intros.
         </p>
-        <div className="space-y-3">
+        <div className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
           <Headline as="h1">Net worth, up 2.4% this month.</Headline>
           <Headline as="h2">Groceries down. Utilities steady.</Headline>
           <Headline as="h3">Tucker mortgage current — next due Jun 5.</Headline>
@@ -135,13 +228,15 @@ export default function DesignSystemPage() {
           <SectionLabel>Standfirst</SectionLabel>
         </div>
         <p className="text-[13px] text-muted">
-          Props: <code className="font-mono">children</code>
+          Props: <code className="font-mono">children</code>. Subheading-weight body text inside a Notable card.
         </p>
-        <Standfirst>
-          A quiet month in the Lopez household. Groceries came in 18% under
-          budget, three bills shifted into the next cycle, and Anthropic
-          transferred the May stipend on the 3rd as expected.
-        </Standfirst>
+        <div className="bg-surface border border-rule rounded-xl p-5 shadow-sm">
+          <Standfirst>
+            A quiet month in the Lopez household. Groceries came in 18% under
+            budget, three bills shifted into the next cycle, and Anthropic
+            transferred the May stipend on the 3rd as expected.
+          </Standfirst>
+        </div>
       </section>
 
       {/* ── SectionLabel ───────────────────────────────────────────────────── */}
@@ -150,52 +245,12 @@ export default function DesignSystemPage() {
           <SectionLabel>SectionLabel (the component itself)</SectionLabel>
         </div>
         <p className="text-[13px] text-muted">
-          Props: <code className="font-mono">children</code>
+          Props: <code className="font-mono">children</code>. Uppercase tracking label for section headings.
         </p>
         <div className="space-y-3 pl-3 border-l-2 border-rule">
           <SectionLabel>Coming Due — 14 days</SectionLabel>
           <SectionLabel>Spending by Category</SectionLabel>
           <SectionLabel>Net Worth · Tucker household</SectionLabel>
-        </div>
-      </section>
-
-      {/* ── KpiStone ───────────────────────────────────────────────────────── */}
-      <section aria-labelledby="lbl-kpistone" className="space-y-5">
-        <div id="lbl-kpistone">
-          <SectionLabel>KpiStone</SectionLabel>
-        </div>
-        <p className="text-[13px] text-muted">
-          Props: <code className="font-mono">label</code>,{' '}
-          <code className="font-mono">value</code>,{' '}
-          <code className="font-mono">caption</code>,{' '}
-          <code className="font-mono">tone</code> (neutral | positive | negative)
-        </p>
-
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-widest text-muted">Positive tone</p>
-          <div className="grid grid-cols-3 gap-4 max-w-sm">
-            <KpiStone label="CASH"       value="$42,180.00" caption="+$620.00"  tone="positive" />
-            <KpiStone label="DEBT"       value="$18,902.44" caption="−$340.00"  tone="positive" />
-            <KpiStone label="THIS MONTH" value="+$1,840.00" caption="net"       tone="neutral"  />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-widest text-muted">Negative tone</p>
-          <div className="grid grid-cols-3 gap-4 max-w-sm">
-            <KpiStone label="SPENDING"  value="$3,241.80" caption="+$482.10" tone="negative" />
-            <KpiStone label="UTILITIES" value="$183.42"   caption="+$22.00"  tone="negative" />
-            <KpiStone label="SAVINGS"   value="$8,750.00" caption="−$500.00" tone="negative" />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-widest text-muted">Neutral tone (no caption)</p>
-          <div className="grid grid-cols-3 gap-4 max-w-sm">
-            <KpiStone label="ACCOUNTS"   value="4" />
-            <KpiStone label="OPEN BILLS" value="7" />
-            <KpiStone label="DAYS LEFT"  value="8" />
-          </div>
         </div>
       </section>
 
@@ -205,98 +260,23 @@ export default function DesignSystemPage() {
           <SectionLabel>RulerList</SectionLabel>
         </div>
         <p className="text-[13px] text-muted">
-          Props: <code className="font-mono">items</code> (label, value, key)
+          Props: <code className="font-mono">items</code> (label, value, key). Used inside Coming Due card.
         </p>
 
-        <div className="grid gap-8 lg:grid-cols-2 max-w-3xl">
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-widest text-muted">Coming due — next 14 days</p>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 text-blue-600">
+                <Calendar size={16} strokeWidth={2} />
+              </div>
+              <h3 className="text-sm font-semibold text-ink">Coming due — next 14 days</h3>
+            </div>
             <RulerList items={comingDue} />
           </div>
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-widest text-muted">Large payments — upcoming</p>
+          <div className="bg-surface border border-rule rounded-xl p-5 shadow-sm space-y-3">
+            <h3 className="text-sm font-semibold text-ink">Large payments — upcoming</h3>
             <RulerList items={largePayments} />
           </div>
-        </div>
-      </section>
-
-      {/* ── Composition: Briefing extract ──────────────────────────────────── */}
-      <section aria-labelledby="lbl-composition" className="space-y-6">
-        <div className="space-y-1">
-          <div id="lbl-composition">
-            <SectionLabel>Composition: Briefing extract</SectionLabel>
-          </div>
-          <p className="text-[13px] text-muted">
-            Mobile-width frames (380px) shown side-by-side on desktop.
-            Left frame: positive month. Right frame: negative month — same
-            structure, different data state.
-          </p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-
-          {/* ── Good month ───────────────────────────────────────────────── */}
-          <PhoneFrame>
-            <Masthead volume="VOL. III · BRIEFING" date="SAT, MAY 24" />
-
-            <div className="space-y-2">
-              <Headline as="h2">Net worth, up 2.4%.</Headline>
-              <Standfirst>
-                Groceries down 18%, three bills shifted into June. Anthropic
-                stipend landed on the 3rd — everything on track.
-              </Standfirst>
-            </div>
-
-            <div className="space-y-3">
-              <SectionLabel>Snapshot · May 2025</SectionLabel>
-              <div className="grid grid-cols-3 gap-3">
-                <KpiStone label="CASH"       value="$42,180" caption="+$620"  tone="positive" />
-                <KpiStone label="DEBT"       value="$18,902" caption="−$340"  tone="positive" />
-                <KpiStone label="THIS MONTH" value="+$1,840" caption="net"    tone="neutral"  />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <SectionLabel>Coming Due — 14 days</SectionLabel>
-              <RulerList items={comingDue} />
-            </div>
-          </PhoneFrame>
-
-          {/* ── Bad month ────────────────────────────────────────────────── */}
-          <PhoneFrame>
-            <Masthead volume="VOL. IV · BRIEFING" date="SAT, JUN 21" />
-
-            <div className="space-y-2">
-              <Headline as="h2">Spending overrun — June.</Headline>
-              <Standfirst>
-                Car repair hit in week 2. Utilities 22% over baseline. Net
-                position negative for the first time in four months.
-              </Standfirst>
-            </div>
-
-            <div className="space-y-3">
-              <SectionLabel>Snapshot · Jun 2025</SectionLabel>
-              <div className="grid grid-cols-3 gap-3">
-                <KpiStone label="CASH"       value="$39,120" caption="−$3,060" tone="negative" />
-                <KpiStone label="DEBT"       value="$19,480" caption="+$578"   tone="negative" />
-                <KpiStone label="THIS MONTH" value="−$980"   caption="net"     tone="negative" />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <SectionLabel>Coming Due — 14 days</SectionLabel>
-              <RulerList
-                items={[
-                  { key: 'tucker-mortgage-jun', label: 'Tucker Mortgage — 5th',   value: '$2,847.00' },
-                  { key: 'firstenergy-jun',      label: 'FirstEnergy — 7th',       value: '$205.18' },
-                  { key: 'property-tax-q3',      label: 'Property Tax Q3 — 9th',   value: '$1,420.00' },
-                  { key: 'auto-insurance',        label: 'Auto Insurance — 14th',   value: '$892.00' },
-                  { key: 'anthropic-sub-jun',     label: 'Anthropic Claude — 12th', value: '$20.00' },
-                ]}
-              />
-            </div>
-          </PhoneFrame>
-
         </div>
       </section>
 
