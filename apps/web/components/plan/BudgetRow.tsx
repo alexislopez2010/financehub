@@ -1,0 +1,96 @@
+'use client'
+
+import { Trash2 } from 'lucide-react'
+import { EditableCell } from '@/components/ledger/EditableCell'
+import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
+import { cn } from '@/lib/cn'
+
+export interface BudgetRowProps {
+  row: BudgetVsActualRow
+  onEditBudget: (next: number) => void
+  onDelete: () => void
+  onCreateForUnbudgeted: () => void  // for budgetId=null rows: prompt to create a budget
+}
+
+function formatUSD(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function pctOfBudget(actual: number, budgeted: number): number {
+  if (budgeted === 0) return 0
+  return (actual / budgeted) * 100
+}
+
+export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }: BudgetRowProps) {
+  const isUnbudgeted = row.budgetId === null
+  const overBudget = !isUnbudgeted && row.variance < 0
+  const pct = pctOfBudget(row.actual, row.budgeted)
+  const barPct = Math.min(100, Math.max(0, pct))
+
+  return (
+    <div className={cn(
+      'grid grid-cols-[1fr_100px_100px_120px_28px] sm:grid-cols-[1fr_120px_120px_140px_28px] gap-3 items-center',
+      'px-4 py-3 text-sm transition-colors hover:bg-gray-50'
+    )}>
+      <div className="min-w-0">
+        <div className="text-ink font-medium truncate">{row.category}</div>
+        {!isUnbudgeted && (
+          <div className="mt-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all', overBudget ? 'bg-red-500' : 'bg-emerald-500')}
+              style={{ width: `${barPct}%` }}
+            />
+          </div>
+        )}
+        {isUnbudgeted && (
+          <button
+            type="button"
+            onClick={onCreateForUnbudgeted}
+            className="mt-1 text-xs text-brand hover:underline"
+          >
+            + Add a budget for this
+          </button>
+        )}
+      </div>
+
+      <div className="text-right tabular text-sm">
+        {isUnbudgeted ? (
+          <span className="text-muted italic text-xs">no budget</span>
+        ) : (
+          <EditableCell
+            variant="number"
+            value={row.budgeted}
+            onCommit={onEditBudget}
+            display={<span className="text-ink font-medium">{formatUSD(row.budgeted)}</span>}
+            inputClassName="text-right"
+          />
+        )}
+      </div>
+
+      <div className="text-right tabular text-sm text-ink font-medium">
+        {formatUSD(row.actual)}
+      </div>
+
+      <div className={cn(
+        'text-right tabular text-sm font-semibold',
+        row.variance < 0 ? 'text-red-600' : row.variance > 0 ? 'text-emerald-600' : 'text-muted'
+      )}>
+        {row.variance < 0 ? '−' : row.variance > 0 ? '+' : ''}
+        {formatUSD(Math.abs(row.variance))}
+      </div>
+
+      <div className="text-right">
+        {!isUnbudgeted && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={`Delete budget for ${row.category}`}
+            className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
