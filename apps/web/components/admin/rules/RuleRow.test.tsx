@@ -102,6 +102,28 @@ describe('<RuleRow>', () => {
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith('r1')
   })
 
+  it('does not call update when category is blanked on a category_map rule', async () => {
+    const user = userEvent.setup()
+    render(
+      <ul>
+        <RuleRow
+          rule={makeRule({ rule_kind: 'category_map', category: 'Housing' })}
+          categories={[makeCategory('Housing')]}
+        />
+      </ul>
+    )
+
+    await user.click(screen.getByRole('button', { name: /^Housing$/ }))
+    const select = screen.getByRole('combobox')
+    await user.selectOptions(select, '__unset__')
+    await user.tab()
+
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(/category cannot be blank on a category_map rule/i)
+    ).toBeInTheDocument()
+  })
+
   it('does not call update when keyword is blanked', async () => {
     const user = userEvent.setup()
     render(

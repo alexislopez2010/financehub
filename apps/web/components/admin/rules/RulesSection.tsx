@@ -112,7 +112,7 @@ export function RulesSection() {
             </div>
           ))}
 
-          <div key="__general__" className="py-2">
+          <div className="py-2">
             <div className="px-4 py-2 text-xs italic uppercase tracking-wider text-muted">
               General rules
             </div>

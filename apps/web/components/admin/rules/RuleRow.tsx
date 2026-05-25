@@ -57,6 +57,10 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
   function handleCategoryCommit(next: string) {
     const value = next === UNSET_VALUE ? null : next
     if (value === (rule.category ?? null)) return
+    if (value === null && rule.rule_kind === 'category_map') {
+      setEditError('Category cannot be blank on a category_map rule.')
+      return
+    }
     setEditError(null)
     updateRule
       .mutateAsync({ id: rule.id, patch: { category: value } })
@@ -141,7 +145,7 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
             <button
               type="button"
               aria-label={`Delete rule ${rule.keyword ?? rule.id}`}
-              className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-colors"
+              className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 hover:text-red-600 hover:bg-red-50 transition-colors"
             >
               <Trash2 size={14} />
             </button>
