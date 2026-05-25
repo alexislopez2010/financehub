@@ -53,19 +53,6 @@ test.describe('protected surface redirects (unauthenticated)', () => {
   })
 })
 
-test.describe('shell integration (requires authenticated user)', () => {
-  test.skip('tab navigation switches surfaces', () => {
-    // Phase 2M: seed a test user, sign in via storage state, click each tab,
-    // assert URL changes and active-tab aria-current updates.
-  })
-
-  test.skip('Cmd-K opens the spotlight palette', () => {
-    // Phase 2M: dispatch a keydown event with metaKey+k after auth,
-    // assert the Dialog is visible and the input is focused.
-  })
-
-  test.skip('spotlight jump navigates to selected surface', () => {
-    // Phase 2M: open spotlight, click a Jump item, assert URL changes
-    // and dialog closes.
-  })
-})
+// Shell integration tests that require an authenticated user have moved to
+// `authenticated.spec.ts` (runs under the `authenticated` Playwright project,
+// gated on SUPABASE_SERVICE_ROLE_KEY via global-setup.ts).

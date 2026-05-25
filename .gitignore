@@ -18,6 +18,11 @@ test-results
 playwright-report
 blob-report
 playwright/.cache
+# E2E auth storageState (provisioned at runtime; never commit)
+**/tests/.auth
+# E2E env file (contains SUPABASE_SERVICE_ROLE_KEY)
+.env.test
+**/.env.test
 
 # Vitest
 coverage
