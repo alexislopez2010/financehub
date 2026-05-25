@@ -1,8 +1,10 @@
 'use client'
 
+import { Trash2 } from 'lucide-react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { daysUntilDue } from '@/lib/finance/dueDate'
 import { nextDueDate } from '@/lib/bills/sort'
+import { EditableCell } from '@/components/ledger/EditableCell'
 import { cn } from '@/lib/cn'
 
 type BillRow = Tables<'bills'>
@@ -10,6 +12,10 @@ type BillRow = Tables<'bills'>
 export interface BillRowProps {
   bill: BillRow
   today: { year: number; month: number; day: number }
+  onEditName?: (next: string) => void
+  onEditDueDay?: (next: number) => void
+  onEditAmount?: (next: number) => void
+  onDelete?: () => void
 }
 
 function formatUSD(n: number): string {
@@ -25,18 +31,35 @@ function dueLabel(days: number | null): { text: string; tone: string } {
   return { text: `in ${days} days`, tone: 'text-muted' }
 }
 
-export function BillRow({ bill, today }: BillRowProps) {
+export function BillRow({
+  bill, today,
+  onEditName, onEditDueDay, onEditAmount, onDelete
+}: BillRowProps) {
   const days = bill.due_day == null ? null : daysUntilDue({ due_day: bill.due_day }, today)
   const due = dueLabel(days)
   const nextDate = nextDueDate(bill, today)
+  const showDelete = onDelete !== undefined
+
+  const cols = showDelete
+    ? 'grid-cols-[1fr_90px_110px_28px] sm:grid-cols-[1fr_140px_120px_140px_28px]'
+    : 'grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px]'
 
   return (
     <div className={cn(
-      'grid grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px] gap-3 items-center',
-      'px-4 py-3 text-sm hover:bg-gray-50 transition-colors'
+      'grid gap-3 items-center px-4 py-3 text-sm hover:bg-gray-50 transition-colors',
+      cols
     )}>
       <div className="min-w-0">
-        <div className="text-ink font-medium truncate">{bill.name}</div>
+        {onEditName ? (
+          <EditableCell
+            variant="text"
+            value={bill.name}
+            onCommit={onEditName}
+            display={<span className="text-ink font-medium truncate block">{bill.name}</span>}
+          />
+        ) : (
+          <div className="text-ink font-medium truncate">{bill.name}</div>
+        )}
         <div className="flex items-center gap-1.5 mt-0.5">
           {bill.category && <span className="text-xs text-muted">{bill.category}</span>}
           {bill.frequency && (
@@ -48,9 +71,24 @@ export function BillRow({ bill, today }: BillRowProps) {
         </div>
       </div>
 
-      <div className={cn('text-right text-xs tabular', due.tone)}>
-        <div>{due.text}</div>
-        {nextDate && <div className="text-[10px] text-muted">{nextDate}</div>}
+      <div className="text-right text-xs tabular">
+        {onEditDueDay ? (
+          <div className="space-y-0.5">
+            <EditableCell
+              variant="number"
+              value={bill.due_day ?? 0}
+              onCommit={(n) => onEditDueDay(Math.min(Math.max(Math.round(n), 1), 31))}
+              display={<span className={cn('block', due.tone)}>{due.text}</span>}
+              inputClassName="text-right"
+            />
+            {nextDate && <div className="text-[10px] text-muted">{nextDate}</div>}
+          </div>
+        ) : (
+          <>
+            <div className={due.tone}>{due.text}</div>
+            {nextDate && <div className="text-[10px] text-muted">{nextDate}</div>}
+          </>
+        )}
       </div>
 
       <div className="hidden sm:block text-xs text-muted truncate" title={bill.account ?? ''}>
@@ -58,8 +96,31 @@ export function BillRow({ bill, today }: BillRowProps) {
       </div>
 
       <div className="text-right tabular text-sm text-ink font-semibold">
-        {formatUSD(bill.budget_amount)}
+        {onEditAmount ? (
+          <EditableCell
+            variant="number"
+            value={bill.budget_amount}
+            onCommit={onEditAmount}
+            display={<span className="font-semibold">{formatUSD(bill.budget_amount)}</span>}
+            inputClassName="text-right"
+          />
+        ) : (
+          formatUSD(bill.budget_amount)
+        )}
       </div>
+
+      {showDelete && (
+        <div className="text-right">
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={`Delete bill ${bill.name}`}
+            className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

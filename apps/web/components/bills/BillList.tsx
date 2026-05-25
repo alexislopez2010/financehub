@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
+import { ArrowDown, ArrowUpDown } from 'lucide-react'
 import { useMemo } from 'react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { billComparator, type BillSortKey } from '@/lib/bills/sort'
@@ -14,6 +14,10 @@ export interface BillListProps {
   sortKey: BillSortKey
   onSortChange: (key: BillSortKey) => void
   today: { year: number; month: number; day: number }
+  onEditName?: (id: string, next: string) => void
+  onEditDueDay?: (id: string, next: number) => void
+  onEditAmount?: (id: string, next: number) => void
+  onDelete?: (id: string, name: string) => void
 }
 
 interface ColHeader {
@@ -24,12 +28,15 @@ interface ColHeader {
 
 const HEADERS: ReadonlyArray<ColHeader> = [
   { key: 'name',     label: 'Name',     className: 'text-left' },
-  { key: 'due',      label: 'Next due', className: 'text-right' },
-  { key: 'category', label: 'Account',  className: 'hidden sm:block text-left' },
-  { key: 'amount',   label: 'Amount',   className: 'text-right' }
+  { key: 'due',      label: 'Next due', className: 'text-right justify-end' },
+  { key: 'category', label: 'Account',  className: 'hidden sm:flex text-left' },
+  { key: 'amount',   label: 'Amount',   className: 'text-right justify-end' }
 ]
 
-export function BillList({ bills, sortKey, onSortChange, today }: BillListProps) {
+export function BillList({
+  bills, sortKey, onSortChange, today,
+  onEditName, onEditDueDay, onEditAmount, onDelete
+}: BillListProps) {
   const sorted = useMemo(() => {
     const copy = [...bills].filter(b => b.is_active !== false)
     copy.sort(billComparator(sortKey, today))
@@ -44,12 +51,17 @@ export function BillList({ bills, sortKey, onSortChange, today }: BillListProps)
     )
   }
 
+  const showDelete = onDelete !== undefined
+  const headerCols = showDelete
+    ? 'grid-cols-[1fr_90px_110px_28px] sm:grid-cols-[1fr_140px_120px_140px_28px]'
+    : 'grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px]'
+
   return (
     <section className="bg-surface border border-rule rounded-xl shadow-sm overflow-hidden">
-      {/* Header row */}
       <div className={cn(
-        'grid grid-cols-[1fr_90px_110px] sm:grid-cols-[1fr_140px_120px_140px] gap-3',
-        'px-4 py-2 text-[10px] uppercase tracking-[0.12em] font-semibold text-muted bg-gray-50 border-b border-rule'
+        'grid gap-3 px-4 py-2',
+        'text-[10px] uppercase tracking-[0.12em] font-semibold text-muted bg-gray-50 border-b border-rule',
+        headerCols
       )}>
         {HEADERS.map(h => {
           const active = sortKey === h.key
@@ -70,12 +82,20 @@ export function BillList({ bills, sortKey, onSortChange, today }: BillListProps)
             </button>
           )
         })}
+        {showDelete && <span />}
       </div>
 
       <ul className="divide-y divide-gray-100">
         {sorted.map(b => (
-          <li key={b.id}>
-            <BillRow bill={b} today={today} />
+          <li key={b.id} className="group">
+            <BillRow
+              bill={b}
+              today={today}
+              {...(onEditName ? { onEditName: (next: string) => onEditName(b.id, next) } : {})}
+              {...(onEditDueDay ? { onEditDueDay: (next: number) => onEditDueDay(b.id, next) } : {})}
+              {...(onEditAmount ? { onEditAmount: (next: number) => onEditAmount(b.id, next) } : {})}
+              {...(onDelete ? { onDelete: () => onDelete(b.id, b.name) } : {})}
+            />
           </li>
         ))}
       </ul>
