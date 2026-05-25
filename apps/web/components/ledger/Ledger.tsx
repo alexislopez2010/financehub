@@ -6,6 +6,7 @@ import { useTransactions } from '@/lib/data/transactions'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
 import { FilterChips } from './FilterChips'
 import { FilterSheet } from './FilterSheet'
+import { TransactionList } from './TransactionList'
 
 export function Ledger() {
   const router = useRouter()
@@ -45,13 +46,17 @@ export function Ledger() {
         />
       </div>
 
-      <div className="bg-surface border border-rule rounded-xl p-8 shadow-sm text-center text-sm text-muted">
-        {txQ.isLoading
-          ? 'Loading transactions…'
-          : txQ.error
-            ? `Failed to load: ${txQ.error.message}`
-            : `Loaded ${filtered.length} transactions${filters.q ? ` (filtered by "${filters.q}")` : ''}. List rendering lands in 2G.T2.`}
-      </div>
+      {txQ.isLoading ? (
+        <div className="bg-surface border border-rule rounded-xl p-8 shadow-sm text-center text-sm text-muted">
+          Loading transactions…
+        </div>
+      ) : txQ.error ? (
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm text-sm text-red-700">
+          Failed to load: {txQ.error.message}
+        </div>
+      ) : (
+        <TransactionList transactions={filtered} />
+      )}
 
       <FilterSheet
         open={sheetOpen}
