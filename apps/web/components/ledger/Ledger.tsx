@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Upload } from 'lucide-react'
 import { useTransactions, useUpdateTransaction, useDeleteTransaction } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
@@ -97,9 +99,18 @@ export function Ledger() {
 
   return (
     <div className="space-y-4 pb-4">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-bold text-ink">Ledger</h1>
-        <p className="text-sm text-muted">All transactions, filterable. Bulk select + delete enabled.</p>
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold text-ink">Ledger</h1>
+          <p className="text-sm text-muted">All transactions, filterable. Bulk select + delete enabled.</p>
+        </div>
+        <Link
+          href="/ledger/import"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-sm text-ink hover:bg-bg transition shrink-0"
+        >
+          <Upload size={14} aria-hidden="true" />
+          Import
+        </Link>
       </header>
 
       <div className="bg-surface border border-rule rounded-xl p-3 sm:p-4 shadow-sm">

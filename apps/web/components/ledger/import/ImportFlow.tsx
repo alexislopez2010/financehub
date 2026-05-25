@@ -1,9 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ImportRow } from '@/lib/import/adapters/types'
+import type { InsertResult } from '@/lib/import/insert'
 import { UploadStep } from './UploadStep'
+import { PreviewStep } from './PreviewStep'
+import { CompleteStep } from './CompleteStep'
 
 export type ImportStep = 'upload' | 'preview' | 'complete'
 
@@ -21,34 +24,21 @@ export interface ImportPayload {
   skipped: ReadonlyArray<SkippedReport>
 }
 
-interface PlaceholderPreviewProps {
-  payload: ImportPayload
-  onBack: () => void
-}
-
-function PlaceholderPreview({ payload, onBack }: PlaceholderPreviewProps) {
-  return (
-    <div className="rounded-xl border border-rule bg-surface p-6 shadow-sm">
-      <p className="text-sm italic text-muted">
-        Preview UI lands in Phase 3A T3. Detected{' '}
-        <span className="font-medium text-ink">{payload.adapterName}</span>{' '}
-        with {payload.parsedRows.length} new + {payload.duplicateRows.length} duplicate row(s)
-        for account <span className="font-medium text-ink">{payload.accountName}</span>.
-      </p>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mt-4 rounded-lg border border-rule px-3 py-1.5 text-sm text-muted hover:text-ink"
-      >
-        Back
-      </button>
-    </div>
-  )
+function deriveDateRange(rows: ReadonlyArray<ImportRow>): { start: string; end: string } {
+  if (rows.length === 0) return { start: '', end: '' }
+  let min = rows[0]!.date
+  let max = rows[0]!.date
+  for (const r of rows) {
+    if (r.date < min) min = r.date
+    if (r.date > max) max = r.date
+  }
+  return { start: min, end: max }
 }
 
 export function ImportFlow() {
   const [step, setStep] = useState<ImportStep>('upload')
   const [payload, setPayload] = useState<ImportPayload | null>(null)
+  const [result, setResult] = useState<InsertResult | null>(null)
 
   function handleParsed(next: ImportPayload) {
     setPayload(next)
@@ -58,6 +48,22 @@ export function ImportFlow() {
   function handleBack() {
     setStep('upload')
   }
+
+  function handleComplete(next: InsertResult) {
+    setResult(next)
+    setStep('complete')
+  }
+
+  function handleReset() {
+    setPayload(null)
+    setResult(null)
+    setStep('upload')
+  }
+
+  const completeDateRange = useMemo(
+    () => deriveDateRange(payload?.parsedRows ?? []),
+    [payload]
+  )
 
   return (
     <div className="space-y-4 pb-4">
@@ -72,8 +78,23 @@ export function ImportFlow() {
       </header>
 
       {step === 'upload' && <UploadStep onParsed={handleParsed} />}
+
       {step === 'preview' && payload && (
-        <PlaceholderPreview payload={payload} onBack={handleBack} />
+        <PreviewStep
+          payload={payload}
+          onBack={handleBack}
+          onComplete={handleComplete}
+        />
+      )}
+
+      {step === 'complete' && payload && result && (
+        <CompleteStep
+          result={result}
+          accountId={payload.accountId}
+          accountName={payload.accountName}
+          dateRange={completeDateRange}
+          onReset={handleReset}
+        />
       )}
     </div>
   )
