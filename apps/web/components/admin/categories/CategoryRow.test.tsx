@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CategoryRow as CategoryRowType } from '@/lib/data/categories'
 
-const mockUpdateMutate = vi.fn()
+const mockUpdateMutateAsync = vi.fn()
 const mockDeleteMutateAsync = vi.fn()
-const mockUseUpdate = vi.fn(() => ({ mutate: mockUpdateMutate, isPending: false }))
+const mockUseUpdate = vi.fn(() => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }))
 const mockUseDelete = vi.fn(() => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }))
 
 vi.mock('@/lib/data/categories', async () => ({
@@ -29,7 +29,8 @@ function makeCategory(over: Partial<CategoryRowType> = {}): CategoryRowType {
 }
 
 beforeEach(() => {
-  mockUpdateMutate.mockReset()
+  mockUpdateMutateAsync.mockReset()
+  mockUpdateMutateAsync.mockResolvedValue(undefined)
   mockDeleteMutateAsync.mockReset()
   mockDeleteMutateAsync.mockResolvedValue(undefined)
 })
@@ -49,7 +50,7 @@ describe('<CategoryRow>', () => {
     await user.clear(input)
     await user.type(input, 'Food{Enter}')
 
-    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: 'c1', patch: { name: 'Food' } })
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { name: 'Food' } })
   })
 
   it('does not commit empty or whitespace names', async () => {
@@ -63,7 +64,24 @@ describe('<CategoryRow>', () => {
     const input = screen.getByRole('textbox')
     await user.clear(input)
     await user.type(input, '   {Enter}')
-    expect(mockUpdateMutate).not.toHaveBeenCalled()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a rename error when the mutation rejects', async () => {
+    mockUpdateMutateAsync.mockRejectedValueOnce(new Error('duplicate'))
+    const user = userEvent.setup()
+    render(
+      <ul>
+        <CategoryRow category={makeCategory()} />
+      </ul>
+    )
+
+    await user.click(screen.getByRole('button', { name: /^Groceries$/ }))
+    const input = screen.getByRole('textbox')
+    await user.clear(input)
+    await user.type(input, 'Food{Enter}')
+
+    expect(await screen.findByText('duplicate')).toBeInTheDocument()
   })
 
   it('opens the confirm dialog, mentions Uncategorized, and deletes on confirm', async () => {

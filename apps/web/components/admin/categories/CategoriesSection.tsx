@@ -44,11 +44,11 @@ function groupCategories(rows: ReadonlyArray<CategoryRowType>): ReadonlyArray<Ty
     entries.sort(([a], [b]) => {
       if (a === GENERAL_LABEL) return -1
       if (b === GENERAL_LABEL) return 1
-      return a.localeCompare(b)
+      return a.localeCompare(b, undefined, { sensitivity: 'base' })
     })
     return entries.map(([parent, cats]) => ({
       parent,
-      categories: [...cats].sort((x, y) => x.name.localeCompare(y.name))
+      categories: [...cats].sort((x, y) => x.name.localeCompare(y.name, undefined, { sensitivity: 'base' }))
     }))
   }
 
