@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { currentPeriod, parsePeriod, type PlanPeriod } from '@/lib/plan/period'
 import { PeriodSelector } from './PeriodSelector'
+import { PlanSummary } from './PlanSummary'
 import { BudgetSection } from './BudgetSection'
 import { IncomeSection } from './IncomeSection'
 
@@ -33,6 +34,7 @@ export function Plan() {
         <PeriodSelector period={period} onChange={setPeriod} />
       </header>
 
+      <PlanSummary period={period} />
       <BudgetSection period={period} />
       <IncomeSection period={period} />
     </div>

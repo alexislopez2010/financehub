@@ -7,6 +7,7 @@ import { useTransactions } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
 import { deriveBudgetVsActual } from '@/lib/plan/budgetVsActual'
 import { periodToRange, type PlanPeriod } from '@/lib/plan/period'
+import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { BudgetRow } from './BudgetRow'
 import { AddBudgetForm } from './AddBudgetForm'
 import { cn } from '@/lib/cn'
@@ -54,7 +55,7 @@ export function BudgetSection({ period }: BudgetSectionProps) {
 
   function handleCreate(input: { category: string; categoryId: string | null; amount: number }) {
     createBudget.mutate({
-      household_id: (budgetsQ.data?.[0]?.household_id) ?? (txsQ.data?.[0]?.household_id) ?? '',
+      household_id: LOPEZ_HOUSEHOLD_ID,
       year: period.year,
       month: period.month,
       category: input.category,

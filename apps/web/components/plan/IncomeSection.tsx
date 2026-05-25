@@ -8,6 +8,7 @@ import {
 import { useTransactions } from '@/lib/data/transactions'
 import { matchIncome } from '@/lib/finance/incomeMatching'
 import { periodToRange, type PlanPeriod } from '@/lib/plan/period'
+import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { IncomeRow } from './IncomeRow'
 import { AddIncomeForm } from './AddIncomeForm'
 import { cn } from '@/lib/cn'
@@ -68,7 +69,7 @@ export function IncomeSection({ period }: IncomeSectionProps) {
     source: string; member: string | null; frequency: string; expected_amount: number
   }) {
     createPlan.mutate({
-      household_id: (incomeQ.data?.[0]?.household_id) ?? (txsQ.data?.[0]?.household_id) ?? '',
+      household_id: LOPEZ_HOUSEHOLD_ID,
       year: period.year,
       month: period.month,
       source: input.source,
