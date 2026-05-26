@@ -11,6 +11,7 @@ type TransactionRow = Tables<'transactions'>
 const mockInsertSingle = vi.fn()
 const mockUpdateSingle = vi.fn()
 const mockDeleteEq = vi.fn()
+const mockRpc = vi.fn()
 
 vi.mock('@/lib/supabase/browser', () => ({
   createClient: () => ({
@@ -30,11 +31,18 @@ vi.mock('@/lib/supabase/browser', () => ({
       delete: () => ({
         eq: (_col: string, _val: unknown) => mockDeleteEq()
       })
-    })
+    }),
+    rpc: (name: string, args: Record<string, unknown>) => mockRpc(name, args)
   })
 }))
 
-import { useCreateTransaction, useUpdateTransaction, useDeleteTransaction } from './transactions'
+import {
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction,
+  usePairTransferRows,
+  useUnpairTransferRow
+} from './transactions'
 
 function makeWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -84,6 +92,7 @@ beforeEach(() => {
   mockInsertSingle.mockReset()
   mockUpdateSingle.mockReset()
   mockDeleteEq.mockReset()
+  mockRpc.mockReset()
 })
 
 describe('useCreateTransaction', () => {
@@ -219,5 +228,177 @@ describe('useDeleteTransaction', () => {
 
     const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
     expect(cache).toEqual(initial)
+  })
+})
+
+describe('usePairTransferRows', () => {
+  it('optimistically marks both rows as Transfer with shared pair anchor', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [
+      makeTx({ id: 'a', amount: -100, account_id: 'acc1', type: 'Expense' }),
+      makeTx({ id: 'b', amount: 100, account_id: 'acc2', type: 'Income' }),
+      makeTx({ id: 'c', amount: 50 })
+    ])
+
+    let resolveServer: (v: { data: string; error: null }) => void = () => {}
+    mockRpc.mockReturnValueOnce(new Promise(r => { resolveServer = r }))
+
+    const { result } = renderHook(() => usePairTransferRows(), { wrapper })
+    void result.current.mutate({ rowAId: 'a', rowBId: 'b' })
+
+    await waitFor(() => {
+      const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+      expect(cache).toBeDefined()
+      const a = cache!.find(t => t.id === 'a')!
+      const b = cache!.find(t => t.id === 'b')!
+      expect(a.type).toBe('Transfer')
+      expect(a.transfer_pair_id).toBe('a')
+      expect(b.type).toBe('Transfer')
+      expect(b.transfer_pair_id).toBe('a')
+      // Untouched row stays the same.
+      const c = cache!.find(t => t.id === 'c')!
+      expect(c.type).toBe('Expense')
+      expect(c.transfer_pair_id).toBeNull()
+    })
+
+    resolveServer({ data: 'a', error: null })
+  })
+
+  it('rolls back optimistic pair on RPC error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const initial = [
+      makeTx({ id: 'a', amount: -100, account_id: 'acc1', type: 'Expense' }),
+      makeTx({ id: 'b', amount: 100, account_id: 'acc2', type: 'Income' })
+    ]
+    seedCache(client, initial)
+
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'rows must have opposite signs' } })
+
+    const { result } = renderHook(() => usePairTransferRows(), { wrapper })
+    await new Promise<void>(resolve => {
+      result.current.mutate(
+        { rowAId: 'a', rowBId: 'b' },
+        { onSettled: () => resolve() }
+      )
+    })
+
+    const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+    expect(cache).toEqual(initial)
+  })
+
+  it('is a no-op on cache slots where the rows are not present', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const unrelated = [makeTx({ id: 'x' }), makeTx({ id: 'y' })]
+    seedCache(client, unrelated)
+
+    mockRpc.mockResolvedValueOnce({ data: 'a', error: null })
+
+    const { result } = renderHook(() => usePairTransferRows(), { wrapper })
+    await new Promise<void>(resolve => {
+      result.current.mutate(
+        { rowAId: 'a', rowBId: 'b' },
+        { onSettled: () => resolve() }
+      )
+    })
+
+    // No rows in cache match; both slots leave unrelated rows untouched.
+    const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+    expect(cache).toEqual(unrelated)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('passes the household id and row ids to the RPC', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [])
+
+    mockRpc.mockResolvedValueOnce({ data: 'a', error: null })
+
+    const { result } = renderHook(() => usePairTransferRows(), { wrapper })
+    await new Promise<void>(resolve => {
+      result.current.mutate(
+        { rowAId: 'a', rowBId: 'b' },
+        { onSettled: () => resolve() }
+      )
+    })
+
+    expect(mockRpc).toHaveBeenCalledWith('pair_transfer_rows', expect.objectContaining({
+      p_row_a_id: 'a',
+      p_row_b_id: 'b'
+    }))
+  })
+})
+
+describe('useUnpairTransferRow', () => {
+  it('optimistically clears transfer_pair_id on both legs', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [
+      makeTx({ id: 'a', type: 'Transfer', transfer_pair_id: 'a' }),
+      makeTx({ id: 'b', type: 'Transfer', transfer_pair_id: 'a' }),
+      makeTx({ id: 'c' })
+    ])
+
+    let resolveServer: (v: { data: number; error: null }) => void = () => {}
+    mockRpc.mockReturnValueOnce(new Promise(r => { resolveServer = r }))
+
+    const { result } = renderHook(() => useUnpairTransferRow(), { wrapper })
+    void result.current.mutate('b')
+
+    await waitFor(() => {
+      const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+      expect(cache).toBeDefined()
+      const a = cache!.find(t => t.id === 'a')!
+      const b = cache!.find(t => t.id === 'b')!
+      expect(a.transfer_pair_id).toBeNull()
+      expect(b.transfer_pair_id).toBeNull()
+      // type stays as Transfer (caller can hand-edit via EditableCell)
+      expect(a.type).toBe('Transfer')
+      expect(b.type).toBe('Transfer')
+    })
+
+    resolveServer({ data: 2, error: null })
+  })
+
+  it('rolls back on RPC error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const initial = [
+      makeTx({ id: 'a', type: 'Transfer', transfer_pair_id: 'a' }),
+      makeTx({ id: 'b', type: 'Transfer', transfer_pair_id: 'a' })
+    ]
+    seedCache(client, initial)
+
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'row is not paired' } })
+
+    const { result } = renderHook(() => useUnpairTransferRow(), { wrapper })
+    await new Promise<void>(resolve => {
+      result.current.mutate('b', { onSettled: () => resolve() })
+    })
+
+    const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+    expect(cache).toEqual(initial)
+  })
+
+  it('clears only the source row when the paired sibling is absent from cache (best-effort)', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [
+      makeTx({ id: 'b', type: 'Transfer', transfer_pair_id: 'a' })
+    ])
+
+    mockRpc.mockResolvedValueOnce({ data: 2, error: null })
+
+    const { result } = renderHook(() => useUnpairTransferRow(), { wrapper })
+    await new Promise<void>(resolve => {
+      result.current.mutate('b', { onSettled: () => resolve() })
+    })
+
+    const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
+    const b = cache!.find(t => t.id === 'b')!
+    expect(b.transfer_pair_id).toBeNull()
   })
 })

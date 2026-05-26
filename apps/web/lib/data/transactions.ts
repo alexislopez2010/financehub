@@ -1,8 +1,9 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient, type UseQueryResult, type UseMutationResult } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type UseQueryResult, type UseMutationResult, type QueryKey } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/browser'
 import { queryKeys, type TransactionFilters } from './keys'
+import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/database.types'
 
 export type TransactionRow = Tables<'transactions'>
@@ -157,6 +158,140 @@ export function useUpdateTransaction(): UseMutationResult<TransactionRow, Error,
     onError(_err, _args, ctx) {
       if (ctx) {
         queryClient.setQueryData(ctx.key, ctx.previous)
+      }
+    },
+    onSettled() {
+      queryClient.invalidateQueries({ queryKey: queryKeys.allTransactions() })
+    }
+  })
+}
+
+export interface PairTransferRowsArgs {
+  rowAId: string
+  rowBId: string
+}
+
+interface PairCtx {
+  readonly snapshots: ReadonlyArray<readonly [QueryKey, ReadonlyArray<TransactionRow>]>
+}
+
+/**
+ * Calls the pair_transfer_rows RPC. Optimistically updates both rows
+ * across every active transactions cache slot to type='Transfer' +
+ * transfer_pair_id=rowAId. Rolls back snapshots on error.
+ */
+export function usePairTransferRows(): UseMutationResult<string, Error, PairTransferRowsArgs, PairCtx> {
+  const queryClient = useQueryClient()
+
+  return useMutation<string, Error, PairTransferRowsArgs, PairCtx>({
+    async mutationFn({ rowAId, rowBId }) {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('pair_transfer_rows', {
+        p_household_id: LOPEZ_HOUSEHOLD_ID,
+        p_row_a_id: rowAId,
+        p_row_b_id: rowBId
+      })
+      if (error) throw error
+      if (!data) throw new Error('pair_transfer_rows returned no data')
+      return data as string
+    },
+    async onMutate({ rowAId, rowBId }) {
+      await queryClient.cancelQueries({ queryKey: queryKeys.allTransactions() })
+
+      const entries = queryClient.getQueriesData<ReadonlyArray<TransactionRow>>({
+        queryKey: queryKeys.allTransactions()
+      })
+      const snapshots: Array<readonly [QueryKey, ReadonlyArray<TransactionRow>]> = []
+
+      for (const [key, prev] of entries) {
+        if (!prev) continue
+        snapshots.push([key, prev] as const)
+        const next = prev.map(t => {
+          if (t.id === rowAId || t.id === rowBId) {
+            return { ...t, type: 'Transfer', transfer_pair_id: rowAId } as TransactionRow
+          }
+          return t
+        })
+        queryClient.setQueryData<ReadonlyArray<TransactionRow>>(key, next)
+      }
+
+      return { snapshots }
+    },
+    onError(_err, _args, ctx) {
+      if (!ctx) return
+      for (const [key, snapshot] of ctx.snapshots) {
+        queryClient.setQueryData(key, snapshot)
+      }
+    },
+    onSettled() {
+      queryClient.invalidateQueries({ queryKey: queryKeys.allTransactions() })
+    }
+  })
+}
+
+interface UnpairCtx {
+  readonly snapshots: ReadonlyArray<readonly [QueryKey, ReadonlyArray<TransactionRow>]>
+}
+
+/**
+ * Calls the unpair_transfer_row RPC. Optimistically clears
+ * transfer_pair_id on the source row and its paired sibling (if present
+ * in cache). Leaves type='Transfer' so the user can edit via the
+ * existing EditableCell flow. Rolls back snapshots on error.
+ */
+export function useUnpairTransferRow(): UseMutationResult<number, Error, string, UnpairCtx> {
+  const queryClient = useQueryClient()
+
+  return useMutation<number, Error, string, UnpairCtx>({
+    async mutationFn(rowId) {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('unpair_transfer_row', {
+        p_household_id: LOPEZ_HOUSEHOLD_ID,
+        p_row_id: rowId
+      })
+      if (error) throw error
+      return (data ?? 0) as number
+    },
+    async onMutate(rowId) {
+      await queryClient.cancelQueries({ queryKey: queryKeys.allTransactions() })
+
+      const entries = queryClient.getQueriesData<ReadonlyArray<TransactionRow>>({
+        queryKey: queryKeys.allTransactions()
+      })
+      const snapshots: Array<readonly [QueryKey, ReadonlyArray<TransactionRow>]> = []
+
+      // Resolve the pair anchor from any cache slot that has the row.
+      let pairId: string | null = null
+      for (const [, prev] of entries) {
+        if (!prev) continue
+        const found = prev.find(t => t.id === rowId)
+        if (found && found.transfer_pair_id) {
+          pairId = found.transfer_pair_id
+          break
+        }
+      }
+
+      for (const [key, prev] of entries) {
+        if (!prev) continue
+        snapshots.push([key, prev] as const)
+        const next = prev.map(t => {
+          if (t.id === rowId) {
+            return { ...t, transfer_pair_id: null } as TransactionRow
+          }
+          if (pairId !== null && (t.id === pairId || t.transfer_pair_id === pairId)) {
+            return { ...t, transfer_pair_id: null } as TransactionRow
+          }
+          return t
+        })
+        queryClient.setQueryData<ReadonlyArray<TransactionRow>>(key, next)
+      }
+
+      return { snapshots }
+    },
+    onError(_err, _rowId, ctx) {
+      if (!ctx) return
+      for (const [key, snapshot] of ctx.snapshots) {
+        queryClient.setQueryData(key, snapshot)
       }
     },
     onSettled() {
