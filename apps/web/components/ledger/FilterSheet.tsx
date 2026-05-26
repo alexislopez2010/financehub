@@ -132,6 +132,55 @@ export function FilterSheet({ open, onOpenChange, filters, onChange }: FilterShe
                 ))}
               </select>
             </Field>
+
+            <fieldset className="block">
+              <legend className="text-xs font-medium uppercase tracking-wider text-muted mb-1">Amount</legend>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col">
+                  <span className="text-[11px] text-muted mb-0.5">Min</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={filters.minAmount ?? ''}
+                    onChange={e => {
+                      const raw = e.target.value
+                      if (raw === '') {
+                        setField('minAmount', undefined)
+                        return
+                      }
+                      const n = Number(raw)
+                      setField('minAmount', Number.isFinite(n) ? n : undefined)
+                    }}
+                    className={inputCls}
+                    placeholder="$"
+                    aria-label="Minimum amount"
+                  />
+                </label>
+                <label className="flex flex-col">
+                  <span className="text-[11px] text-muted mb-0.5">Max</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={filters.maxAmount ?? ''}
+                    onChange={e => {
+                      const raw = e.target.value
+                      if (raw === '') {
+                        setField('maxAmount', undefined)
+                        return
+                      }
+                      const n = Number(raw)
+                      setField('maxAmount', Number.isFinite(n) ? n : undefined)
+                    }}
+                    className={inputCls}
+                    placeholder="$"
+                    aria-label="Maximum amount"
+                  />
+                </label>
+              </div>
+              <p className="text-[11px] text-muted mt-1">Use negative numbers for expenses.</p>
+            </fieldset>
           </div>
 
           <div className="sticky bottom-0 bg-surface border-t border-rule px-5 py-3 flex justify-end gap-2">
