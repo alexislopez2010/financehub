@@ -10,6 +10,7 @@ import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { AccountRow } from './AccountRow'
 import { AddAccountForm } from './AddAccountForm'
+import { EditAccountDialog } from './EditAccountDialog'
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -23,6 +24,7 @@ export function AccountsSection() {
   const updateAccount = useUpdateAccount()
 
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editTargetId, setEditTargetId] = useState<string | null>(null)
 
   const summary = useMemo(
     () => deriveBalances({
@@ -31,6 +33,13 @@ export function AccountsSection() {
     }),
     [accountsQ.data, txsQ.data]
   )
+
+  // Look up the full account row for the dialog by id. We keep the row state
+  // outside of edit state so cache updates refresh the dialog data too.
+  const editTarget = useMemo(() => {
+    if (!editTargetId) return null
+    return accountsQ.data?.find(a => a.id === editTargetId) ?? null
+  }, [editTargetId, accountsQ.data])
 
   const searchParams = useSearchParams()
   const focusId = searchParams?.get('focus') ?? null
@@ -125,6 +134,7 @@ export function AccountsSection() {
                     <AccountRow
                       balance={b}
                       onEditName={(next) => handleEditName(b.accountId, next)}
+                      onEdit={() => setEditTargetId(b.accountId)}
                       onArchive={() => handleArchive(b.accountId, b.name)}
                     />
                   </li>
@@ -134,6 +144,12 @@ export function AccountsSection() {
           </>
         )}
       </section>
+
+      <EditAccountDialog
+        open={editTarget !== null}
+        onOpenChange={(o) => { if (!o) setEditTargetId(null) }}
+        account={editTarget}
+      />
     </div>
   )
 }

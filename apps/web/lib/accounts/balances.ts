@@ -50,10 +50,18 @@ export function deriveBalances(input: {
   accounts: ReadonlyArray<AccountRow>
   transactions: ReadonlyArray<TransactionRow>
 }): AccountSummary {
+  // Build a lookup so we can consult each account's starting_balance_date
+  // while aggregating activity. Transactions dated BEFORE the anchor are
+  // excluded from the current balance — they are considered pre-history.
+  const accountById = new Map<string, AccountRow>()
+  for (const a of input.accounts) accountById.set(a.id, a)
+
   // Aggregate activity per account_id.
   const activityByAccount = new Map<string, { sum: number; count: number }>()
   for (const tx of input.transactions) {
     if (!tx.account_id) continue
+    const account = accountById.get(tx.account_id)
+    if (account?.starting_balance_date && tx.date < account.starting_balance_date) continue
     const signed = signedActivity(tx)
     const entry = activityByAccount.get(tx.account_id) ?? { sum: 0, count: 0 }
     entry.sum += signed

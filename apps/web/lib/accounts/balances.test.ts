@@ -176,4 +176,41 @@ describe('deriveBalances', () => {
     })
     expect(out.accounts[0]!.currentBalance).toBe(100)
   })
+
+  describe('starting_balance_date filtering', () => {
+    it('ignores transactions dated before the anchor', () => {
+      const out = deriveBalances({
+        accounts: [account({ starting_balance: 5000, starting_balance_date: '2025-01-01' })],
+        // Pre-anchor activity should NOT influence the current balance.
+        transactions: [
+          tx({ id: 't1', date: '2024-06-15', amount: 999, type: 'Expense' }),
+          tx({ id: 't2', date: '2025-01-15', amount: 100, type: 'Expense' })
+        ]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(4900)
+      expect(out.accounts[0]!.txCount).toBe(1)
+      expect(out.accounts[0]!.activity).toBe(-100)
+    })
+
+    it('counts all transactions when starting_balance_date is null', () => {
+      const out = deriveBalances({
+        accounts: [account({ starting_balance: 5000, starting_balance_date: null })],
+        transactions: [
+          tx({ id: 't1', date: '2024-06-15', amount: 50, type: 'Expense' }),
+          tx({ id: 't2', date: '2025-01-15', amount: 100, type: 'Expense' })
+        ]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(4850)
+      expect(out.accounts[0]!.txCount).toBe(2)
+    })
+
+    it('counts a transaction dated exactly on the anchor (>= comparison)', () => {
+      const out = deriveBalances({
+        accounts: [account({ starting_balance: 1000, starting_balance_date: '2025-01-01' })],
+        transactions: [tx({ date: '2025-01-01', amount: 25, type: 'Expense' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(975)
+      expect(out.accounts[0]!.txCount).toBe(1)
+    })
+  })
 })

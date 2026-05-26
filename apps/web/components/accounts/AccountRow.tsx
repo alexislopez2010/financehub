@@ -1,6 +1,6 @@
 'use client'
 
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { AccountBalance } from '@/lib/accounts/balances'
 import { EditableCell } from '@/components/ledger/EditableCell'
 import { cn } from '@/lib/cn'
@@ -18,6 +18,7 @@ const DEBT_TYPES = new Set(['credit', 'loan'])
 export interface AccountRowProps {
   balance: AccountBalance
   onEditName?: (next: string) => void
+  onEdit?: () => void
   onArchive?: () => void
 }
 
@@ -25,7 +26,7 @@ function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-export function AccountRow({ balance, onEditName, onArchive }: AccountRowProps) {
+export function AccountRow({ balance, onEditName, onEdit, onArchive }: AccountRowProps) {
   const isDebt = balance.type ? DEBT_TYPES.has(balance.type) : false
   const tone = isDebt
     ? balance.currentBalance > 0 ? 'text-red-600' : 'text-emerald-600'
@@ -35,7 +36,7 @@ export function AccountRow({ balance, onEditName, onArchive }: AccountRowProps) 
     <div
       data-account-id={balance.accountId}
       className={cn(
-        'grid grid-cols-[1fr_100px_120px_28px] sm:grid-cols-[1fr_120px_140px_28px] gap-3 items-center',
+        'grid grid-cols-[1fr_100px_120px_56px] sm:grid-cols-[1fr_120px_140px_56px] gap-3 items-center',
         'px-4 py-3 text-sm hover:bg-gray-50 transition-colors'
       )}
     >
@@ -68,7 +69,17 @@ export function AccountRow({ balance, onEditName, onArchive }: AccountRowProps) 
         {formatUSD(balance.currentBalance)}
       </div>
 
-      <div className="text-right">
+      <div className="text-right flex items-center justify-end gap-0.5">
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit account ${balance.name}`}
+            className="p-1 rounded text-muted opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-gray-100 transition-colors"
+          >
+            <Pencil size={14} />
+          </button>
+        )}
         {onArchive && (
           <button
             type="button"
