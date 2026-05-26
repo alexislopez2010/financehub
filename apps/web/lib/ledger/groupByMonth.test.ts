@@ -78,13 +78,44 @@ describe('groupByMonth', () => {
     expect(out[0]!.totalIncome).toBe(50)
   })
 
-  it('Transfer transactions are excluded from both totals', () => {
+  it('Transfer transactions are excluded from income/expense totals', () => {
     const out = groupByMonth([
       tx({ id: 'a', date: '2025-05-15', amount: 100, type: 'Expense' }),
       tx({ id: 'b', date: '2025-05-20', amount: 500, type: 'Transfer' })
     ])
     expect(out[0]!.totalExpense).toBe(100)
     expect(out[0]!.totalIncome).toBe(0)
+  })
+
+  it('computes totalTransfers separately from income/expense in a mixed month', () => {
+    const out = groupByMonth([
+      tx({ id: 'a', date: '2025-05-15', amount: 100, type: 'Expense' }),
+      tx({ id: 'b', date: '2025-05-18', amount: 250, type: 'Income' }),
+      tx({ id: 'c', date: '2025-05-20', amount: 500, type: 'Transfer' }),
+      tx({ id: 'd', date: '2025-05-22', amount: -500, type: 'Transfer' })
+    ])
+    expect(out[0]!.totalExpense).toBe(100)
+    expect(out[0]!.totalIncome).toBe(250)
+    expect(out[0]!.totalTransfers).toBe(1000)
+  })
+
+  it('a month with only Transfer rows reports zero income/expense and summed transfers', () => {
+    const out = groupByMonth([
+      tx({ id: 'a', date: '2025-05-10', amount: 400, type: 'Transfer' }),
+      tx({ id: 'b', date: '2025-05-12', amount: 250, type: 'Transfer' })
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0]!.totalIncome).toBe(0)
+    expect(out[0]!.totalExpense).toBe(0)
+    expect(out[0]!.totalTransfers).toBe(650)
+  })
+
+  it('totalTransfers is 0 when no Transfer rows are present', () => {
+    const out = groupByMonth([
+      tx({ id: 'a', date: '2025-05-15', amount: 100, type: 'Expense' }),
+      tx({ id: 'b', date: '2025-05-18', amount: 200, type: 'Income' })
+    ])
+    expect(out[0]!.totalTransfers).toBe(0)
   })
 
   it('skips transactions with invalid date strings', () => {

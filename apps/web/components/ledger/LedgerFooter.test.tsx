@@ -18,7 +18,7 @@ function tx(over: Partial<TxRow> = {}): TxRow {
 
 describe('deriveTotals', () => {
   it('returns all zeros for empty input', () => {
-    expect(deriveTotals([])).toEqual({ count: 0, income: 0, expense: 0, net: 0 })
+    expect(deriveTotals([])).toEqual({ count: 0, income: 0, expense: 0, transfers: 0, net: 0 })
   })
 
   it('sums Income + Refund as income; Expense as expense', () => {
@@ -32,13 +32,35 @@ describe('deriveTotals', () => {
     expect(t.net).toBe(350)
   })
 
-  it('excludes Transfer from both totals', () => {
+  it('excludes Transfer from income/expense/net but sums into transfers', () => {
     const t = deriveTotals([
       tx({ amount: 500, type: 'Income' }),
       tx({ amount: 500, type: 'Transfer' })
     ])
     expect(t.income).toBe(500)
     expect(t.expense).toBe(0)
+    expect(t.net).toBe(500)
+    expect(t.transfers).toBe(500)
+  })
+
+  it('sums multiple Transfer rows into transfers as absolute amounts', () => {
+    const t = deriveTotals([
+      tx({ id: 't1', amount: 400, type: 'Transfer' }),
+      tx({ id: 't2', amount: -400, type: 'Transfer' }),
+      tx({ id: 't3', amount: 150, type: 'Transfer' })
+    ])
+    expect(t.transfers).toBe(950)
+    expect(t.income).toBe(0)
+    expect(t.expense).toBe(0)
+    expect(t.net).toBe(0)
+  })
+
+  it('reports transfers as 0 when no Transfer rows are present', () => {
+    const t = deriveTotals([
+      tx({ amount: 100, type: 'Expense' }),
+      tx({ amount: 200, type: 'Income' })
+    ])
+    expect(t.transfers).toBe(0)
   })
 
   it('uses absolute values', () => {
@@ -89,6 +111,25 @@ describe('<LedgerFooter>', () => {
     const netLabel = screen.getByText('net')
     const netValue = netLabel.nextElementSibling
     expect(netValue?.className).toContain('text-red-600')
+  })
+
+  it('renders the transfers pill when transfers > 0', () => {
+    render(<LedgerFooter transactions={[
+      tx({ id: 'a', amount: 500, type: 'Income' }),
+      tx({ id: 'b', amount: 400, type: 'Transfer' })
+    ]} />)
+    expect(screen.getByText('transfers')).toBeInTheDocument()
+    const transfersLabel = screen.getByText('transfers')
+    const transfersValue = transfersLabel.nextElementSibling
+    expect(transfersValue?.className).toContain('text-muted')
+  })
+
+  it('hides the transfers pill when transfers === 0', () => {
+    render(<LedgerFooter transactions={[
+      tx({ id: 'a', amount: 500, type: 'Income' }),
+      tx({ id: 'b', amount: 200, type: 'Expense' })
+    ]} />)
+    expect(screen.queryByText('transfers')).toBeNull()
   })
 
   it('singular vs plural', () => {

@@ -14,6 +14,8 @@ export interface MonthGroup {
   totalExpense: number
   /** Sum of Income + Refund amounts in this month (absolute, positive number). */
   totalIncome: number
+  /** Sum of Transfer amounts in this month (absolute, positive number). Informational — excluded from net. */
+  totalTransfers: number
 }
 
 const MONTH_NAMES = [
@@ -49,9 +51,13 @@ export function groupByMonth(
     const items = buckets.get(ym)!
     let totalExpense = 0
     let totalIncome = 0
+    let totalTransfers = 0
     for (const tx of items) {
       const dir = activityDirection(tx)
-      if (dir === 'transfer') continue
+      if (dir === 'transfer') {
+        totalTransfers += Math.abs(signedActivity(tx))
+        continue
+      }
       const signed = signedActivity(tx)
       if (signed > 0) totalIncome += signed
       else if (signed < 0) totalExpense += -signed
@@ -64,7 +70,8 @@ export function groupByMonth(
       label,
       items,
       totalExpense: round2(totalExpense),
-      totalIncome: round2(totalIncome)
+      totalIncome: round2(totalIncome),
+      totalTransfers: round2(totalTransfers)
     })
   }
   return result

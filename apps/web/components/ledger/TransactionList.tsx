@@ -77,10 +77,19 @@ export function TransactionList({
           )}>
             <h3 className="text-xs uppercase tracking-[0.12em] font-semibold text-gray-700">{g.label}</h3>
             <div className="text-xs text-muted tabular">
-              <span className="text-red-600 font-medium">{formatUSD(g.totalExpense)}</span> out
               {g.totalIncome > 0 && (
-                <span className="ml-3">
+                <span>
                   <span className="text-emerald-600 font-medium">{formatUSD(g.totalIncome)}</span> in
+                </span>
+              )}
+              {g.totalExpense > 0 && (
+                <span className={cn(g.totalIncome > 0 && 'ml-3')}>
+                  <span className="text-red-600 font-medium">{formatUSD(g.totalExpense)}</span> out
+                </span>
+              )}
+              {g.totalTransfers > 0 && (
+                <span className={cn((g.totalIncome > 0 || g.totalExpense > 0) && 'ml-3')}>
+                  <span className="text-muted font-medium">{formatUSD(g.totalTransfers)}</span> transfers
                 </span>
               )}
             </div>

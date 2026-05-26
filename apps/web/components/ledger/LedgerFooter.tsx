@@ -19,13 +19,18 @@ function deriveTotals(txs: ReadonlyArray<TxRow>): {
   count: number
   income: number
   expense: number
+  transfers: number
   net: number
 } {
   let income = 0
   let expense = 0
+  let transfers = 0
   for (const tx of txs) {
     const dir = activityDirection(tx)
-    if (dir === 'transfer') continue
+    if (dir === 'transfer') {
+      transfers += Math.abs(signedActivity(tx))
+      continue
+    }
     const signed = signedActivity(tx)
     if (signed > 0) income += signed
     else if (signed < 0) expense += -signed
@@ -34,6 +39,7 @@ function deriveTotals(txs: ReadonlyArray<TxRow>): {
     count: txs.length,
     income: round2(income),
     expense: round2(expense),
+    transfers: round2(transfers),
     net: round2(income - expense)
   }
 }
@@ -70,6 +76,12 @@ export function LedgerFooter({ transactions, className }: LedgerFooterProps) {
           <span className="text-xs text-muted mr-1">out</span>
           <span className="font-medium text-red-600">{formatUSD(t.expense)}</span>
         </span>
+        {t.transfers > 0 && (
+          <span>
+            <span className="text-xs text-muted mr-1">transfers</span>
+            <span className="font-medium text-muted">{formatUSD(t.transfers)}</span>
+          </span>
+        )}
         <span>
           <span className="text-xs text-muted mr-1">net</span>
           <span className={cn('font-semibold', netTone)}>
