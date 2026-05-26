@@ -1,7 +1,9 @@
 /**
  * Shared parsing utilities for adapters.
  *
- * - parseUsDate: handles MM/DD/YYYY, M/D/YYYY, MM/DD/YY (assumes 20YY)
+ * - parseUsDate: handles MM/DD/YYYY, M/D/YYYY, MM/DD/YY, MM-DD-YYYY (assumes 20YY for 2-digit year).
+ *   Separator can be '/' (Chase, Capital One, etc.) or '-' (Citibank). The two
+ *   separators in a single date must match (rejects MM/DD-YYYY etc.).
  * - parseMoney: strips $, commas, whitespace, parens; returns null if invalid
  * - findHeaderIndex: case-insensitive index lookup
  * - hasHeader: case-insensitive contains check
@@ -10,11 +12,12 @@
 export function parseUsDate(raw: string): string | null {
   const s = raw.trim()
   if (!s) return null
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/)
+  // Capture the separator with \2 backref so both separators must match.
+  const m = s.match(/^(\d{1,2})([/-])(\d{1,2})\2(\d{2}|\d{4})$/)
   if (!m) return null
   const monthStr = m[1] ?? ''
-  const dayStr = m[2] ?? ''
-  const yearStr = m[3] ?? ''
+  const dayStr = m[3] ?? ''
+  const yearStr = m[4] ?? ''
   const month = Number(monthStr)
   const day = Number(dayStr)
   let year = Number(yearStr)
