@@ -1,9 +1,10 @@
 'use client'
 
 import type { Tables } from '@/lib/supabase/database.types'
+import { ArrowRightLeft } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { EditableCell, type SelectOption } from './EditableCell'
-import { RowActionsMenu } from './RowActionsMenu'
+import { RowActionsMenu, type DemoteTransferTarget } from './RowActionsMenu'
 import { buildMemberOptions, type MemberOption } from '@/lib/ledger/memberOptions'
 
 export type TransactionRow = Tables<'transactions'>
@@ -29,17 +30,20 @@ export interface TransactionRowProps {
   onDelete?: () => void
   /** Opens the Convert-to-transfer dialog. Wired only for non-Transfer unpaired rows. */
   onConvertToTransfer?: () => void
+  /**
+   * Opens the same pairing dialog for orphan Transfer rows
+   * (type === 'Transfer' && transfer_pair_id == null).
+   */
+  onPairTransfer?: () => void
   /** Calls the unpair RPC. Wired only for already-paired rows. */
   onUnpairTransfer?: () => void
+  /**
+   * Demote an orphan Transfer to a non-Transfer type. Wired only for
+   * `type === 'Transfer' && transfer_pair_id == null` rows.
+   */
+  onDemoteTransfer?: (next: DemoteTransferTarget) => void
   /** Disables the unpair item + shows "Unpairing…" inline. */
   unpairing?: boolean
-}
-
-const typeAmountTone: Record<string, string> = {
-  Income: 'text-emerald-600',
-  Refund: 'text-emerald-600',
-  Expense: 'text-red-600',
-  Transfer: 'text-muted'
 }
 
 function formatUSD(n: number): string {
@@ -73,16 +77,23 @@ export function TransactionRow({
   onPromote,
   onDelete,
   onConvertToTransfer,
+  onPairTransfer,
   onUnpairTransfer,
+  onDemoteTransfer,
   unpairing
 }: TransactionRowProps) {
-  const tone = typeAmountTone[tx.type] ?? 'text-ink'
-  const sign = tx.type === 'Income' || tx.type === 'Refund' ? '+' : tx.type === 'Expense' ? '−' : ''
+  // Tone is by sign so Transfer rows still get red/green — black-on-black
+  // for Transfer was the bug that hid orphan rows in the UI.
+  const tone = tx.amount < 0 ? 'text-red-600' : tx.amount > 0 ? 'text-emerald-600' : 'text-ink'
+  const sign = tx.amount < 0 ? '−' : tx.amount > 0 ? '+' : ''
   const showCheckbox = onSelectChange !== undefined
   const showActions = onPromote !== undefined || onDelete !== undefined
 
+  const isOrphanTransfer = tx.type === 'Transfer' && tx.transfer_pair_id == null
   const canConvert = tx.type !== 'Transfer' && tx.transfer_pair_id == null
+  const canPair = isOrphanTransfer
   const canUnpair = tx.transfer_pair_id != null
+  const canDemote = isOrphanTransfer
 
   // Build the grid template classes based on which optional columns are present.
   // Using hardcoded Tailwind variants so JIT can pick them up at build time.
@@ -135,6 +146,13 @@ export function TransactionRow({
           />
         ) : (
           <span title={tx.description ?? undefined}>{tx.description}</span>
+        )}
+        {tx.type === 'Transfer' && (
+          <ArrowRightLeft
+            size={12}
+            className="inline-block ml-1.5 text-muted align-text-bottom"
+            aria-label="Transfer"
+          />
         )}
       </div>
 
@@ -210,7 +228,9 @@ export function TransactionRow({
             onPromote={() => onPromote?.()}
             onDelete={() => onDelete?.()}
             {...(canConvert && onConvertToTransfer ? { onConvertToTransfer } : {})}
+            {...(canPair && onPairTransfer ? { onPairTransfer } : {})}
             {...(canUnpair && onUnpairTransfer ? { onUnpairTransfer } : {})}
+            {...(canDemote && onDemoteTransfer ? { onDemoteToType: onDemoteTransfer } : {})}
             {...(unpairing !== undefined ? { unpairing } : {})}
           />
         </div>

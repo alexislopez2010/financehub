@@ -139,6 +139,12 @@ export function ConvertToTransferDialog({
     accounts
   )
 
+  const isAlreadyTransfer = sourceTransaction.type === 'Transfer'
+  const dialogTitle = isAlreadyTransfer ? 'Pair transfer' : 'Convert to transfer'
+  const dialogDescription = isAlreadyTransfer
+    ? "This transfer isn't linked yet. Pick its counterpart on another account."
+    : 'Pair this transaction with a matching counterpart on another account.'
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -151,14 +157,14 @@ export function ConvertToTransferDialog({
           <div className="sticky top-0 bg-surface border-b border-rule px-5 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ArrowRightLeft size={16} className="text-brand" />
-              <Dialog.Title className="text-sm font-semibold text-ink">Convert to transfer</Dialog.Title>
+              <Dialog.Title className="text-sm font-semibold text-ink">{dialogTitle}</Dialog.Title>
             </div>
             <Dialog.Close className="text-muted hover:text-ink"><X size={18} /></Dialog.Close>
           </div>
 
           <div className="px-5 py-4 space-y-4">
             <Dialog.Description className="text-xs text-muted">
-              Pair this transaction with a matching counterpart on another account.
+              {dialogDescription}
             </Dialog.Description>
 
             {/* Source row card */}

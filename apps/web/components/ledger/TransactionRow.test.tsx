@@ -107,3 +107,32 @@ describe('<TransactionRow> member column', () => {
     expect(onEditMember).toHaveBeenCalledWith(null)
   })
 })
+
+describe('<TransactionRow> Transfer visual treatment', () => {
+  it('renders a Transfer row with negative amount in red tone', () => {
+    render(
+      <TransactionRow tx={makeTx({ type: 'Transfer', amount: -120, description: 'Move to savings' })} />
+    )
+    // The amount span lives inside the right-aligned cell. Find it by content.
+    const amountEl = screen.getByText(/\$120/).closest('div')
+    expect(amountEl?.className).toMatch(/text-red-600/)
+  })
+
+  it('renders a Transfer row with positive amount in emerald tone', () => {
+    render(
+      <TransactionRow tx={makeTx({ type: 'Transfer', amount: 120, description: 'Move from savings' })} />
+    )
+    const amountEl = screen.getByText(/\$120/).closest('div')
+    expect(amountEl?.className).toMatch(/text-emerald-600/)
+  })
+
+  it('renders the ArrowRightLeft icon next to the description on Transfer rows', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Transfer', amount: -50 })} />)
+    expect(screen.getByLabelText('Transfer')).toBeInTheDocument()
+  })
+
+  it('does NOT render the Transfer icon on non-Transfer rows', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Expense', amount: -50 })} />)
+    expect(screen.queryByLabelText('Transfer')).toBeNull()
+  })
+})

@@ -15,6 +15,7 @@ import { LedgerFooter } from './LedgerFooter'
 import { BulkActionsBar } from './BulkActionsBar'
 import { PromoteToBillDialog } from './PromoteToBillDialog'
 import { ConvertToTransferDialog } from './ConvertToTransferDialog'
+import type { DemoteTransferTarget } from './RowActionsMenu'
 import type { Tables } from '@/lib/supabase/database.types'
 
 type TxRow = Tables<'transactions'>
@@ -134,6 +135,10 @@ export function Ledger() {
     })
   }
 
+  function handleDemoteTransfer(id: string, next: DemoteTransferTarget) {
+    updateTx.mutate({ id, patch: { type: next } })
+  }
+
   return (
     <div className="space-y-4 pb-4">
       <header className="flex items-start justify-between gap-3">
@@ -180,7 +185,9 @@ export function Ledger() {
           onPromote={tx => setPromotingTx(tx)}
           onDelete={handleDelete}
           onConvertToTransfer={tx => setConvertingTx(tx)}
+          onPairTransfer={tx => setConvertingTx(tx)}
           onUnpairTransfer={handleUnpair}
+          onDemoteTransfer={handleDemoteTransfer}
           unpairingId={unpairingId}
         />
       )}

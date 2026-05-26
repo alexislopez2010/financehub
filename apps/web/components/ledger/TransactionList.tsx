@@ -2,6 +2,7 @@
 
 import { groupByMonth, type TransactionRow as TxRow } from '@/lib/ledger/groupByMonth'
 import { TransactionRow } from './TransactionRow'
+import type { DemoteTransferTarget } from './RowActionsMenu'
 import type { SelectOption } from './EditableCell'
 import { cn } from '@/lib/cn'
 
@@ -25,7 +26,11 @@ export interface TransactionListProps {
   onPromote?: (tx: TxRow) => void
   onDelete?: (id: string) => void
   onConvertToTransfer?: (tx: TxRow) => void
+  /** Same dialog as Convert — for orphan Transfer rows. */
+  onPairTransfer?: (tx: TxRow) => void
   onUnpairTransfer?: (id: string) => void
+  /** Demote an orphan Transfer to Expense / Income / Refund. */
+  onDemoteTransfer?: (id: string, next: DemoteTransferTarget) => void
   /** Id of the row currently mid-unpair RPC (disables menu item + shows "Unpairing…"). */
   unpairingId?: string | null
 }
@@ -47,7 +52,9 @@ export function TransactionList({
   onPromote,
   onDelete,
   onConvertToTransfer,
+  onPairTransfer,
   onUnpairTransfer,
+  onDemoteTransfer,
   unpairingId
 }: TransactionListProps) {
   const groups = groupByMonth(transactions)
@@ -98,7 +105,9 @@ export function TransactionList({
                   {...(onPromote ? { onPromote: () => onPromote(tx) } : {})}
                   {...(onDelete ? { onDelete: () => onDelete(tx.id) } : {})}
                   {...(onConvertToTransfer ? { onConvertToTransfer: () => onConvertToTransfer(tx) } : {})}
+                  {...(onPairTransfer ? { onPairTransfer: () => onPairTransfer(tx) } : {})}
                   {...(onUnpairTransfer ? { onUnpairTransfer: () => onUnpairTransfer(tx.id) } : {})}
+                  {...(onDemoteTransfer ? { onDemoteTransfer: (next: DemoteTransferTarget) => onDemoteTransfer(tx.id, next) } : {})}
                   {...(unpairingId === tx.id ? { unpairing: true } : {})}
                 />
               </li>

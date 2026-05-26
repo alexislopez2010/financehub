@@ -178,4 +178,41 @@ describe('<ConvertToTransferDialog>', () => {
     const callArgs = mockPairMutate.mock.calls[0]
     expect(callArgs?.[0]).toEqual({ rowAId: 'src', rowBId: 'cand-ok' })
   })
+
+  it('uses the "Pair transfer" title when the source is already a Transfer', () => {
+    const source = tx({
+      id: 'src',
+      type: 'Transfer',
+      amount: -100,
+      account_id: 'acct-a',
+      date: '2025-05-15'
+    })
+    render(
+      <ConvertToTransferDialog
+        open
+        onOpenChange={() => {}}
+        sourceTransaction={source}
+        allTransactions={[]}
+      />
+    )
+
+    expect(screen.getByText('Pair transfer')).toBeInTheDocument()
+    expect(screen.getByText(/This transfer isn't linked yet/i)).toBeInTheDocument()
+    expect(screen.queryByText('Convert to transfer')).toBeNull()
+  })
+
+  it('uses the "Convert to transfer" title when the source is not yet a Transfer', () => {
+    const source = tx({ id: 'src', type: 'Expense', amount: -100, account_id: 'acct-a' })
+    render(
+      <ConvertToTransferDialog
+        open
+        onOpenChange={() => {}}
+        sourceTransaction={source}
+        allTransactions={[]}
+      />
+    )
+
+    expect(screen.getByText('Convert to transfer')).toBeInTheDocument()
+    expect(screen.queryByText('Pair transfer')).toBeNull()
+  })
 })

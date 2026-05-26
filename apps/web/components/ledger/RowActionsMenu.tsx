@@ -1,25 +1,52 @@
 'use client'
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { MoreVertical, ArrowRightCircle, ArrowRightLeft, Trash2, Unlink } from 'lucide-react'
+import {
+  MoreVertical,
+  ArrowRightCircle,
+  ArrowRightLeft,
+  Trash2,
+  Unlink,
+  TrendingDown,
+  TrendingUp,
+  Undo2
+} from 'lucide-react'
 import { cn } from '@/lib/cn'
+
+export type DemoteTransferTarget = 'Expense' | 'Income' | 'Refund'
 
 export interface RowActionsMenuProps {
   onPromote: () => void
   onDelete: () => void
-  /** When set, shows a "Convert to transfer" item. */
+  /** When set, shows a "Convert to transfer" item (non-Transfer rows). */
   onConvertToTransfer?: () => void
+  /**
+   * When set, shows a "Pair with another transaction" item (orphan Transfer
+   * rows — type === 'Transfer' && transfer_pair_id == null). Opens the same
+   * dialog as Convert; the underlying RPC doesn't care about current type.
+   */
+  onPairTransfer?: () => void
   /** When set, shows an "Unpair transfer" item. */
   onUnpairTransfer?: () => void
+  /**
+   * When set, shows three "Change to expense / income / refund" items —
+   * intended for orphan Transfer rows whose counterpart isn't tracked.
+   */
+  onDemoteToType?: (next: DemoteTransferTarget) => void
   /** When true, shows "Unpairing…" inline on the unpair item and disables it. */
   unpairing?: boolean
 }
+
+const itemBase =
+  'flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none'
 
 export function RowActionsMenu({
   onPromote,
   onDelete,
   onConvertToTransfer,
+  onPairTransfer,
   onUnpairTransfer,
+  onDemoteToType,
   unpairing
 }: RowActionsMenuProps) {
   return (
@@ -38,25 +65,26 @@ export function RowActionsMenu({
           align="end"
           sideOffset={4}
           className={cn(
-            'z-50 min-w-[200px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+            'z-50 min-w-[220px] rounded-lg bg-surface border border-rule shadow-lg p-1',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0'
           )}
         >
-          <DropdownMenu.Item
-            onSelect={onPromote}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
-          >
+          <DropdownMenu.Item onSelect={onPromote} className={itemBase}>
             <ArrowRightCircle size={14} className="text-brand" />
             Promote to bill
           </DropdownMenu.Item>
 
           {onConvertToTransfer && (
-            <DropdownMenu.Item
-              onSelect={onConvertToTransfer}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
-            >
+            <DropdownMenu.Item onSelect={onConvertToTransfer} className={itemBase}>
               <ArrowRightLeft size={14} className="text-brand" />
               Convert to transfer
+            </DropdownMenu.Item>
+          )}
+
+          {onPairTransfer && (
+            <DropdownMenu.Item onSelect={onPairTransfer} className={itemBase}>
+              <ArrowRightLeft size={14} className="text-brand" />
+              Pair with another transaction
             </DropdownMenu.Item>
           )}
 
@@ -80,6 +108,32 @@ export function RowActionsMenu({
               <Unlink size={14} className="text-muted" />
               {unpairing ? 'Unpairing…' : 'Unpair transfer'}
             </DropdownMenu.Item>
+          )}
+
+          {onDemoteToType && (
+            <>
+              <DropdownMenu.Item
+                onSelect={() => onDemoteToType('Expense')}
+                className={itemBase}
+              >
+                <TrendingDown size={14} className="text-red-600" />
+                Change to expense
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => onDemoteToType('Income')}
+                className={itemBase}
+              >
+                <TrendingUp size={14} className="text-emerald-600" />
+                Change to income
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={() => onDemoteToType('Refund')}
+                className={itemBase}
+              >
+                <Undo2 size={14} className="text-emerald-600" />
+                Change to refund
+              </DropdownMenu.Item>
+            </>
           )}
 
           <DropdownMenu.Item
