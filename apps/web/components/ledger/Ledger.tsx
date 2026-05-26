@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Upload } from 'lucide-react'
-import { useTransactions, useUpdateTransaction, useDeleteTransaction } from '@/lib/data/transactions'
+import { useTransactions, useUpdateTransaction, useDeleteTransaction, useUnpairTransferRow } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
 import { FilterChips } from './FilterChips'
@@ -13,6 +13,7 @@ import { TransactionList } from './TransactionList'
 import { LedgerFooter } from './LedgerFooter'
 import { BulkActionsBar } from './BulkActionsBar'
 import { PromoteToBillDialog } from './PromoteToBillDialog'
+import { ConvertToTransferDialog } from './ConvertToTransferDialog'
 import type { Tables } from '@/lib/supabase/database.types'
 
 type TxRow = Tables<'transactions'>
@@ -26,6 +27,8 @@ export function Ledger() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [promotingTx, setPromotingTx] = useState<TxRow | null>(null)
+  const [convertingTx, setConvertingTx] = useState<TxRow | null>(null)
+  const [unpairingId, setUnpairingId] = useState<string | null>(null)
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -43,6 +46,7 @@ export function Ledger() {
   const categoriesQ = useCategories()
   const updateTx = useUpdateTransaction()
   const deleteTx = useDeleteTransaction()
+  const unpairTx = useUnpairTransferRow()
 
   // Client-side q filter on the description.
   const filtered = (txQ.data ?? []).filter(tx => {
@@ -97,6 +101,15 @@ export function Ledger() {
     }
   }
 
+  function handleUnpair(id: string) {
+    setUnpairingId(id)
+    unpairTx.mutate(id, {
+      onSettled() {
+        setUnpairingId(prev => (prev === id ? null : prev))
+      }
+    })
+  }
+
   return (
     <div className="space-y-4 pb-4">
       <header className="flex items-start justify-between gap-3">
@@ -140,6 +153,9 @@ export function Ledger() {
           onEditCategory={handleEditCategory}
           onPromote={tx => setPromotingTx(tx)}
           onDelete={handleDelete}
+          onConvertToTransfer={tx => setConvertingTx(tx)}
+          onUnpairTransfer={handleUnpair}
+          unpairingId={unpairingId}
         />
       )}
 
@@ -161,6 +177,13 @@ export function Ledger() {
       <PromoteToBillDialog
         tx={promotingTx}
         onClose={() => setPromotingTx(null)}
+      />
+
+      <ConvertToTransferDialog
+        open={convertingTx !== null}
+        onOpenChange={o => { if (!o) setConvertingTx(null) }}
+        sourceTransaction={convertingTx}
+        allTransactions={txQ.data ?? []}
       />
     </div>
   )

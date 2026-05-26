@@ -18,6 +18,12 @@ export interface TransactionRowProps {
   onEditCategory?: (next: string) => void
   onPromote?: () => void
   onDelete?: () => void
+  /** Opens the Convert-to-transfer dialog. Wired only for non-Transfer unpaired rows. */
+  onConvertToTransfer?: () => void
+  /** Calls the unpair RPC. Wired only for already-paired rows. */
+  onUnpairTransfer?: () => void
+  /** Disables the unpair item + shows "Unpairing…" inline. */
+  unpairing?: boolean
 }
 
 const typeAmountTone: Record<string, string> = {
@@ -46,12 +52,18 @@ export function TransactionRow({
   onEditAmount,
   onEditCategory,
   onPromote,
-  onDelete
+  onDelete,
+  onConvertToTransfer,
+  onUnpairTransfer,
+  unpairing
 }: TransactionRowProps) {
   const tone = typeAmountTone[tx.type] ?? 'text-ink'
   const sign = tx.type === 'Income' || tx.type === 'Refund' ? '+' : tx.type === 'Expense' ? '−' : ''
   const showCheckbox = onSelectChange !== undefined
   const showActions = onPromote !== undefined || onDelete !== undefined
+
+  const canConvert = tx.type !== 'Transfer' && tx.transfer_pair_id == null
+  const canUnpair = tx.transfer_pair_id != null
 
   // Build the grid template classes based on which optional columns are present.
   // Using hardcoded Tailwind variants so JIT can pick them up at build time.
@@ -144,6 +156,9 @@ export function TransactionRow({
           <RowActionsMenu
             onPromote={() => onPromote?.()}
             onDelete={() => onDelete?.()}
+            {...(canConvert && onConvertToTransfer ? { onConvertToTransfer } : {})}
+            {...(canUnpair && onUnpairTransfer ? { onUnpairTransfer } : {})}
+            {...(unpairing !== undefined ? { unpairing } : {})}
           />
         </div>
       )}

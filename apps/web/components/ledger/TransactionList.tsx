@@ -16,6 +16,10 @@ export interface TransactionListProps {
   onEditCategory?: (id: string, next: string) => void
   onPromote?: (tx: TxRow) => void
   onDelete?: (id: string) => void
+  onConvertToTransfer?: (tx: TxRow) => void
+  onUnpairTransfer?: (id: string) => void
+  /** Id of the row currently mid-unpair RPC (disables menu item + shows "Unpairing…"). */
+  unpairingId?: string | null
 }
 
 function formatUSD(n: number): string {
@@ -31,7 +35,10 @@ export function TransactionList({
   onEditAmount,
   onEditCategory,
   onPromote,
-  onDelete
+  onDelete,
+  onConvertToTransfer,
+  onUnpairTransfer,
+  unpairingId
 }: TransactionListProps) {
   const groups = groupByMonth(transactions)
 
@@ -78,6 +85,9 @@ export function TransactionList({
                   {...(onEditCategory ? { onEditCategory: (next: string) => onEditCategory(tx.id, next) } : {})}
                   {...(onPromote ? { onPromote: () => onPromote(tx) } : {})}
                   {...(onDelete ? { onDelete: () => onDelete(tx.id) } : {})}
+                  {...(onConvertToTransfer ? { onConvertToTransfer: () => onConvertToTransfer(tx) } : {})}
+                  {...(onUnpairTransfer ? { onUnpairTransfer: () => onUnpairTransfer(tx.id) } : {})}
+                  {...(unpairingId === tx.id ? { unpairing: true } : {})}
                 />
               </li>
             ))}
