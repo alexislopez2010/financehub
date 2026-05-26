@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Loader2, Upload } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react'
 import { useCategories } from '@/lib/data/categories'
 import type { ImportRow } from '@/lib/import/adapters/types'
 import { insertImportedTransactions, type InsertResult } from '@/lib/import/insert'
@@ -97,6 +97,50 @@ export function PreviewStep({ payload, onBack, onComplete }: PreviewStepProps) {
   const importLabel = isBusy
     ? `Inserting… ${inserting.done} of ${inserting.total}`
     : `Import ${newRows.length} transaction${newRows.length === 1 ? '' : 's'}`
+
+  if (newRows.length === 0) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle size={20} className="text-amber-600 mt-0.5" aria-hidden="true" />
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-amber-900">All rows skipped</h3>
+            <p className="text-sm text-amber-800">
+              The {payload.adapterName} adapter found {payload.skipped.length} row{payload.skipped.length === 1 ? '' : 's'} but couldn&apos;t parse any of them. Common causes: unexpected date format, missing description, all rows marked Pending.
+            </p>
+          </div>
+        </div>
+
+        {payload.skipped.length > 0 && (
+          <details open className="text-xs">
+            <summary className="cursor-pointer text-amber-900 font-medium">
+              {payload.skipped.length} skipped row{payload.skipped.length === 1 ? '' : 's'}
+            </summary>
+            <ul className="mt-2 space-y-1 max-h-64 overflow-y-auto">
+              {payload.skipped.slice(0, 50).map((s, idx) => (
+                <li key={idx} className="flex gap-2 text-amber-900">
+                  <span className="font-mono text-amber-700">row {s.rowIndex + 1}</span>
+                  <span className="italic">{s.reason}</span>
+                </li>
+              ))}
+              {payload.skipped.length > 50 && (
+                <li className="italic text-amber-700">…and {payload.skipped.length - 50} more</li>
+              )}
+            </ul>
+          </details>
+        )}
+
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
+        >
+          <ArrowLeft size={14} aria-hidden="true" />
+          Back to Upload
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

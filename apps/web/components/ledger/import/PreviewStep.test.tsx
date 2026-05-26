@@ -135,4 +135,70 @@ describe('<PreviewStep>', () => {
     await user.click(screen.getByRole('button', { name: /show skipped duplicates/i }))
     expect(screen.getByText('DUPE ROW')).toBeInTheDocument()
   })
+
+  it('renders the all-rows-skipped empty state when parsedRows is empty and skipped rows exist', async () => {
+    const user = userEvent.setup()
+    const onBack = vi.fn()
+    const payload = makePayload({
+      adapterName: 'Citibank',
+      parsedRows: [],
+      skipped: [
+        { rowIndex: 0, reason: 'unparseable date' },
+        { rowIndex: 1, reason: 'missing description' }
+      ]
+    })
+    render(<PreviewStep payload={payload} onBack={onBack} onComplete={() => {}} />)
+
+    expect(screen.getByText(/all rows skipped/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/the citibank adapter found 2 rows but couldn't parse any of them/i)
+    ).toBeInTheDocument()
+    // Skip detail list is rendered and open by default. Anchor on the row
+    // labels because the reason text "missing description" also appears in
+    // the explainer paragraph above.
+    expect(screen.getByText(/unparseable date/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/missing description/i).length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/^row 1$/)).toBeInTheDocument()
+    expect(screen.getByText(/^row 2$/)).toBeInTheDocument()
+
+    // No normal preview UI / no sticky Import bar.
+    expect(screen.queryByText('New')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /import \d+ transaction/i })).not.toBeInTheDocument()
+
+    // Back button works.
+    await user.click(screen.getByRole('button', { name: /back to upload/i }))
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the empty state without a skip-detail list when no skipped rows', () => {
+    const payload = makePayload({
+      adapterName: 'Chase',
+      parsedRows: [],
+      skipped: []
+    })
+    render(<PreviewStep payload={payload} onBack={() => {}} onComplete={() => {}} />)
+
+    expect(screen.getByText(/all rows skipped/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/the chase adapter found 0 rows but couldn't parse any of them/i)
+    ).toBeInTheDocument()
+    // No skip list summary / no skip list items.
+    expect(screen.queryByText(/skipped rows?$/i)).not.toBeInTheDocument()
+    // Still has a Back button.
+    expect(screen.getByRole('button', { name: /back to upload/i })).toBeInTheDocument()
+  })
+
+  it('renders the normal preview UI when parsedRows has items (sanity check)', () => {
+    const payload = makePayload({
+      parsedRows: [makeRow({ description: 'NORMAL ROW' })]
+    })
+    render(<PreviewStep payload={payload} onBack={() => {}} onComplete={() => {}} />)
+
+    // Normal preview elements present.
+    expect(screen.getByText('NORMAL ROW')).toBeInTheDocument()
+    expect(screen.getByText('New')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /import 1 transaction/i })).toBeInTheDocument()
+    // Empty-state heading absent.
+    expect(screen.queryByText(/all rows skipped/i)).not.toBeInTheDocument()
+  })
 })

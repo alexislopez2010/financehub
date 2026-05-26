@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, CheckCircle, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle, RotateCcw, XCircle } from 'lucide-react'
 import type { InsertResult } from '@/lib/import/insert'
 
 export interface CompleteStepProps {
@@ -25,13 +25,29 @@ function buildLedgerHref(accountName: string, dateRange: { start: string; end: s
 export function CompleteStep({ result, accountId: _accountId, accountName, dateRange, onReset }: CompleteStepProps) {
   const insertedLabel = result.inserted === 1 ? '1 transaction' : `${result.inserted} transactions`
   const ledgerHref = buildLedgerHref(accountName, dateRange)
+  const isFailure = result.inserted === 0
+  const hasPartialFailure = result.inserted > 0 && result.failed.length > 0
 
   return (
     <div className="rounded-xl border border-rule bg-surface p-8 shadow-sm space-y-6">
       <div className="flex flex-col items-center text-center gap-3">
-        <CheckCircle size={48} className="text-emerald-600" aria-hidden="true" />
-        <h2 className="text-2xl font-bold text-ink">Imported {insertedLabel}</h2>
-        <p className="text-sm text-muted">into {accountName}</p>
+        {isFailure ? (
+          <>
+            <XCircle size={48} className="text-red-600" aria-hidden="true" />
+            <h2 className="text-2xl font-bold text-red-700">Import didn&apos;t insert anything</h2>
+            <p className="text-sm text-muted">
+              {result.failed.length > 0
+                ? `All ${result.failed.length} row${result.failed.length === 1 ? '' : 's'} failed at insert. See details below.`
+                : 'No rows were available to insert. The CSV may have had every row skipped during parsing — go back to Upload and check the skip reasons.'}
+            </p>
+          </>
+        ) : (
+          <>
+            <CheckCircle size={48} className="text-emerald-600" aria-hidden="true" />
+            <h2 className="text-2xl font-bold text-ink">Imported {insertedLabel}</h2>
+            <p className="text-sm text-muted">into {accountName}</p>
+          </>
+        )}
       </div>
 
       {result.failed.length > 0 && (
@@ -39,7 +55,7 @@ export function CompleteStep({ result, accountId: _accountId, accountName, dateR
           <p className="font-medium">
             {result.failed.length} row{result.failed.length === 1 ? '' : 's'} failed to import
           </p>
-          <details>
+          <details open={isFailure || hasPartialFailure}>
             <summary className="cursor-pointer text-xs text-red-700/80 hover:text-red-800">
               See details
             </summary>
@@ -58,21 +74,44 @@ export function CompleteStep({ result, accountId: _accountId, accountName, dateR
       )}
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2">
-        <Link
-          href={ledgerHref}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand/90"
-        >
-          View in Ledger
-          <ArrowRight size={14} aria-hidden="true" />
-        </Link>
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-surface px-4 py-2 text-sm text-ink hover:bg-bg"
-        >
-          <RotateCcw size={14} aria-hidden="true" />
-          Import another
-        </button>
+        {isFailure ? (
+          <>
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand/90"
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+              Back to Upload
+            </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-surface px-4 py-2 text-sm text-ink hover:bg-bg"
+            >
+              <RotateCcw size={14} aria-hidden="true" />
+              Import another
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href={ledgerHref}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand/90"
+            >
+              View in Ledger
+              <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rule bg-surface px-4 py-2 text-sm text-ink hover:bg-bg"
+            >
+              <RotateCcw size={14} aria-hidden="true" />
+              Import another
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
