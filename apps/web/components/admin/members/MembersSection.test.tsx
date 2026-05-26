@@ -6,13 +6,20 @@ const mockUseHouseholdMembers = vi.fn()
 const mockUseUpdate = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
 const mockUseReset = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
 const mockUseRemove = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
+const mockUseAdd = vi.fn(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+  data: undefined,
+  reset: vi.fn()
+}))
 
 vi.mock('@/lib/data/admin', async () => {
   return {
     useHouseholdMembers: () => mockUseHouseholdMembers(),
     useUpdateHouseholdMember: () => mockUseUpdate(),
     useResetMfa: () => mockUseReset(),
-    useRemoveHouseholdMember: () => mockUseRemove()
+    useRemoveHouseholdMember: () => mockUseRemove(),
+    useAddHouseholdMember: () => mockUseAdd()
   }
 })
 

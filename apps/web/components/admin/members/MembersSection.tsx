@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { UserPlus } from 'lucide-react'
 import { useHouseholdMembers, type HouseholdMemberRow } from '@/lib/data/admin'
 import { MemberRow } from './MemberRow'
 import { EditMemberDialog } from './EditMemberDialog'
 import { ResetMfaDialog } from './ResetMfaDialog'
 import { RemoveMemberDialog } from './RemoveMemberDialog'
+import { AddMemberDialog } from './AddMemberDialog'
 
 type ActiveDialog = 'edit' | 'reset-mfa' | 'remove' | null
 
@@ -13,6 +15,7 @@ export function MembersSection() {
   const membersQ = useHouseholdMembers()
   const [target, setTarget] = useState<HouseholdMemberRow | null>(null)
   const [active, setActive] = useState<ActiveDialog>(null)
+  const [showAdd, setShowAdd] = useState(false)
 
   function open(dialog: ActiveDialog, member: HouseholdMemberRow) {
     setTarget(member)
@@ -29,7 +32,7 @@ export function MembersSection() {
   return (
     <>
       <section className="bg-surface border border-rule rounded-xl shadow-sm overflow-hidden">
-        <header className="px-4 py-3 border-b border-rule flex items-baseline justify-between">
+        <header className="px-4 py-3 border-b border-rule flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-ink">Members</h2>
             <p className="text-xs text-muted">
@@ -38,6 +41,14 @@ export function MembersSection() {
                 : `${members.length} ${members.length === 1 ? 'member' : 'members'} in this household`}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-xs font-medium text-ink hover:bg-bg transition"
+          >
+            <UserPlus size={14} />
+            Add member
+          </button>
         </header>
 
         {membersQ.isLoading ? (
@@ -66,6 +77,7 @@ export function MembersSection() {
       <EditMemberDialog member={active === 'edit' ? target : null} onClose={close} />
       <ResetMfaDialog member={active === 'reset-mfa' ? target : null} onClose={close} />
       <RemoveMemberDialog member={active === 'remove' ? target : null} onClose={close} />
+      <AddMemberDialog open={showAdd} onClose={() => setShowAdd(false)} />
     </>
   )
 }
