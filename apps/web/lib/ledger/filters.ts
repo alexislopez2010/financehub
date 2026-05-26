@@ -30,6 +30,8 @@ export function parseFiltersFromUrl(params: URLSearchParams): LedgerFilters {
   const member = params.get('member')
   const type = params.get('type')
   const q = params.get('q')
+  const amountMin = params.get('amount_min')
+  const amountMax = params.get('amount_max')
 
   if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) out.startDate = start
   if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) out.endDate = end
@@ -42,6 +44,14 @@ export function parseFiltersFromUrl(params: URLSearchParams): LedgerFilters {
     out.type = type
   }
   if (q) out.q = q
+  if (amountMin !== null) {
+    const n = Number(amountMin)
+    if (Number.isFinite(n)) out.minAmount = n
+  }
+  if (amountMax !== null) {
+    const n = Number(amountMax)
+    if (Number.isFinite(n)) out.maxAmount = n
+  }
 
   return out
 }
@@ -57,6 +67,8 @@ export function serializeFiltersToUrl(filters: LedgerFilters): URLSearchParams {
   if (filters.member) p.set('member', filters.member)
   if (filters.type) p.set('type', filters.type)
   if (filters.q) p.set('q', filters.q)
+  if (filters.minAmount !== undefined) p.set('amount_min', String(filters.minAmount))
+  if (filters.maxAmount !== undefined) p.set('amount_max', String(filters.maxAmount))
   return p
 }
 
@@ -72,7 +84,9 @@ export function isEmpty(filters: LedgerFilters): boolean {
   return (
     !filters.startDate && !filters.endDate &&
     filters.categoryId === undefined &&
-    !filters.account && !filters.member && !filters.type && !filters.q
+    !filters.account && !filters.member && !filters.type && !filters.q &&
+    filters.minAmount === undefined &&
+    filters.maxAmount === undefined
   )
 }
 

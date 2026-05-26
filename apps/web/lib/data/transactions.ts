@@ -36,6 +36,12 @@ export function useTransactions(
       if (filters?.account) q = q.eq('account', filters.account)
       if (filters?.member) q = q.eq('member', filters.member)
       if (filters?.type) q = q.eq('type', filters.type)
+      if (filters?.minAmount !== undefined && Number.isFinite(filters.minAmount)) {
+        q = q.gte('amount', filters.minAmount)
+      }
+      if (filters?.maxAmount !== undefined && Number.isFinite(filters.maxAmount)) {
+        q = q.lte('amount', filters.maxAmount)
+      }
 
       const { data, error } = await q
       if (error) throw error

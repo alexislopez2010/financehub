@@ -20,6 +20,10 @@ export interface TransactionFilters {
   member?: string
   /** Filter by transaction type. */
   type?: 'Income' | 'Expense' | 'Transfer' | 'Refund'
+  /** Signed amount lower bound (e.g. -500). Rows with amount >= minAmount match. */
+  minAmount?: number
+  /** Signed amount upper bound (e.g. 500). Rows with amount <= maxAmount match. */
+  maxAmount?: number
 }
 
 export interface BudgetPeriod {

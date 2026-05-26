@@ -13,9 +13,40 @@ const mockUpdateSingle = vi.fn()
 const mockDeleteEq = vi.fn()
 const mockRpc = vi.fn()
 
+/**
+ * Records calls to the Supabase query builder used by useTransactions.
+ * The builder is chainable and thenable — awaiting it resolves to
+ * `{ data, error }`. Each filter method captures (column, value) so tests
+ * can assert which filters were applied.
+ */
+interface QueryCall {
+  method: string
+  args: ReadonlyArray<unknown>
+}
+const queryCalls: QueryCall[] = []
+let queryResult: { data: unknown; error: unknown } = { data: [], error: null }
+
+function makeQueryBuilder(): unknown {
+  const builder: Record<string, unknown> = {}
+  const chainable = ['select', 'order', 'gte', 'lte', 'eq', 'is']
+  for (const m of chainable) {
+    builder[m] = (...args: unknown[]) => {
+      queryCalls.push({ method: m, args })
+      return builder
+    }
+  }
+  builder.then = (onFulfilled: (v: typeof queryResult) => unknown) =>
+    Promise.resolve(queryResult).then(onFulfilled)
+  return builder
+}
+
 vi.mock('@/lib/supabase/browser', () => ({
   createClient: () => ({
     from: (_table: string) => ({
+      select: (...args: unknown[]) => {
+        queryCalls.push({ method: 'select', args })
+        return makeQueryBuilder()
+      },
       insert: (_payload: unknown) => ({
         select: () => ({
           single: () => mockInsertSingle()
@@ -37,6 +68,7 @@ vi.mock('@/lib/supabase/browser', () => ({
 }))
 
 import {
+  useTransactions,
   useCreateTransaction,
   useUpdateTransaction,
   useDeleteTransaction,
@@ -93,6 +125,8 @@ beforeEach(() => {
   mockUpdateSingle.mockReset()
   mockDeleteEq.mockReset()
   mockRpc.mockReset()
+  queryCalls.length = 0
+  queryResult = { data: [], error: null }
 })
 
 describe('useCreateTransaction', () => {
@@ -400,5 +434,77 @@ describe('useUnpairTransferRow', () => {
     const cache = client.getQueryData<ReadonlyArray<TransactionRow>>(queryKeys.transactions())
     const b = cache!.find(t => t.id === 'b')!
     expect(b.transfer_pair_id).toBeNull()
+  })
+})
+
+describe('useTransactions amount filters', () => {
+  function findCalls(method: string): ReadonlyArray<QueryCall> {
+    return queryCalls.filter(c => c.method === method)
+  }
+  function hasCall(method: string, column: string, value: unknown): boolean {
+    return queryCalls.some(c => c.method === method && c.args[0] === column && c.args[1] === value)
+  }
+
+  it('applies gte(amount, minAmount) when only minAmount is set', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({ minAmount: -500 }), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('gte', 'amount', -500)).toBe(true)
+    // No max filter applied
+    expect(findCalls('lte').some(c => c.args[0] === 'amount')).toBe(false)
+  })
+
+  it('applies lte(amount, maxAmount) when only maxAmount is set', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({ maxAmount: 500 }), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('lte', 'amount', 500)).toBe(true)
+    expect(findCalls('gte').some(c => c.args[0] === 'amount')).toBe(false)
+  })
+
+  it('applies both gte and lte when both are set', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(
+      () => useTransactions({ minAmount: -500, maxAmount: 500 }),
+      { wrapper }
+    )
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('gte', 'amount', -500)).toBe(true)
+    expect(hasCall('lte', 'amount', 500)).toBe(true)
+  })
+
+  it('skips amount filters when both are undefined', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({}), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(findCalls('gte').some(c => c.args[0] === 'amount')).toBe(false)
+    expect(findCalls('lte').some(c => c.args[0] === 'amount')).toBe(false)
+  })
+
+  it('applies minAmount=0 (zero is a valid bound, not "unset")', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({ minAmount: 0 }), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('gte', 'amount', 0)).toBe(true)
   })
 })

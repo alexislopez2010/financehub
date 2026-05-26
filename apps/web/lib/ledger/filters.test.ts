@@ -55,6 +55,37 @@ describe('parseFiltersFromUrl', () => {
     expect(f.account).toBe('Chase Card')
     expect(f.member).toBe('Alexis')
   })
+
+  it('parses amount_min and amount_max as numbers', () => {
+    const p = new URLSearchParams('amount_min=-500&amount_max=500')
+    const f = parseFiltersFromUrl(p)
+    expect(f.minAmount).toBe(-500)
+    expect(f.maxAmount).toBe(500)
+  })
+
+  it('preserves negative amount_min', () => {
+    const p = new URLSearchParams('amount_min=-1234.56')
+    expect(parseFiltersFromUrl(p).minAmount).toBe(-1234.56)
+  })
+
+  it('rejects non-numeric amount params (NaN → undefined)', () => {
+    const p = new URLSearchParams('amount_min=abc&amount_max=xyz')
+    const f = parseFiltersFromUrl(p)
+    expect(f.minAmount).toBeUndefined()
+    expect(f.maxAmount).toBeUndefined()
+  })
+
+  it('rejects Infinity/-Infinity amount params', () => {
+    const p = new URLSearchParams('amount_min=Infinity&amount_max=-Infinity')
+    const f = parseFiltersFromUrl(p)
+    expect(f.minAmount).toBeUndefined()
+    expect(f.maxAmount).toBeUndefined()
+  })
+
+  it('accepts zero as a valid amount bound', () => {
+    const p = new URLSearchParams('amount_min=0')
+    expect(parseFiltersFromUrl(p).minAmount).toBe(0)
+  })
 })
 
 describe('serializeFiltersToUrl', () => {
@@ -96,6 +127,25 @@ describe('serializeFiltersToUrl', () => {
     const p = serializeFiltersToUrl({ categoryId: undefined } as unknown as LedgerFilters)
     expect(p.has('category')).toBe(false)
   })
+
+  it('round-trips amount_min and amount_max', () => {
+    const f = { minAmount: -500, maxAmount: 500 }
+    const params = serializeFiltersToUrl(f)
+    expect(params.get('amount_min')).toBe('-500')
+    expect(params.get('amount_max')).toBe('500')
+    expect(parseFiltersFromUrl(params)).toEqual(f)
+  })
+
+  it('emits amount_min=0 (treats zero as set, not absent)', () => {
+    const p = serializeFiltersToUrl({ minAmount: 0 })
+    expect(p.get('amount_min')).toBe('0')
+  })
+
+  it('omits amount params when undefined', () => {
+    const p = serializeFiltersToUrl({ startDate: '2025-05-01' })
+    expect(p.has('amount_min')).toBe(false)
+    expect(p.has('amount_max')).toBe(false)
+  })
 })
 
 describe('toDataFilters', () => {
@@ -118,6 +168,15 @@ describe('isEmpty', () => {
     expect(isEmpty({ startDate: '2025-05-01' })).toBe(false)
     expect(isEmpty({ categoryId: null })).toBe(false)  // uncategorized is a filter
     expect(isEmpty({ q: 'food' })).toBe(false)
+  })
+  it('false when only minAmount is set', () => {
+    expect(isEmpty({ minAmount: -500 })).toBe(false)
+  })
+  it('false when only maxAmount is set', () => {
+    expect(isEmpty({ maxAmount: 500 })).toBe(false)
+  })
+  it('false when minAmount is 0 (zero is a valid bound)', () => {
+    expect(isEmpty({ minAmount: 0 })).toBe(false)
   })
 })
 
