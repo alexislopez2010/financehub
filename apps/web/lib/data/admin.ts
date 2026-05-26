@@ -169,6 +169,98 @@ export function useResetMfa(): UseMutationResult<number, Error, ResetMfaArgs, ne
   })
 }
 
+export interface AddHouseholdMemberArgs {
+  email: string
+  displayName: string
+  role: HouseholdRole
+}
+
+export interface AddHouseholdMemberResult {
+  userId: string
+  email: string
+  initialPassword: string
+  displayName: string
+  role: string
+}
+
+/** Shape returned by the add-household-member Edge Function. */
+interface RawAddMemberResponse {
+  user_id?: unknown
+  email?: unknown
+  initial_password?: unknown
+  display_name?: unknown
+  role?: unknown
+}
+
+function isAddMemberResponse(v: unknown): v is Required<{
+  user_id: string
+  email: string
+  initial_password: string
+  display_name: string
+  role: string
+}> {
+  if (!v || typeof v !== 'object') return false
+  const r = v as RawAddMemberResponse
+  return (
+    typeof r.user_id === 'string' &&
+    typeof r.email === 'string' &&
+    typeof r.initial_password === 'string' &&
+    typeof r.display_name === 'string' &&
+    typeof r.role === 'string'
+  )
+}
+
+/**
+ * Adds a new member to the Lopez household via the `add-household-member`
+ * Edge Function. The Edge Function holds the service-role key and:
+ *   - re-verifies the caller is an owner (defense-in-depth on top of the
+ *     /admin page gate)
+ *   - creates the auth user with auth.admin.createUser
+ *   - inserts the household_members row
+ *   - rolls back the auth user if the insert fails
+ *
+ * Returns the new user's id, email, role, display name, and a one-time
+ * initial password. The dialog shows the password once with a copy button;
+ * it is never persisted client-side.
+ */
+export function useAddHouseholdMember(): UseMutationResult<
+  AddHouseholdMemberResult,
+  Error,
+  AddHouseholdMemberArgs,
+  never
+> {
+  const queryClient = useQueryClient()
+
+  return useMutation<AddHouseholdMemberResult, Error, AddHouseholdMemberArgs, never>({
+    async mutationFn(args) {
+      const supabase = createClient()
+      const { data, error } = await supabase.functions.invoke('add-household-member', {
+        body: {
+          household_id: LOPEZ_HOUSEHOLD_ID,
+          email: args.email,
+          display_name: args.displayName,
+          role: args.role
+        }
+      })
+      if (error) throw error
+      if (!isAddMemberResponse(data)) {
+        throw new Error('add-household-member returned an unexpected response')
+      }
+      return {
+        userId: data.user_id,
+        email: data.email,
+        initialPassword: data.initial_password,
+        displayName: data.display_name,
+        role: data.role
+      }
+    },
+    onSuccess() {
+      // Refetch the members list so the new row appears.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.householdMembers() })
+    }
+  })
+}
+
 export interface RemoveMemberArgs {
   target_user: string
 }

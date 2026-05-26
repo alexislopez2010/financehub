@@ -7,10 +7,14 @@ import type { HouseholdMemberRow } from './admin'
 
 // Hoisted Supabase mock — must come before SUT import.
 const mockRpc = vi.fn()
+const mockInvoke = vi.fn()
 
 vi.mock('@/lib/supabase/browser', () => ({
   createClient: () => ({
-    rpc: (fn: string, args: unknown) => mockRpc(fn, args)
+    rpc: (fn: string, args: unknown) => mockRpc(fn, args),
+    functions: {
+      invoke: (name: string, opts: unknown) => mockInvoke(name, opts)
+    }
   })
 }))
 
@@ -18,7 +22,8 @@ import {
   useHouseholdMembers,
   useUpdateHouseholdMember,
   useResetMfa,
-  useRemoveHouseholdMember
+  useRemoveHouseholdMember,
+  useAddHouseholdMember
 } from './admin'
 
 function makeWrapper(client: QueryClient) {
@@ -54,6 +59,7 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
 
 beforeEach(() => {
   mockRpc.mockReset()
+  mockInvoke.mockReset()
 })
 
 describe('useHouseholdMembers', () => {
@@ -248,5 +254,115 @@ describe('useRemoveHouseholdMember', () => {
 
     const cache = client.getQueryData<ReadonlyArray<HouseholdMemberRow>>(queryKeys.householdMembers())
     expect(cache).toEqual(initial)
+  })
+})
+
+describe('useAddHouseholdMember', () => {
+  it('maps the Edge Function response to camelCase and invokes with the right body', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        user_id: 'new-user-uuid',
+        email: 'new@example.com',
+        initial_password: 'abc123XYZ!@#$%^&*',
+        display_name: 'New Person',
+        role: 'member'
+      },
+      error: null
+    })
+
+    const { result } = renderHook(() => useAddHouseholdMember(), { wrapper })
+
+    const res = await result.current.mutateAsync({
+      email: 'new@example.com',
+      displayName: 'New Person',
+      role: 'member'
+    })
+
+    expect(mockInvoke).toHaveBeenCalledWith('add-household-member', {
+      body: {
+        household_id: '00000000-0000-0000-0000-000000000001',
+        email: 'new@example.com',
+        display_name: 'New Person',
+        role: 'member'
+      }
+    })
+
+    expect(res).toEqual({
+      userId: 'new-user-uuid',
+      email: 'new@example.com',
+      initialPassword: 'abc123XYZ!@#$%^&*',
+      displayName: 'New Person',
+      role: 'member'
+    })
+  })
+
+  it('throws when the Edge Function returns an error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'only owners can add members' }
+    })
+
+    const { result } = renderHook(() => useAddHouseholdMember(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        email: 'who@example.com',
+        displayName: 'Who',
+        role: 'member'
+      })
+    ).rejects.toMatchObject({ message: 'only owners can add members' })
+  })
+
+  it('throws when the Edge Function returns an unexpected shape', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    // Missing initial_password + user_id fields.
+    mockInvoke.mockResolvedValueOnce({
+      data: { email: 'oops@example.com' },
+      error: null
+    })
+
+    const { result } = renderHook(() => useAddHouseholdMember(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        email: 'oops@example.com',
+        displayName: 'Oops',
+        role: 'member'
+      })
+    ).rejects.toThrow(/unexpected response/)
+  })
+
+  it('invalidates householdMembers on success so the list refetches', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        user_id: 'new-id',
+        email: 'a@b.co',
+        initial_password: 'pw',
+        display_name: 'A',
+        role: 'owner'
+      },
+      error: null
+    })
+
+    const { result } = renderHook(() => useAddHouseholdMember(), { wrapper })
+    await result.current.mutateAsync({
+      email: 'a@b.co',
+      displayName: 'A',
+      role: 'owner'
+    })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.householdMembers() })
   })
 })
