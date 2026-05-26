@@ -65,6 +65,27 @@ function toSelectOption(o: MemberOption): SelectOption {
   return { value: o.value ?? UNASSIGNED_SENTINEL, label: o.label }
 }
 
+type TypePillKind = 'Income' | 'Refund' | 'Transfer'
+
+const TYPE_PILL_TONES: Record<TypePillKind, string> = {
+  Income: 'bg-emerald-50 text-emerald-700',
+  Refund: 'bg-blue-50 text-blue-700',
+  Transfer: 'bg-purple-50 text-purple-700'
+}
+
+function TypePill({ type }: { type: TypePillKind }) {
+  return (
+    <span
+      className={cn(
+        'inline-block ml-1.5 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-medium align-middle',
+        TYPE_PILL_TONES[type]
+      )}
+    >
+      {type}
+    </span>
+  )
+}
+
 export function TransactionRow({
   tx,
   selected,
@@ -165,7 +186,7 @@ export function TransactionRow({
         )}
       </div>
 
-      <div className="hidden sm:block">
+      <div className="hidden sm:flex sm:items-center sm:min-w-0">
         {onEditCategory && categoryOptions ? (
           <EditableCell
             variant="select"
@@ -189,6 +210,9 @@ export function TransactionRow({
             )}>{tx.category}</span>
           )
         )}
+        {tx.type === 'Income' || tx.type === 'Refund' || tx.type === 'Transfer' ? (
+          <TypePill type={tx.type} />
+        ) : null}
       </div>
 
       <div className="hidden sm:block text-xs text-muted truncate" title={tx.account ?? ''}>

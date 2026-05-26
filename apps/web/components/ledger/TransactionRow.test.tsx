@@ -136,3 +136,41 @@ describe('<TransactionRow> Transfer visual treatment', () => {
     expect(screen.queryByLabelText('Transfer')).toBeNull()
   })
 })
+
+describe('<TransactionRow> Type pill', () => {
+  it('renders an "INCOME" pill on Income rows in an emerald tone', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Income', amount: 200 })} />)
+    const pill = screen.getByText('Income')
+    expect(pill).toBeInTheDocument()
+    expect(pill.className).toMatch(/uppercase/)
+    expect(pill.className).toMatch(/bg-emerald-50/)
+    expect(pill.className).toMatch(/text-emerald-700/)
+  })
+
+  it('renders a "REFUND" pill on Refund rows in a blue tone', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Refund', amount: 25 })} />)
+    const pill = screen.getByText('Refund')
+    expect(pill).toBeInTheDocument()
+    expect(pill.className).toMatch(/uppercase/)
+    expect(pill.className).toMatch(/bg-blue-50/)
+    expect(pill.className).toMatch(/text-blue-700/)
+  })
+
+  it('renders a "TRANSFER" pill on Transfer rows in a purple tone', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Transfer', amount: -100 })} />)
+    const pill = screen.getByText('Transfer')
+    expect(pill).toBeInTheDocument()
+    expect(pill.className).toMatch(/uppercase/)
+    expect(pill.className).toMatch(/bg-purple-50/)
+    expect(pill.className).toMatch(/text-purple-700/)
+  })
+
+  it('does NOT render a type pill on Expense rows', () => {
+    render(<TransactionRow tx={makeTx({ type: 'Expense', amount: -10 })} />)
+    expect(screen.queryByText('Income')).toBeNull()
+    expect(screen.queryByText('Refund')).toBeNull()
+    // 'Transfer' label is also used for the Transfer icon's aria-label;
+    // ensure no visible text pill with that exact content exists.
+    expect(screen.queryByText('Transfer')).toBeNull()
+  })
+})
