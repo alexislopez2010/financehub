@@ -182,7 +182,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
       if (!adapter) {
         setError({
           message: 'Unrecognized CSV format.',
-          detail: `Headers detected: ${parsedCsv.headers.join(', ')}. Use one of: Chase, Capital One, Discover, Amex, or a CSV with date/description/amount columns.`
+          detail: `Headers detected: ${parsedCsv.headers.join(', ')}. Use one of: Chase, Capital One, Citibank, Discover, Amex, or a CSV with date/description/amount columns.`
         })
         setStage({ kind: 'idle' })
         return

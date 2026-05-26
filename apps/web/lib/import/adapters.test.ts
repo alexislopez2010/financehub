@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ADAPTERS, amex, capitalOne, chase, detectAdapter, discover, generic } from './adapters'
+import { ADAPTERS, amex, capitalOne, chase, citibank, detectAdapter, discover, generic } from './adapters'
 
 describe('detectAdapter', () => {
   it('returns chase for Chase headers', () => {
@@ -22,6 +22,17 @@ describe('detectAdapter', () => {
 
     // Assert
     expect(result?.name).toBe('Capital One')
+  })
+
+  it('returns citibank for Citibank headers', () => {
+    // Arrange
+    const headers = ['Status', 'Date', 'Description', 'Debit', 'Credit']
+
+    // Act
+    const result = detectAdapter(headers)
+
+    // Assert
+    expect(result?.name).toBe('Citibank')
   })
 
   it('returns discover for Discover headers', () => {
@@ -95,6 +106,7 @@ describe('detectAdapter', () => {
     expect(ADAPTERS.map(a => a.name)).toEqual([
       'Chase',
       'Capital One',
+      'Citibank',
       'Discover',
       'American Express',
       'Generic CSV'
@@ -320,6 +332,107 @@ describe('capitalOne adapter', () => {
     const { parsed } = capitalOne.parse(headers, rows)
 
     // Assert — must stay an Expense.
+    expect(parsed[0]?.amount).toBe(-42.5)
+    expect(parsed[0]?.type).toBe('Expense')
+  })
+})
+
+describe('citibank adapter', () => {
+  const headers = ['Status', 'Date', 'Description', 'Debit', 'Credit']
+
+  it('matches its signature', () => {
+    expect(citibank.matches(headers)).toBe(true)
+  })
+
+  it('does not match when Status is missing', () => {
+    expect(citibank.matches(['Date', 'Description', 'Debit', 'Credit'])).toBe(false)
+  })
+
+  it('parses charges (Debit) and payments (Credit) with credit - debit math', () => {
+    // Arrange
+    const rows = [
+      ['Cleared', '05/15/2026', 'TARGET STORE', '42.50', ''],
+      ['Cleared', '05/14/2026', 'PAYROLL DEPOSIT', '', '2500.00']
+    ]
+
+    // Act
+    const { parsed, skipped } = citibank.parse(headers, rows)
+
+    // Assert
+    expect(skipped).toHaveLength(0)
+    expect(parsed).toHaveLength(2)
+    expect(parsed[0]).toEqual({
+      date: '2026-05-15',
+      description: 'TARGET STORE',
+      amount: -42.5,
+      type: 'Expense',
+      source: 'Citibank'
+    })
+    expect(parsed[1]).toEqual({
+      date: '2026-05-14',
+      description: 'PAYROLL DEPOSIT',
+      amount: 2500,
+      type: 'Income',
+      source: 'Citibank'
+    })
+  })
+
+  it('skips rows with Status="Pending"', () => {
+    // Arrange
+    const rows = [
+      ['Pending', '05/16/2026', 'AMAZON.COM', '99.99', '']
+    ]
+
+    // Act
+    const { parsed, skipped } = citibank.parse(headers, rows)
+
+    // Assert
+    expect(parsed).toHaveLength(0)
+    expect(skipped).toHaveLength(1)
+    expect(skipped[0]?.reason).toBe('Pending status — not yet posted')
+  })
+
+  it('includes rows with Status="Cleared"', () => {
+    // Arrange
+    const rows = [
+      ['Cleared', '05/14/2026', 'STARBUCKS', '5.75', '']
+    ]
+
+    // Act
+    const { parsed, skipped } = citibank.parse(headers, rows)
+
+    // Assert
+    expect(skipped).toHaveLength(0)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]?.amount).toBe(-5.75)
+  })
+
+  it('skips rows with both Debit and Credit empty', () => {
+    // Arrange
+    const rows = [
+      ['Cleared', '05/14/2026', 'NOTHING', '', '']
+    ]
+
+    // Act
+    const { parsed, skipped } = citibank.parse(headers, rows)
+
+    // Assert
+    expect(parsed).toHaveLength(0)
+    expect(skipped).toHaveLength(1)
+    expect(skipped[0]?.reason).toBe('Both debit and credit are empty')
+  })
+
+  it('treats accounting parens as positive magnitude (Excel re-save defense)', () => {
+    // Arrange — Excel-resaved CSVs may emit "(42.50)" in the Debit column.
+    // Math.abs ensures the sign stays driven by which column is populated.
+    const rows = [
+      ['Cleared', '05/20/2026', 'TARGET', '(42.50)', '']
+    ]
+
+    // Act
+    const { parsed } = citibank.parse(headers, rows)
+
+    // Assert
     expect(parsed[0]?.amount).toBe(-42.5)
     expect(parsed[0]?.type).toBe('Expense')
   })
