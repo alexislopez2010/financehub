@@ -1,83 +1,54 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 
-const mockUseHouseholdMembersList = vi.fn<() => { data: ReadonlyArray<{ display_name: string }> }>()
+const membersMock = vi.fn<() => { data: ReadonlyArray<{ display_name: string }> }>()
+const accountsMock = vi.fn<() => { data: ReadonlyArray<{ id: string; name: string }> }>()
+const categoriesMock = vi.fn<() => { data: ReadonlyArray<{ id: string; name: string }> }>()
 
 vi.mock('@/lib/data/householdMembers', () => ({
-  useHouseholdMembersList: () => mockUseHouseholdMembersList()
+  useHouseholdMembersList: () => membersMock()
+}))
+vi.mock('@/lib/data/accounts', () => ({
+  useAccounts: () => accountsMock()
+}))
+vi.mock('@/lib/data/categories', () => ({
+  useCategories: () => categoriesMock()
 }))
 
 import { FilterChips } from './FilterChips'
 
 beforeEach(() => {
-  mockUseHouseholdMembersList.mockReset()
-  mockUseHouseholdMembersList.mockReturnValue({
-    data: [
-      { display_name: 'Alexis Lopez' },
-      { display_name: 'Marilyn Lopez' }
-    ]
-  })
+  membersMock.mockReset()
+  accountsMock.mockReset()
+  categoriesMock.mockReset()
+  membersMock.mockReturnValue({ data: [{ display_name: 'Alexis Lopez' }] })
+  accountsMock.mockReturnValue({ data: [{ id: 'a1', name: 'Citibank' }] })
+  categoriesMock.mockReturnValue({ data: [{ id: 'c1', name: 'Food & Dining' }] })
 })
 
-describe('<FilterChips> Member chip', () => {
-  it('renders "Member ▼" trigger when filters.member is not set', () => {
+describe('<FilterChips> orchestrator', () => {
+  it('renders all seven filter children when given default filters', () => {
     render(<FilterChips filters={{}} onChange={() => {}} />)
+    expect(screen.getByPlaceholderText(/search descriptions/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /filter by date/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /filter by account/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /filter by category/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /filter by member/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /filter by amount/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /filter by type/i })).toBeInTheDocument()
   })
 
-  it('renders "member: <value>" with a clear button when filters.member is set', () => {
+  it('shows the Reset button only when filters are non-empty', () => {
+    const { rerender } = render(<FilterChips filters={{}} onChange={() => {}} />)
+    expect(screen.queryByRole('button', { name: /^reset$/i })).toBeNull()
+    rerender(<FilterChips filters={{ member: 'Alexis Lopez' }} onChange={() => {}} />)
+    expect(screen.getByRole('button', { name: /^reset$/i })).toBeInTheDocument()
+  })
+
+  it('renders set state for member when filters.member is set', () => {
     render(<FilterChips filters={{ member: 'Alexis Lopez' }} onChange={() => {}} />)
-    const chip = screen.getByRole('button', { name: /clear member filter \(alexis lopez\)/i })
-    expect(chip).toBeInTheDocument()
-    expect(chip.textContent).toMatch(/member:/i)
-    expect(chip.textContent).toMatch(/Alexis Lopez/)
-  })
-
-  it('clicking the clear button removes member from filters', async () => {
-    const onChange = vi.fn()
-    const user = userEvent.setup()
-    render(<FilterChips filters={{ member: 'Alexis Lopez', account: 'Checking' }} onChange={onChange} />)
-    await user.click(screen.getByRole('button', { name: /clear member filter/i }))
-    expect(onChange).toHaveBeenCalledTimes(1)
-    expect(onChange).toHaveBeenCalledWith({ account: 'Checking' })
-  })
-
-  it('opening the dropdown and picking a member sets filters.member', async () => {
-    const onChange = vi.fn()
-    const user = userEvent.setup()
-    render(<FilterChips filters={{}} onChange={onChange} />)
-
-    await user.click(screen.getByRole('button', { name: /filter by member/i }))
-
-    const item = await screen.findByRole('menuitem', { name: 'Marilyn Lopez' })
-    await user.click(item)
-
-    expect(onChange).toHaveBeenCalledTimes(1)
-    expect(onChange).toHaveBeenCalledWith({ member: 'Marilyn Lopez' })
-  })
-
-  it('Family is offered as a synthetic option in the dropdown', async () => {
-    const onChange = vi.fn()
-    const user = userEvent.setup()
-    render(<FilterChips filters={{}} onChange={onChange} />)
-
-    await user.click(screen.getByRole('button', { name: /filter by member/i }))
-
-    const family = await screen.findByRole('menuitem', { name: 'Family' })
-    await user.click(family)
-
-    expect(onChange).toHaveBeenCalledWith({ member: 'Family' })
-  })
-
-  it('does NOT offer an "(Unassigned)" option in the filter dropdown', async () => {
-    const user = userEvent.setup()
-    render(<FilterChips filters={{}} onChange={() => {}} />)
-
-    await user.click(screen.getByRole('button', { name: /filter by member/i }))
-
-    // Wait for the menu to settle
-    await screen.findByRole('menuitem', { name: 'Family' })
-    expect(screen.queryByRole('menuitem', { name: /\(Unassigned\)/i })).toBeNull()
+    expect(
+      screen.getByRole('button', { name: /clear member filter \(alexis lopez\)/i })
+    ).toBeInTheDocument()
   })
 })
