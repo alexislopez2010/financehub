@@ -49,4 +49,37 @@ describe('<MemberFilter>', () => {
     await user.click(item)
     expect(onChange).toHaveBeenCalledWith('Marilyn Lopez')
   })
+
+  it('renders (Unassigned) as the first option in the dropdown', async () => {
+    const user = userEvent.setup()
+    render(<MemberFilter value={undefined} onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: /filter by member/i }))
+
+    const items = await screen.findAllByRole('menuitem')
+    expect(items[0]?.textContent).toBe('(Unassigned)')
+  })
+
+  it('picking (Unassigned) calls onChange(null)', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MemberFilter value={undefined} onChange={onChange} />)
+    await user.click(screen.getByRole('button', { name: /filter by member/i }))
+    const item = await screen.findByRole('menuitem', { name: '(Unassigned)' })
+    await user.click(item)
+    expect(onChange).toHaveBeenCalledWith(null)
+  })
+
+  it('renders "(Unassigned)" label when value is null', () => {
+    render(<MemberFilter value={null} onChange={() => {}} />)
+    const chip = screen.getByRole('button', { name: /clear member filter \(\(unassigned\)\)/i })
+    expect(chip.textContent).toMatch(/\(Unassigned\)/)
+  })
+
+  it('clicking clear chip when value=null calls onChange(undefined)', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<MemberFilter value={null} onChange={onChange} />)
+    await user.click(screen.getByRole('button', { name: /clear member filter/i }))
+    expect(onChange).toHaveBeenCalledWith(undefined)
+  })
 })

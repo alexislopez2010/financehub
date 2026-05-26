@@ -6,8 +6,13 @@ import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { cn } from '@/lib/cn'
 
 export interface MemberFilterProps {
-  value: string | undefined
-  onChange: (next: string | undefined) => void
+  /**
+   * undefined → filter not set
+   * null      → explicitly filter to rows with no member assigned
+   * string    → filter to that member name (or 'Family' synthetic)
+   */
+  value: string | null | undefined
+  onChange: (next: string | null | undefined) => void
 }
 
 interface FilterMemberOption {
@@ -17,9 +22,8 @@ interface FilterMemberOption {
 }
 
 /**
- * Build the option list for the Member filter chip. Unlike the row-edit
- * dropdown, this does NOT include '(Unassigned)' — filtering for null
- * member is rarely useful and isn't worth a UI knob.
+ * Build the named-member option list for the Member filter chip. The
+ * '(Unassigned)' option is rendered separately so it always appears first.
  */
 function buildFilterChipOptions(
   members: ReadonlyArray<{ display_name: string }>
@@ -37,23 +41,26 @@ function buildFilterChipOptions(
   return options
 }
 
+const UNASSIGNED_LABEL = '(Unassigned)'
+
 export function MemberFilter({ value, onChange }: MemberFilterProps) {
   const membersQ = useHouseholdMembersList()
   const options = buildFilterChipOptions(membersQ.data ?? [])
 
-  if (value) {
+  if (value !== undefined) {
+    const display = value === null ? UNASSIGNED_LABEL : value
     return (
       <button
         type="button"
         onClick={() => onChange(undefined)}
-        aria-label={`Clear member filter (${value})`}
+        aria-label={`Clear member filter (${display})`}
         className={cn(
           'inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full text-xs',
           'bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors'
         )}
       >
         <span className="font-medium">member:</span>
-        <span>{value}</span>
+        <span>{display}</span>
         <X size={12} className="ml-1" />
       </button>
     )
@@ -83,6 +90,13 @@ export function MemberFilter({ value, onChange }: MemberFilterProps) {
             'data-[state=open]:animate-in data-[state=open]:fade-in-0'
           )}
         >
+          <DropdownMenu.Item
+            onSelect={() => onChange(null)}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none italic"
+          >
+            {UNASSIGNED_LABEL}
+          </DropdownMenu.Item>
+
           {options.length === 0 ? (
             <div className="px-3 py-2 text-xs text-muted">No members</div>
           ) : (

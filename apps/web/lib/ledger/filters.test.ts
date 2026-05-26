@@ -56,6 +56,11 @@ describe('parseFiltersFromUrl', () => {
     expect(f.member).toBe('Alexis')
   })
 
+  it('parses "__unassigned__" as null member', () => {
+    const p = new URLSearchParams('member=__unassigned__')
+    expect(parseFiltersFromUrl(p).member).toBeNull()
+  })
+
   it('parses amount_min and amount_max as numbers', () => {
     const p = new URLSearchParams('amount_min=-500&amount_max=500')
     const f = parseFiltersFromUrl(p)
@@ -113,6 +118,16 @@ describe('serializeFiltersToUrl', () => {
     expect(serializeFiltersToUrl(f).get('category')).toBe('uncategorized')
   })
 
+  it('encodes null member as "__unassigned__"', () => {
+    const f = { member: null }
+    expect(serializeFiltersToUrl(f).get('member')).toBe('__unassigned__')
+  })
+
+  it('round-trips null member', () => {
+    const params = serializeFiltersToUrl({ member: null })
+    expect(parseFiltersFromUrl(params)).toEqual({ member: null })
+  })
+
   it('omits undefined fields', () => {
     const p = serializeFiltersToUrl({ startDate: '2025-05-01' })
     expect(p.has('start')).toBe(true)
@@ -168,6 +183,9 @@ describe('isEmpty', () => {
     expect(isEmpty({ startDate: '2025-05-01' })).toBe(false)
     expect(isEmpty({ categoryId: null })).toBe(false)  // uncategorized is a filter
     expect(isEmpty({ q: 'food' })).toBe(false)
+  })
+  it('false when member is null (Unassigned is an active filter)', () => {
+    expect(isEmpty({ member: null })).toBe(false)
   })
   it('false when only minAmount is set', () => {
     expect(isEmpty({ minAmount: -500 })).toBe(false)

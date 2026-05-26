@@ -508,3 +508,48 @@ describe('useTransactions amount filters', () => {
     expect(hasCall('gte', 'amount', 0)).toBe(true)
   })
 })
+
+describe('useTransactions member filter', () => {
+  function findCalls(method: string): ReadonlyArray<QueryCall> {
+    return queryCalls.filter(c => c.method === method)
+  }
+  function hasCall(method: string, column: string, value: unknown): boolean {
+    return queryCalls.some(c => c.method === method && c.args[0] === column && c.args[1] === value)
+  }
+
+  it('applies is(member, null) when filters.member === null', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({ member: null }), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('is', 'member', null)).toBe(true)
+    expect(findCalls('eq').some(c => c.args[0] === 'member')).toBe(false)
+  })
+
+  it('applies eq(member, name) when filters.member is a string', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({ member: 'Alexis' }), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(hasCall('eq', 'member', 'Alexis')).toBe(true)
+    expect(findCalls('is').some(c => c.args[0] === 'member')).toBe(false)
+  })
+
+  it('skips member filter when filters.member is undefined', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    queryResult = { data: [], error: null }
+
+    const { result } = renderHook(() => useTransactions({}), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(findCalls('eq').some(c => c.args[0] === 'member')).toBe(false)
+    expect(findCalls('is').some(c => c.args[0] === 'member')).toBe(false)
+  })
+})

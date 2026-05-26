@@ -29,10 +29,16 @@ export interface RowActionsMenuProps {
   /** When set, shows an "Unpair transfer" item. */
   onUnpairTransfer?: () => void
   /**
-   * When set, shows three "Change to expense / income / refund" items —
-   * intended for orphan Transfer rows whose counterpart isn't tracked.
+   * When set, shows "Change to expense / income / refund" items, skipping
+   * the row's current type. Intended for any unpaired row so misclassified
+   * Income/Expense/Refund/Transfer rows can be retyped from the menu.
    */
   onDemoteToType?: (next: DemoteTransferTarget) => void
+  /**
+   * Current row type. When provided alongside `onDemoteToType`, the matching
+   * "Change to X" item is omitted (since "change to current type" is a no-op).
+   */
+  currentType?: 'Income' | 'Expense' | 'Transfer' | 'Refund'
   /** When true, shows "Unpairing…" inline on the unpair item and disables it. */
   unpairing?: boolean
 }
@@ -47,6 +53,7 @@ export function RowActionsMenu({
   onPairTransfer,
   onUnpairTransfer,
   onDemoteToType,
+  currentType,
   unpairing
 }: RowActionsMenuProps) {
   return (
@@ -112,27 +119,33 @@ export function RowActionsMenu({
 
           {onDemoteToType && (
             <>
-              <DropdownMenu.Item
-                onSelect={() => onDemoteToType('Expense')}
-                className={itemBase}
-              >
-                <TrendingDown size={14} className="text-red-600" />
-                Change to expense
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => onDemoteToType('Income')}
-                className={itemBase}
-              >
-                <TrendingUp size={14} className="text-emerald-600" />
-                Change to income
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => onDemoteToType('Refund')}
-                className={itemBase}
-              >
-                <Undo2 size={14} className="text-emerald-600" />
-                Change to refund
-              </DropdownMenu.Item>
+              {currentType !== 'Expense' && (
+                <DropdownMenu.Item
+                  onSelect={() => onDemoteToType('Expense')}
+                  className={itemBase}
+                >
+                  <TrendingDown size={14} className="text-red-600" />
+                  Change to expense
+                </DropdownMenu.Item>
+              )}
+              {currentType !== 'Income' && (
+                <DropdownMenu.Item
+                  onSelect={() => onDemoteToType('Income')}
+                  className={itemBase}
+                >
+                  <TrendingUp size={14} className="text-emerald-600" />
+                  Change to income
+                </DropdownMenu.Item>
+              )}
+              {currentType !== 'Refund' && (
+                <DropdownMenu.Item
+                  onSelect={() => onDemoteToType('Refund')}
+                  className={itemBase}
+                >
+                  <Undo2 size={14} className="text-emerald-600" />
+                  Change to refund
+                </DropdownMenu.Item>
+              )}
             </>
           )}
 

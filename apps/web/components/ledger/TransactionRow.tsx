@@ -96,7 +96,13 @@ export function TransactionRow({
   const canConvert = tx.type !== 'Transfer' && tx.transfer_pair_id == null
   const canPair = isOrphanTransfer
   const canUnpair = tx.transfer_pair_id != null
-  const canDemote = isOrphanTransfer
+  // "Change to X" applies to any row whose type isn't fixed by an active pair.
+  // The matching item is skipped via currentType so we never offer a no-op.
+  const canChangeType = tx.transfer_pair_id == null
+  const knownType =
+    tx.type === 'Income' || tx.type === 'Expense' || tx.type === 'Transfer' || tx.type === 'Refund'
+      ? tx.type
+      : undefined
 
   // Build the grid template classes based on which optional columns are present.
   // Using hardcoded Tailwind variants so JIT can pick them up at build time.
@@ -233,7 +239,12 @@ export function TransactionRow({
             {...(canConvert && onConvertToTransfer ? { onConvertToTransfer } : {})}
             {...(canPair && onPairTransfer ? { onPairTransfer } : {})}
             {...(canUnpair && onUnpairTransfer ? { onUnpairTransfer } : {})}
-            {...(canDemote && onDemoteTransfer ? { onDemoteToType: onDemoteTransfer } : {})}
+            {...(canChangeType && onDemoteTransfer
+              ? {
+                  onDemoteToType: onDemoteTransfer,
+                  ...(knownType ? { currentType: knownType } : {})
+                }
+              : {})}
             {...(unpairing !== undefined ? { unpairing } : {})}
           />
         </div>

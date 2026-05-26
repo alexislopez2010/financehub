@@ -92,3 +92,91 @@ describe('<RowActionsMenu> orphan-Transfer gating', () => {
     expect(onDemoteToType).toHaveBeenCalledWith('Income')
   })
 })
+
+describe('<RowActionsMenu> currentType filtering', () => {
+  it('omits "Change to expense" when currentType is Expense (offers Income + Refund only)', async () => {
+    const user = userEvent.setup()
+    renderMenu({
+      onDemoteToType: vi.fn(),
+      currentType: 'Expense'
+    })
+
+    await openMenu(user)
+
+    expect(screen.queryByText('Change to expense')).toBeNull()
+    expect(screen.getByText('Change to income')).toBeInTheDocument()
+    expect(screen.getByText('Change to refund')).toBeInTheDocument()
+  })
+
+  it('omits "Change to income" when currentType is Income', async () => {
+    const user = userEvent.setup()
+    renderMenu({
+      onDemoteToType: vi.fn(),
+      currentType: 'Income'
+    })
+
+    await openMenu(user)
+
+    expect(screen.queryByText('Change to income')).toBeNull()
+    expect(screen.getByText('Change to expense')).toBeInTheDocument()
+    expect(screen.getByText('Change to refund')).toBeInTheDocument()
+  })
+
+  it('omits "Change to refund" when currentType is Refund', async () => {
+    const user = userEvent.setup()
+    renderMenu({
+      onDemoteToType: vi.fn(),
+      currentType: 'Refund'
+    })
+
+    await openMenu(user)
+
+    expect(screen.queryByText('Change to refund')).toBeNull()
+    expect(screen.getByText('Change to expense')).toBeInTheDocument()
+    expect(screen.getByText('Change to income')).toBeInTheDocument()
+  })
+
+  it('omits "Change to transfer" item entirely (use Convert/Pair instead), keeps the three demote items minus current', async () => {
+    const user = userEvent.setup()
+    renderMenu({
+      onDemoteToType: vi.fn(),
+      currentType: 'Transfer'
+    })
+
+    await openMenu(user)
+
+    // Transfer is not a demote target — the three offered are Expense/Income/Refund
+    expect(screen.getByText('Change to expense')).toBeInTheDocument()
+    expect(screen.getByText('Change to income')).toBeInTheDocument()
+    expect(screen.getByText('Change to refund')).toBeInTheDocument()
+  })
+
+  it('hides demote group entirely when onDemoteToType is omitted (paired Transfer row)', async () => {
+    const user = userEvent.setup()
+    renderMenu({
+      onUnpairTransfer: vi.fn(),
+      currentType: 'Transfer'
+    })
+
+    await openMenu(user)
+
+    expect(screen.queryByText('Change to expense')).toBeNull()
+    expect(screen.queryByText('Change to income')).toBeNull()
+    expect(screen.queryByText('Change to refund')).toBeNull()
+    expect(screen.getByText('Unpair transfer')).toBeInTheDocument()
+  })
+
+  it('clicking "Change to refund" on an Expense row fires onDemoteToType("Refund")', async () => {
+    const user = userEvent.setup()
+    const onDemoteToType = vi.fn()
+    renderMenu({
+      onDemoteToType,
+      currentType: 'Expense'
+    })
+
+    await openMenu(user)
+    await user.click(screen.getByText('Change to refund'))
+
+    expect(onDemoteToType).toHaveBeenCalledWith('Refund')
+  })
+})

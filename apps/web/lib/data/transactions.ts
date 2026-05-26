@@ -34,7 +34,11 @@ export function useTransactions(
           : q.eq('category_id', filters.categoryId)
       }
       if (filters?.account) q = q.eq('account', filters.account)
-      if (filters?.member) q = q.eq('member', filters.member)
+      if (filters?.member === null) {
+        q = q.is('member', null)
+      } else if (filters?.member) {
+        q = q.eq('member', filters.member)
+      }
       if (filters?.type) q = q.eq('type', filters.type)
       if (filters?.minAmount !== undefined && Number.isFinite(filters.minAmount)) {
         q = q.gte('amount', filters.minAmount)

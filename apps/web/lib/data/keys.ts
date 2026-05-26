@@ -16,8 +16,8 @@ export interface TransactionFilters {
   categoryId?: string | null
   /** Filter by account string. */
   account?: string
-  /** Filter by member string. */
-  member?: string
+  /** Filter by member string. null = filter to rows where member IS NULL. */
+  member?: string | null
   /** Filter by transaction type. */
   type?: 'Income' | 'Expense' | 'Transfer' | 'Refund'
   /** Signed amount lower bound (e.g. -500). Rows with amount >= minAmount match. */

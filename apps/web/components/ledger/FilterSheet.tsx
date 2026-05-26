@@ -123,10 +123,18 @@ export function FilterSheet({ open, onOpenChange, filters, onChange }: FilterShe
             </Field>
 
             <Field label="Member">
-              <select value={filters.member ?? ''}
-                onChange={e => setField('member', e.target.value || undefined)}
-                className={inputCls}>
+              <select
+                value={filters.member === null ? '__unassigned__' : filters.member ?? ''}
+                onChange={e => {
+                  const v = e.target.value
+                  if (v === '') setField('member', undefined)
+                  else if (v === '__unassigned__') setField('member', null)
+                  else setField('member', v)
+                }}
+                className={inputCls}
+              >
                 <option value="">Any</option>
+                <option value="__unassigned__">(Unassigned)</option>
                 {memberOptionValues.map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
