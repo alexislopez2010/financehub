@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { useAccounts } from '@/lib/data/accounts'
 import { useCategories } from '@/lib/data/categories'
+import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import type { LedgerFilters } from '@/lib/ledger/filters'
 import { cn } from '@/lib/cn'
 
@@ -17,6 +18,23 @@ export interface FilterSheetProps {
 export function FilterSheet({ open, onOpenChange, filters, onChange }: FilterSheetProps) {
   const accountsQ = useAccounts()
   const categoriesQ = useCategories()
+  const membersQ = useHouseholdMembersList()
+
+  // Filter chip + sheet share the same option list. Family is synthetic;
+  // we do NOT include '(Unassigned)' here — filtering for null member is
+  // rarely useful.
+  const memberOptionValues: ReadonlyArray<string> = (() => {
+    const FAMILY = 'Family'
+    const seen = new Set<string>([FAMILY])
+    const out: string[] = [FAMILY]
+    for (const m of membersQ.data ?? []) {
+      const name = m.display_name
+      if (name.length === 0 || seen.has(name)) continue
+      out.push(name)
+      seen.add(name)
+    }
+    return out
+  })()
 
   function setField<K extends keyof LedgerFilters>(key: K, value: LedgerFilters[K] | undefined) {
     const next = { ...filters }
@@ -105,10 +123,14 @@ export function FilterSheet({ open, onOpenChange, filters, onChange }: FilterShe
             </Field>
 
             <Field label="Member">
-              <input type="text" value={filters.member ?? ''}
+              <select value={filters.member ?? ''}
                 onChange={e => setField('member', e.target.value || undefined)}
-                placeholder="Member name"
-                className={inputCls} />
+                className={inputCls}>
+                <option value="">Any</option>
+                {memberOptionValues.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
             </Field>
           </div>
 

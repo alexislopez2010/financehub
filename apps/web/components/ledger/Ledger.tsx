@@ -30,6 +30,7 @@ export function Ledger() {
   const [promotingTx, setPromotingTx] = useState<TxRow | null>(null)
   const [convertingTx, setConvertingTx] = useState<TxRow | null>(null)
   const [unpairingId, setUnpairingId] = useState<string | null>(null)
+  const [bulkAssigning, setBulkAssigning] = useState(false)
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -93,6 +94,23 @@ export function Ledger() {
 
   function handleEditMember(id: string, next: string | null) {
     updateTx.mutate({ id, patch: { member: next } })
+  }
+
+  async function handleBulkAssignMember(next: string | null) {
+    if (selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    setBulkAssigning(true)
+    try {
+      // Per-row optimistic updates already applied + rolled back by the hook.
+      // Run them in parallel; failures are surfaced via React Query but the
+      // loop itself doesn't short-circuit.
+      await Promise.allSettled(
+        ids.map(id => updateTx.mutateAsync({ id, patch: { member: next } }))
+      )
+      setSelectedIds(new Set())
+    } finally {
+      setBulkAssigning(false)
+    }
   }
 
   function handleDelete(id: string) {
@@ -173,6 +191,9 @@ export function Ledger() {
         selectedIds={[...selectedIds]}
         onCancel={clearSelection}
         onCompleted={clearSelection}
+        members={membersQ.data ?? []}
+        onAssignMember={handleBulkAssignMember}
+        isAssigning={bulkAssigning}
       />
 
       <FilterSheet

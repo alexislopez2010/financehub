@@ -1,17 +1,32 @@
 'use client'
 
-import { Trash2, X } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { ChevronDown, Trash2, UserSquare2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useDeleteTransaction } from '@/lib/data/transactions'
+import { buildMemberOptions } from '@/lib/ledger/memberOptions'
 import { cn } from '@/lib/cn'
 
 export interface BulkActionsBarProps {
   selectedIds: ReadonlyArray<string>
   onCancel: () => void
   onCompleted: () => void
+  /** Household member roster from `useHouseholdMembersList`. */
+  members?: ReadonlyArray<{ display_name: string }>
+  /** Apply the chosen member value to every selected row. `null` clears the assignment. */
+  onAssignMember?: (member: string | null) => void | Promise<void>
+  /** When true, the Assign-member button shows a loader and is disabled. */
+  isAssigning?: boolean
 }
 
-export function BulkActionsBar({ selectedIds, onCancel, onCompleted }: BulkActionsBarProps) {
+export function BulkActionsBar({
+  selectedIds,
+  onCancel,
+  onCompleted,
+  members,
+  onAssignMember,
+  isAssigning = false
+}: BulkActionsBarProps) {
   const deleteTx = useDeleteTransaction()
   const [isDeleting, setIsDeleting] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -31,6 +46,10 @@ export function BulkActionsBar({ selectedIds, onCancel, onCompleted }: BulkActio
       onCompleted()
     }
   }
+
+  const memberOptions = onAssignMember
+    ? buildMemberOptions(members ?? [], [])
+    : []
 
   return (
     <div
@@ -73,6 +92,54 @@ export function BulkActionsBar({ selectedIds, onCancel, onCompleted }: BulkActio
           </>
         ) : (
           <>
+            {onAssignMember && (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    disabled={isAssigning}
+                    aria-label="Assign member to selected rows"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg',
+                      'text-white text-xs font-medium px-3 py-1.5',
+                      'hover:bg-white/10',
+                      'disabled:opacity-60 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    <UserSquare2 size={12} />
+                    {isAssigning ? 'Assigning…' : 'Assign member'}
+                    <ChevronDown size={12} className="ml-0.5" />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    align="end"
+                    sideOffset={4}
+                    className={cn(
+                      'z-50 min-w-[200px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+                      'data-[state=open]:animate-in data-[state=open]:fade-in-0'
+                    )}
+                  >
+                    {memberOptions.map(o => (
+                      <DropdownMenu.Item
+                        key={o.label}
+                        onSelect={() => {
+                          void onAssignMember(o.value)
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
+                          o.kind === 'unassigned'
+                            ? 'text-muted italic hover:bg-gray-100'
+                            : 'text-ink hover:bg-gray-100'
+                        )}
+                      >
+                        {o.label}
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            )}
             <button
               type="button"
               onClick={() => setConfirming(true)}
