@@ -10,10 +10,18 @@ export interface TransactionListProps {
   selectedIds?: ReadonlySet<string>
   onToggleSelect?: (id: string, selected: boolean) => void
   categoryOptions?: ReadonlyArray<SelectOption>
+  /**
+   * Household member roster threaded down to each row's Member select.
+   * Passing this once at the list level avoids calling
+   * `useHouseholdMembersList` per row.
+   */
+  members?: ReadonlyArray<{ display_name: string }>
   /** Edit handlers — called with the tx id + new value. */
   onEditDescription?: (id: string, next: string) => void
   onEditAmount?: (id: string, next: number) => void
   onEditCategory?: (id: string, next: string) => void
+  /** Commit handler for the Member field. `next` is null for '(Unassigned)'. */
+  onEditMember?: (id: string, next: string | null) => void
   onPromote?: (tx: TxRow) => void
   onDelete?: (id: string) => void
   onConvertToTransfer?: (tx: TxRow) => void
@@ -31,9 +39,11 @@ export function TransactionList({
   selectedIds,
   onToggleSelect,
   categoryOptions,
+  members,
   onEditDescription,
   onEditAmount,
   onEditCategory,
+  onEditMember,
   onPromote,
   onDelete,
   onConvertToTransfer,
@@ -80,9 +90,11 @@ export function TransactionList({
                       }
                     : {})}
                   {...(categoryOptions ? { categoryOptions } : {})}
+                  {...(members ? { members } : {})}
                   {...(onEditDescription ? { onEditDescription: (next: string) => onEditDescription(tx.id, next) } : {})}
                   {...(onEditAmount ? { onEditAmount: (next: number) => onEditAmount(tx.id, next) } : {})}
                   {...(onEditCategory ? { onEditCategory: (next: string) => onEditCategory(tx.id, next) } : {})}
+                  {...(onEditMember ? { onEditMember: (next: string | null) => onEditMember(tx.id, next) } : {})}
                   {...(onPromote ? { onPromote: () => onPromote(tx) } : {})}
                   {...(onDelete ? { onDelete: () => onDelete(tx.id) } : {})}
                   {...(onConvertToTransfer ? { onConvertToTransfer: () => onConvertToTransfer(tx) } : {})}

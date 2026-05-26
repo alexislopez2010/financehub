@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Upload } from 'lucide-react'
 import { useTransactions, useUpdateTransaction, useDeleteTransaction, useUnpairTransferRow } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
+import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
 import { FilterChips } from './FilterChips'
 import { FilterSheet } from './FilterSheet'
@@ -44,6 +45,7 @@ export function Ledger() {
 
   const txQ = useTransactions(toDataFilters(filters))
   const categoriesQ = useCategories()
+  const membersQ = useHouseholdMembersList()
   const updateTx = useUpdateTransaction()
   const deleteTx = useDeleteTransaction()
   const unpairTx = useUnpairTransferRow()
@@ -87,6 +89,10 @@ export function Ledger() {
         ? { category_id: null, category: null }
         : { category_id: next, category: cat?.name ?? null }
     })
+  }
+
+  function handleEditMember(id: string, next: string | null) {
+    updateTx.mutate({ id, patch: { member: next } })
   }
 
   function handleDelete(id: string) {
@@ -148,9 +154,11 @@ export function Ledger() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           categoryOptions={categoryOptions}
+          members={membersQ.data ?? []}
           onEditDescription={handleEditDescription}
           onEditAmount={handleEditAmount}
           onEditCategory={handleEditCategory}
+          onEditMember={handleEditMember}
           onPromote={tx => setPromotingTx(tx)}
           onDelete={handleDelete}
           onConvertToTransfer={tx => setConvertingTx(tx)}

@@ -4,6 +4,7 @@ import type { Tables } from '@/lib/supabase/database.types'
 import { cn } from '@/lib/cn'
 import { EditableCell, type SelectOption } from './EditableCell'
 import { RowActionsMenu } from './RowActionsMenu'
+import { buildMemberOptions, type MemberOption } from '@/lib/ledger/memberOptions'
 
 export type TransactionRow = Tables<'transactions'>
 
@@ -13,9 +14,17 @@ export interface TransactionRowProps {
   onSelectChange?: (selected: boolean) => void
   /** Categories for the inline category select. Required for category edit. */
   categoryOptions?: ReadonlyArray<SelectOption>
+  /**
+   * Household member roster used by the inline Member select. When omitted,
+   * the cell renders read-only. The list should already be sorted by
+   * display_name (the `useHouseholdMembersList` hook does this).
+   */
+  members?: ReadonlyArray<{ display_name: string }>
   onEditDescription?: (next: string) => void
   onEditAmount?: (next: number) => void
   onEditCategory?: (next: string) => void
+  /** Commit handler for the Member field. `next` is null for '(Unassigned)'. */
+  onEditMember?: (next: string | null) => void
   onPromote?: () => void
   onDelete?: () => void
   /** Opens the Convert-to-transfer dialog. Wired only for non-Transfer unpaired rows. */
@@ -43,14 +52,24 @@ function formatDay(iso: string): string {
   return `${parseInt(m[1]!, 10)}/${parseInt(m[2]!, 10)}`
 }
 
+// Sentinel value used in the select to represent `null` (unassigned),
+// since <select> can only carry string values. Decoded on commit.
+const UNASSIGNED_SENTINEL = '__unassigned__'
+
+function toSelectOption(o: MemberOption): SelectOption {
+  return { value: o.value ?? UNASSIGNED_SENTINEL, label: o.label }
+}
+
 export function TransactionRow({
   tx,
   selected,
   onSelectChange,
   categoryOptions,
+  members,
   onEditDescription,
   onEditAmount,
   onEditCategory,
+  onEditMember,
   onPromote,
   onDelete,
   onConvertToTransfer,
@@ -67,15 +86,27 @@ export function TransactionRow({
 
   // Build the grid template classes based on which optional columns are present.
   // Using hardcoded Tailwind variants so JIT can pick them up at build time.
+  // Desktop layout: date | description | category | account | member | amount [| actions]
+  // Mobile: date | description | amount [| actions]  (member hidden on small screens)
   const colCls = cn(
     showCheckbox && showActions
-      ? 'grid-cols-[20px_60px_1fr_100px_28px] sm:grid-cols-[20px_60px_1fr_140px_120px_120px_28px]'
+      ? 'grid-cols-[20px_60px_1fr_100px_28px] sm:grid-cols-[20px_60px_1fr_140px_120px_120px_120px_28px]'
       : showCheckbox
-        ? 'grid-cols-[20px_60px_1fr_100px] sm:grid-cols-[20px_60px_1fr_140px_120px_120px]'
+        ? 'grid-cols-[20px_60px_1fr_100px] sm:grid-cols-[20px_60px_1fr_140px_120px_120px_120px]'
         : showActions
-          ? 'grid-cols-[60px_1fr_100px_28px] sm:grid-cols-[60px_1fr_140px_120px_120px_28px]'
-          : 'grid-cols-[60px_1fr_100px] sm:grid-cols-[60px_1fr_140px_120px_120px]'
+          ? 'grid-cols-[60px_1fr_100px_28px] sm:grid-cols-[60px_1fr_140px_120px_120px_120px_28px]'
+          : 'grid-cols-[60px_1fr_100px] sm:grid-cols-[60px_1fr_140px_120px_120px_120px]'
   )
+
+  // Build member dropdown options. The current row's member value is passed
+  // as a legacyValue so the dropdown always has a matching option even if
+  // the name is no longer in the current household_members roster.
+  const memberOptions = members
+    ? buildMemberOptions(
+        members,
+        tx.member !== null && tx.member !== undefined ? [tx.member] : []
+      ).map(toSelectOption)
+    : undefined
 
   return (
     <div className={cn(
@@ -135,6 +166,28 @@ export function TransactionRow({
 
       <div className="hidden sm:block text-xs text-muted truncate" title={tx.account ?? ''}>
         {tx.account ?? ''}
+      </div>
+
+      <div className="hidden sm:block text-xs truncate">
+        {onEditMember && memberOptions ? (
+          <EditableCell
+            variant="select"
+            value={tx.member ?? UNASSIGNED_SENTINEL}
+            options={memberOptions}
+            onCommit={v => onEditMember(v === UNASSIGNED_SENTINEL ? null : v)}
+            display={
+              tx.member ? (
+                <span className="text-ink">{tx.member}</span>
+              ) : (
+                <span className="italic text-muted">Unassigned</span>
+              )
+            }
+          />
+        ) : tx.member ? (
+          <span className="text-ink truncate" title={tx.member}>{tx.member}</span>
+        ) : (
+          <span className="italic text-muted">Unassigned</span>
+        )}
       </div>
 
       <div className={cn('text-right tabular font-medium', tone)}>
