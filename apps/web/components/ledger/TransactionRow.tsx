@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn'
 import { EditableCell, type SelectOption } from './EditableCell'
 import { RowActionsMenu, type DemoteTransferTarget } from './RowActionsMenu'
 import { buildMemberOptions, type MemberOption } from '@/lib/ledger/memberOptions'
+import { signedActivity } from '@/lib/finance/signedActivity'
 
 export type TransactionRow = Tables<'transactions'>
 
@@ -82,10 +83,12 @@ export function TransactionRow({
   onDemoteTransfer,
   unpairing
 }: TransactionRowProps) {
-  // Tone is by sign so Transfer rows still get red/green — black-on-black
-  // for Transfer was the bug that hid orphan rows in the UI.
-  const tone = tx.amount < 0 ? 'text-red-600' : tx.amount > 0 ? 'text-emerald-600' : 'text-ink'
-  const sign = tx.amount < 0 ? '−' : tx.amount > 0 ? '+' : ''
+  // Tone is by SIGNED activity (resolves legacy positive-magnitude Expenses
+  // into the proper -value) so the row color always reflects true direction.
+  // Transfer rows still get red/green via the raw signed amount.
+  const signed = signedActivity(tx)
+  const tone = signed < 0 ? 'text-red-600' : signed > 0 ? 'text-emerald-600' : 'text-ink'
+  const sign = signed < 0 ? '−' : signed > 0 ? '+' : ''
   const showCheckbox = onSelectChange !== undefined
   const showActions = onPromote !== undefined || onDelete !== undefined
 
@@ -214,11 +217,11 @@ export function TransactionRow({
             variant="number"
             value={Math.abs(tx.amount)}
             onCommit={n => onEditAmount(n)}
-            display={<span>{sign}{formatUSD(Math.abs(tx.amount))}</span>}
+            display={<span>{sign}{formatUSD(Math.abs(signed))}</span>}
             inputClassName="text-right"
           />
         ) : (
-          <span>{sign}{formatUSD(Math.abs(tx.amount))}</span>
+          <span>{sign}{formatUSD(Math.abs(signed))}</span>
         )}
       </div>
 

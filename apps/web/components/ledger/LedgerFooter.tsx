@@ -2,6 +2,7 @@
 
 import type { Tables } from '@/lib/supabase/database.types'
 import { cn } from '@/lib/cn'
+import { activityDirection, signedActivity } from '@/lib/finance/signedActivity'
 
 type TxRow = Tables<'transactions'>
 
@@ -23,9 +24,11 @@ function deriveTotals(txs: ReadonlyArray<TxRow>): {
   let income = 0
   let expense = 0
   for (const tx of txs) {
-    const amt = Math.abs(tx.amount)
-    if (tx.type === 'Income' || tx.type === 'Refund') income += amt
-    else if (tx.type === 'Expense') expense += amt
+    const dir = activityDirection(tx)
+    if (dir === 'transfer') continue
+    const signed = signedActivity(tx)
+    if (signed > 0) income += signed
+    else if (signed < 0) expense += -signed
   }
   return {
     count: txs.length,

@@ -1,4 +1,5 @@
 import type { Tables } from '@/lib/supabase/database.types'
+import { activityDirection, signedActivity } from '@/lib/finance/signedActivity'
 
 export type TransactionRow = Tables<'transactions'>
 
@@ -49,9 +50,11 @@ export function groupByMonth(
     let totalExpense = 0
     let totalIncome = 0
     for (const tx of items) {
-      const amt = Math.abs(tx.amount)
-      if (tx.type === 'Expense') totalExpense += amt
-      else if (tx.type === 'Income' || tx.type === 'Refund') totalIncome += amt
+      const dir = activityDirection(tx)
+      if (dir === 'transfer') continue
+      const signed = signedActivity(tx)
+      if (signed > 0) totalIncome += signed
+      else if (signed < 0) totalExpense += -signed
     }
     const [yearStr, monthStr] = ym.split('-')
     const monthIdx = parseInt(monthStr!, 10) - 1

@@ -1,4 +1,5 @@
 import type { Tables } from '@/lib/supabase/database.types'
+import { signedActivity } from '@/lib/finance/signedActivity'
 
 export type AccountRow = Tables<'accounts'>
 export type TransactionRow = Tables<'transactions'>
@@ -133,13 +134,6 @@ export function deriveKpisAndExtras(
       monthExpense: round2(monthExpense)
     }
   }
-}
-
-function signedActivity(tx: Pick<TransactionRow, 'amount' | 'type'>): number {
-  if (tx.type === 'Income' || tx.type === 'Refund') return Math.abs(tx.amount)
-  if (tx.type === 'Expense') return -Math.abs(tx.amount)
-  // Transfer: raw signed amount (per the 2D forecast contract).
-  return tx.amount
 }
 
 function parseDate(iso: string): { year: number; month: number; day: number } | null {
