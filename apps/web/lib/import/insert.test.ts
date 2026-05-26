@@ -52,7 +52,8 @@ describe('insertImportedTransactions', () => {
       rows: [],
       householdId: 'hh-1',
       accountId: 'acc-1',
-      accountName: 'Chase Checking'
+      accountName: 'Chase Checking',
+      member: null
     })
     expect(result).toEqual({ inserted: 0, failed: [] })
   })
@@ -66,7 +67,8 @@ describe('insertImportedTransactions', () => {
       rows,
       householdId: 'hh-1',
       accountId: 'acc-1',
-      accountName: 'Chase Checking'
+      accountName: 'Chase Checking',
+      member: null
     })
     expect(result.inserted).toBe(3)
     expect(result.failed).toEqual([])
@@ -93,7 +95,8 @@ describe('insertImportedTransactions', () => {
       rows,
       householdId: 'hh-1',
       accountId: 'acc-1',
-      accountName: 'Chase Checking'
+      accountName: 'Chase Checking',
+      member: null
     })
     expect(result.inserted).toBe(2)
     expect(result.failed).toHaveLength(1)
@@ -112,6 +115,7 @@ describe('insertImportedTransactions', () => {
       householdId: 'hh-1',
       accountId: 'acc-1',
       accountName: 'Chase Checking',
+      member: null,
       onProgress: (done, total) => progress.push({ done, total })
     })
     expect(result.inserted).toBe(150)
@@ -137,7 +141,8 @@ describe('insertImportedTransactions', () => {
       rows: [row],
       householdId: 'hh-1',
       accountId: 'acc-1',
-      accountName: 'Chase Checking'
+      accountName: 'Chase Checking',
+      member: null
     })
     const batch = calls[0] as ReadonlyArray<Record<string, unknown>>
     expect(batch[0]).toEqual({
@@ -149,7 +154,75 @@ describe('insertImportedTransactions', () => {
       account: 'Chase Checking',
       account_id: 'acc-1',
       category_id: 'cat-1',
-      fingerprint: 'fp-abc'
+      fingerprint: 'fp-abc',
+      member: null
     })
+  })
+
+  it('writes member=null on every row when member arg is null', async () => {
+    const rows = [
+      makeRow({ description: 'row-a' }),
+      makeRow({ description: 'row-b' }),
+      makeRow({ description: 'row-c' })
+    ]
+    const { client, calls } = makeFakeSupabase([{ error: null }])
+    await insertImportedTransactions({
+      supabase: client,
+      rows,
+      householdId: 'hh-1',
+      accountId: 'acc-1',
+      accountName: 'Chase Checking',
+      member: null
+    })
+    const batch = calls[0] as ReadonlyArray<Record<string, unknown>>
+    expect(batch).toHaveLength(3)
+    for (const row of batch) {
+      expect(row.member).toBeNull()
+    }
+  })
+
+  it('writes member="Alexis Lopez" on every row when member arg is provided', async () => {
+    const rows = [
+      makeRow({ description: 'row-a' }),
+      makeRow({ description: 'row-b' }),
+      makeRow({ description: 'row-c' })
+    ]
+    const { client, calls } = makeFakeSupabase([{ error: null }])
+    await insertImportedTransactions({
+      supabase: client,
+      rows,
+      householdId: 'hh-1',
+      accountId: 'acc-1',
+      accountName: 'Chase Checking',
+      member: 'Alexis Lopez'
+    })
+    const batch = calls[0] as ReadonlyArray<Record<string, unknown>>
+    expect(batch).toHaveLength(3)
+    for (const row of batch) {
+      expect(row.member).toBe('Alexis Lopez')
+    }
+  })
+
+  it('preserves member arg when falling back to per-row inserts', async () => {
+    const rows = [makeRow({ description: 'row-0' }), makeRow({ description: 'row-1' })]
+    const { client, calls } = makeFakeSupabase([
+      { error: { message: 'batch boom' } },
+      { error: null },
+      { error: null }
+    ])
+    await insertImportedTransactions({
+      supabase: client,
+      rows,
+      householdId: 'hh-1',
+      accountId: 'acc-1',
+      accountName: 'Chase Checking',
+      member: 'Family'
+    })
+    // First call = the bulk batch payload; subsequent calls = per-row payloads.
+    expect(calls).toHaveLength(3)
+    const perRowA = calls[1] as Record<string, unknown>
+    const perRowB = calls[2] as Record<string, unknown>
+    expect(perRowA.member).toBe('Family')
+    expect(perRowB.member).toBe('Family')
   })
 })

@@ -6,12 +6,14 @@ import { useAccounts } from '@/lib/data/accounts'
 import { useBillMatchRules } from '@/lib/data/billMatchRules'
 import { useBills } from '@/lib/data/bills'
 import { useCategories } from '@/lib/data/categories'
+import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { detectAdapter } from '@/lib/import/adapters'
 import type { ImportRow } from '@/lib/import/adapters/types'
 import { categorize, type CategorizeBill, type CategorizeCategory, type CategorizeRule } from '@/lib/import/categorize'
 import { parseCsv } from '@/lib/import/csv'
 import { dedup } from '@/lib/import/dedup'
 import { computeFingerprintsBatch } from '@/lib/import/fingerprint'
+import { buildMemberOptions } from '@/lib/ledger/memberOptions'
 import { cn } from '@/lib/cn'
 import { createClient } from '@/lib/supabase/browser'
 import type { ImportPayload, SkippedReport } from './ImportFlow'
@@ -36,13 +38,18 @@ export interface UploadStepProps {
   onParsed: (payload: ImportPayload) => void
 }
 
+/** Sentinel value used by the member <select> to represent null (Unassigned). */
+const MEMBER_UNASSIGNED_SENTINEL = '__unassigned__'
+
 export function UploadStep({ onParsed }: UploadStepProps) {
   const accountsQ = useAccounts()
   const billsQ = useBills()
   const rulesQ = useBillMatchRules()
   const categoriesQ = useCategories()
+  const membersQ = useHouseholdMembersList()
 
   const [selectedAccountId, setSelectedAccountId] = useState<string>('')
+  const [selectedMember, setSelectedMember] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [stage, setStage] = useState<Stage>({ kind: 'idle' })
   const [error, setError] = useState<ParseError | null>(null)
@@ -55,6 +62,8 @@ export function UploadStep({ onParsed }: UploadStepProps) {
 
   const selectedAccount = (accountsQ.data ?? []).find(a => a.id === selectedAccountId)
   const accountName = selectedAccount?.name ?? ''
+
+  const memberOptions = buildMemberOptions(membersQ.data ?? [], [])
 
   function resetStatus() {
     setError(null)
@@ -253,7 +262,8 @@ export function UploadStep({ onParsed }: UploadStepProps) {
         adapterName: adapter.name,
         parsedRows: enrichedNew,
         duplicateRows,
-        skipped: skipped.map(s => ({ rowIndex: s.rowIndex, reason: s.reason }) satisfies SkippedReport)
+        skipped: skipped.map(s => ({ rowIndex: s.rowIndex, reason: s.reason }) satisfies SkippedReport),
+        member: selectedMember
       }
 
       setStage({ kind: 'idle' })
@@ -269,34 +279,68 @@ export function UploadStep({ onParsed }: UploadStepProps) {
 
   return (
     <div className="rounded-xl border border-rule bg-surface p-6 shadow-sm space-y-5">
-      <label className="block">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Account</span>
-        {accountsQ.isLoading ? (
-          <p className="text-sm italic text-muted">Loading accounts…</p>
-        ) : accountsQ.error ? (
-          <p role="alert" className="text-sm text-red-700">
-            Failed to load accounts: {accountsQ.error.message}
-          </p>
-        ) : (
-          <select
-            value={selectedAccountId}
-            onChange={e => {
-              setSelectedAccountId(e.target.value)
-              resetStatus()
-            }}
-            disabled={isBusy}
-            className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
-            aria-label="Account"
-          >
-            <option value="">Select an account…</option>
-            {(accountsQ.data ?? []).map(a => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Account</span>
+          {accountsQ.isLoading ? (
+            <p className="text-sm italic text-muted">Loading accounts…</p>
+          ) : accountsQ.error ? (
+            <p role="alert" className="text-sm text-red-700">
+              Failed to load accounts: {accountsQ.error.message}
+            </p>
+          ) : (
+            <select
+              value={selectedAccountId}
+              onChange={e => {
+                setSelectedAccountId(e.target.value)
+                resetStatus()
+              }}
+              disabled={isBusy}
+              className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+              aria-label="Account"
+            >
+              <option value="">Select an account…</option>
+              {(accountsQ.data ?? []).map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Member</span>
+          {membersQ.isLoading ? (
+            <p className="text-sm italic text-muted">Loading members…</p>
+          ) : membersQ.error ? (
+            <p role="alert" className="text-sm text-red-700">
+              Failed to load members: {membersQ.error.message}
+            </p>
+          ) : (
+            <select
+              value={selectedMember ?? MEMBER_UNASSIGNED_SENTINEL}
+              onChange={e => {
+                const raw = e.target.value
+                setSelectedMember(raw === MEMBER_UNASSIGNED_SENTINEL ? null : raw)
+                resetStatus()
+              }}
+              disabled={isBusy}
+              className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+              aria-label="Member"
+            >
+              {memberOptions.map(opt => (
+                <option
+                  key={opt.value ?? MEMBER_UNASSIGNED_SENTINEL}
+                  value={opt.value ?? MEMBER_UNASSIGNED_SENTINEL}
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </label>
+      </div>
 
       <div>
         <input
@@ -335,7 +379,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
               <span>
                 {accountSelected
                   ? 'Drag a CSV here, or click to choose a file'
-                  : 'Pick an account first'}
+                  : 'Pick an account to enable upload (member is optional)'}
               </span>
             </>
           )}

@@ -22,6 +22,8 @@ export interface ImportPayload {
   parsedRows: ReadonlyArray<ImportRow>
   duplicateRows: ReadonlyArray<ImportRow>
   skipped: ReadonlyArray<SkippedReport>
+  /** Pre-selected member to assign to every imported row. null = unassigned. */
+  member: string | null
 }
 
 function deriveDateRange(rows: ReadonlyArray<ImportRow>): { start: string; end: string } {

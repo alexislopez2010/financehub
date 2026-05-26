@@ -82,6 +82,7 @@ export function PreviewStep({ payload, onBack, onComplete }: PreviewStepProps) {
         householdId: LOPEZ_HOUSEHOLD_ID,
         accountId: payload.accountId,
         accountName: payload.accountName,
+        member: payload.member,
         onProgress: (done, total) => setInserting({ done, total })
       })
       onComplete(result)

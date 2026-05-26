@@ -9,6 +9,7 @@ const accountsMock = vi.fn()
 const billsMock = vi.fn()
 const billMatchRulesMock = vi.fn()
 const categoriesMock = vi.fn()
+const membersMock = vi.fn()
 
 vi.mock('@/lib/data/accounts', () => ({
   useAccounts: () => accountsMock()
@@ -21,6 +22,9 @@ vi.mock('@/lib/data/billMatchRules', () => ({
 }))
 vi.mock('@/lib/data/categories', () => ({
   useCategories: () => categoriesMock()
+}))
+vi.mock('@/lib/data/householdMembers', () => ({
+  useHouseholdMembersList: () => membersMock()
 }))
 
 // Supabase fetch returns no pre-existing fingerprints by default.
@@ -59,6 +63,14 @@ function setReady(): void {
   billsMock.mockReturnValue({ data: [], isLoading: false, error: null })
   billMatchRulesMock.mockReturnValue({ data: [], isLoading: false, error: null })
   categoriesMock.mockReturnValue({ data: [], isLoading: false, error: null })
+  membersMock.mockReturnValue({
+    data: [
+      { user_id: 'u-1', display_name: 'Alexis Lopez', role: 'owner' },
+      { user_id: 'u-2', display_name: 'Marilyn Lopez', role: 'member' }
+    ],
+    isLoading: false,
+    error: null
+  })
 }
 
 beforeEach(() => {
@@ -66,6 +78,7 @@ beforeEach(() => {
   billsMock.mockReset()
   billMatchRulesMock.mockReset()
   categoriesMock.mockReset()
+  membersMock.mockReset()
   supabaseFingerprintData.rows = []
   setReady()
 })
@@ -89,7 +102,7 @@ describe('<UploadStep>', () => {
     render(withQueryClient(<UploadStep onParsed={() => {}} />))
     const dropzone = screen.getByRole('button')
     expect(dropzone).toBeDisabled()
-    expect(dropzone).toHaveTextContent(/pick an account first/i)
+    expect(dropzone).toHaveTextContent(/pick an account to enable upload/i)
     await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
     expect(dropzone).not.toBeDisabled()
     expect(dropzone).toHaveTextContent(/drag a csv here/i)
@@ -117,10 +130,51 @@ describe('<UploadStep>', () => {
     expect(payload).toMatchObject({
       accountId: 'acc-1',
       accountName: 'Chase Checking',
-      adapterName: 'Chase'
+      adapterName: 'Chase',
+      member: null
     })
     expect(payload.parsedRows.length).toBe(2)
     expect(payload.duplicateRows.length).toBe(0)
+  })
+
+  it('renders the member dropdown with members + Family + Unassigned options', () => {
+    render(withQueryClient(<UploadStep onParsed={() => {}} />))
+    const memberSelect = screen.getByLabelText('Member') as HTMLSelectElement
+    expect(memberSelect).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '(Unassigned)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Family' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Alexis Lopez' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Marilyn Lopez' })).toBeInTheDocument()
+  })
+
+  it('forwards the selected member through the payload', async () => {
+    const user = userEvent.setup()
+    const onParsed = vi.fn()
+    render(withQueryClient(<UploadStep onParsed={onParsed} />))
+
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+    await user.selectOptions(screen.getByLabelText('Member'), 'Marilyn Lopez')
+
+    const csvText = [
+      'Transaction Date,Post Date,Description,Category,Type,Amount,Memo',
+      '04/12/2026,04/13/2026,STARBUCKS #4321,Food & Drink,Sale,-5.75,'
+    ].join('\n')
+    const file = new File([csvText], 'chase.csv', { type: 'text/csv' })
+
+    await user.upload(screen.getByLabelText('CSV file'), file)
+
+    await waitFor(() => expect(onParsed).toHaveBeenCalledTimes(1))
+    expect(onParsed.mock.calls[0]?.[0]?.member).toBe('Marilyn Lopez')
+  })
+
+  it('keeps dropzone enabled when account is set even if member stays unassigned', async () => {
+    const user = userEvent.setup()
+    render(withQueryClient(<UploadStep onParsed={() => {}} />))
+    const dropzone = screen.getByRole('button')
+    expect(dropzone).toBeDisabled()
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+    // Member is left at default '(Unassigned)' (null).
+    expect(dropzone).not.toBeDisabled()
   })
 
   it('shows an error for an unrecognized CSV format', async () => {

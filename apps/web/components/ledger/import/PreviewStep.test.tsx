@@ -43,6 +43,7 @@ function makePayload(overrides: Partial<ImportPayload> = {}): ImportPayload {
     parsedRows: [],
     duplicateRows: [],
     skipped: [],
+    member: null,
     ...overrides
   }
 }

@@ -14,7 +14,8 @@ vi.mock('./UploadStep', () => ({
           adapterName: 'Chase',
           parsedRows: [],
           duplicateRows: [],
-          skipped: []
+          skipped: [],
+          member: null
         })
       }
     >

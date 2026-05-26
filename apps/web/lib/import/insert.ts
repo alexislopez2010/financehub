@@ -28,6 +28,12 @@ export interface InsertArgs {
   householdId: string
   accountId: string
   accountName: string
+  /**
+   * Pre-selected member to write into the `member` column on every imported
+   * row. null = unassigned (the existing data default). 'Family' is the
+   * literal string used for shared expenses.
+   */
+  member: string | null
   /** Optional progress callback fired after each batch resolves. */
   onProgress?: (inserted: number, total: number) => void
 }
@@ -42,13 +48,15 @@ interface TransactionInsertRow {
   account_id: string
   category_id: string | null
   fingerprint: string
+  member: string | null
 }
 
 function toInsertRow(
   r: ImportRow,
   householdId: string,
   accountId: string,
-  accountName: string
+  accountName: string,
+  member: string | null
 ): TransactionInsertRow {
   return {
     household_id: householdId,
@@ -59,7 +67,8 @@ function toInsertRow(
     account: accountName,
     account_id: accountId,
     category_id: r.categoryId,
-    fingerprint: r.fingerprint
+    fingerprint: r.fingerprint,
+    member
   }
 }
 
@@ -74,12 +83,15 @@ function toInsertRow(
  *
  * Does NOT set:
  *   - category (text) — new schema uses category_id only on insert
- *   - member, payment_method, notes — left null
+ *   - payment_method, notes — left null
  *   - bill_id — no transactions.bill_id column; bill linkage stays
  *     informational at this stage (the bills surface matches by name+date)
+ *
+ * `member` IS set per call from args.member (per-file default chosen at
+ * upload time). null = unassigned.
  */
 export async function insertImportedTransactions(args: InsertArgs): Promise<InsertResult> {
-  const { supabase, rows, householdId, accountId, accountName, onProgress } = args
+  const { supabase, rows, householdId, accountId, accountName, member, onProgress } = args
 
   if (rows.length === 0) {
     return { inserted: 0, failed: [] }
@@ -90,7 +102,7 @@ export async function insertImportedTransactions(args: InsertArgs): Promise<Inse
 
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const batch = rows.slice(i, i + CHUNK_SIZE)
-    const payload = batch.map(r => toInsertRow(r, householdId, accountId, accountName))
+    const payload = batch.map(r => toInsertRow(r, householdId, accountId, accountName, member))
 
     const { error } = await supabase.from('transactions').insert(payload)
 
@@ -99,7 +111,7 @@ export async function insertImportedTransactions(args: InsertArgs): Promise<Inse
       for (const r of batch) {
         const { error: oneErr } = await supabase
           .from('transactions')
-          .insert(toInsertRow(r, householdId, accountId, accountName))
+          .insert(toInsertRow(r, householdId, accountId, accountName, member))
         if (oneErr) {
           failed.push({ row: r, error: oneErr.message })
         } else {
