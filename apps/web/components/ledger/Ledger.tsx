@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Upload } from 'lucide-react'
+import { Upload, Sparkles } from 'lucide-react'
 import { useTransactions, useUpdateTransaction, useDeleteTransaction, useUnpairTransferRow } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
 import { useHouseholdMembersList } from '@/lib/data/householdMembers'
@@ -15,6 +15,7 @@ import { LedgerFooter } from './LedgerFooter'
 import { BulkActionsBar } from './BulkActionsBar'
 import { PromoteToBillDialog } from './PromoteToBillDialog'
 import { ConvertToTransferDialog } from './ConvertToTransferDialog'
+import { AutoCategorizeDialog } from './AutoCategorizeDialog'
 import type { DemoteTransferTarget } from './RowActionsMenu'
 import type { Tables } from '@/lib/supabase/database.types'
 
@@ -33,6 +34,7 @@ export function Ledger() {
   const [unpairingId, setUnpairingId] = useState<string | null>(null)
   const [bulkAssigning, setBulkAssigning] = useState(false)
   const [bulkAssigningCategory, setBulkAssigningCategory] = useState(false)
+  const [autoCatOpen, setAutoCatOpen] = useState(false)
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -172,13 +174,23 @@ export function Ledger() {
           <h1 className="text-2xl font-bold text-ink">Ledger</h1>
           <p className="text-sm text-muted">All transactions, filterable. Bulk select + delete enabled.</p>
         </div>
-        <Link
-          href="/ledger/import"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-sm text-ink hover:bg-bg transition shrink-0"
-        >
-          <Upload size={14} aria-hidden="true" />
-          Import
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setAutoCatOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-sm text-ink hover:bg-bg transition"
+          >
+            <Sparkles size={14} aria-hidden="true" />
+            Auto-categorize
+          </button>
+          <Link
+            href="/ledger/import"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-sm text-ink hover:bg-bg transition"
+          >
+            <Upload size={14} aria-hidden="true" />
+            Import
+          </Link>
+        </div>
       </header>
 
       <div className="bg-surface border border-rule rounded-xl p-3 sm:p-4 shadow-sm">
@@ -249,6 +261,11 @@ export function Ledger() {
         onOpenChange={o => { if (!o) setConvertingTx(null) }}
         sourceTransaction={convertingTx}
         allTransactions={txQ.data ?? []}
+      />
+
+      <AutoCategorizeDialog
+        open={autoCatOpen}
+        onOpenChange={setAutoCatOpen}
       />
     </div>
   )
