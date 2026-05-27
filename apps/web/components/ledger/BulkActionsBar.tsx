@@ -1,7 +1,7 @@
 'use client'
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronDown, Trash2, UserSquare2, X } from 'lucide-react'
+import { ChevronDown, Tag, Trash2, UserSquare2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useDeleteTransaction } from '@/lib/data/transactions'
 import { buildMemberOptions } from '@/lib/ledger/memberOptions'
@@ -17,6 +17,12 @@ export interface BulkActionsBarProps {
   onAssignMember?: (member: string | null) => void | Promise<void>
   /** When true, the Assign-member button shows a loader and is disabled. */
   isAssigning?: boolean
+  /** Category roster from `useCategories`. */
+  categories?: ReadonlyArray<{ id: string; name: string }>
+  /** Apply the chosen category to every selected row. `null` clears the assignment. */
+  onAssignCategory?: (categoryId: string | null) => void | Promise<void>
+  /** When true, the Assign-category button shows a loader and is disabled. */
+  isAssigningCategory?: boolean
 }
 
 export function BulkActionsBar({
@@ -25,7 +31,10 @@ export function BulkActionsBar({
   onCompleted,
   members,
   onAssignMember,
-  isAssigning = false
+  isAssigning = false,
+  categories,
+  onAssignCategory,
+  isAssigningCategory = false
 }: BulkActionsBarProps) {
   const deleteTx = useDeleteTransaction()
   const [isDeleting, setIsDeleting] = useState(false)
@@ -134,6 +143,64 @@ export function BulkActionsBar({
                         )}
                       >
                         {o.label}
+                      </DropdownMenu.Item>
+                    ))}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            )}
+            {onAssignCategory && (
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    disabled={isAssigningCategory}
+                    aria-label="Assign category to selected rows"
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg',
+                      'text-white text-xs font-medium px-3 py-1.5',
+                      'hover:bg-white/10',
+                      'disabled:opacity-60 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    <Tag size={12} />
+                    {isAssigningCategory ? 'Assigning…' : 'Assign category'}
+                    <ChevronDown size={12} className="ml-0.5" />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    align="end"
+                    sideOffset={4}
+                    className={cn(
+                      'z-50 min-w-[200px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+                      'data-[state=open]:animate-in data-[state=open]:fade-in-0'
+                    )}
+                  >
+                    <DropdownMenu.Item
+                      key="__uncategorized__"
+                      onSelect={() => {
+                        void onAssignCategory(null)
+                      }}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
+                        'text-muted italic hover:bg-gray-100'
+                      )}
+                    >
+                      (Uncategorized)
+                    </DropdownMenu.Item>
+                    {(categories ?? []).map(c => (
+                      <DropdownMenu.Item
+                        key={c.id}
+                        onSelect={() => {
+                          void onAssignCategory(c.id)
+                        }}
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
+                          'text-ink hover:bg-gray-100'
+                        )}
+                      >
+                        {c.name}
                       </DropdownMenu.Item>
                     ))}
                   </DropdownMenu.Content>

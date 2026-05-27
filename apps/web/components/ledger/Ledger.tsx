@@ -32,6 +32,7 @@ export function Ledger() {
   const [convertingTx, setConvertingTx] = useState<TxRow | null>(null)
   const [unpairingId, setUnpairingId] = useState<string | null>(null)
   const [bulkAssigning, setBulkAssigning] = useState(false)
+  const [bulkAssigningCategory, setBulkAssigningCategory] = useState(false)
 
   // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
   useEffect(() => {
@@ -111,6 +112,22 @@ export function Ledger() {
       setSelectedIds(new Set())
     } finally {
       setBulkAssigning(false)
+    }
+  }
+
+  async function handleBulkAssignCategory(categoryId: string | null) {
+    if (selectedIds.size === 0) return
+    const ids = [...selectedIds]
+    setBulkAssigningCategory(true)
+    try {
+      // Per-row optimistic updates via the hook. Run in parallel; one row
+      // failing doesn't short-circuit the rest (Promise.allSettled).
+      await Promise.allSettled(
+        ids.map(id => updateTx.mutateAsync({ id, patch: { category_id: categoryId } }))
+      )
+      setSelectedIds(new Set())
+    } finally {
+      setBulkAssigningCategory(false)
     }
   }
 
@@ -201,6 +218,9 @@ export function Ledger() {
         members={membersQ.data ?? []}
         onAssignMember={handleBulkAssignMember}
         isAssigning={bulkAssigning}
+        categories={categoriesQ.data ?? []}
+        onAssignCategory={handleBulkAssignCategory}
+        isAssigningCategory={bulkAssigningCategory}
       />
 
       <FilterSheet
