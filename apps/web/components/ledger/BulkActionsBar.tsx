@@ -146,8 +146,10 @@ export function BulkActionsBar({
                   <DropdownMenu.Content
                     align="end"
                     sideOffset={4}
+                    collisionPadding={8}
                     className={cn(
                       'z-50 min-w-[200px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+                      'max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto',
                       'data-[state=open]:animate-in data-[state=open]:fade-in-0'
                     )}
                   >
@@ -194,8 +196,13 @@ export function BulkActionsBar({
                   <DropdownMenu.Content
                     align="end"
                     sideOffset={4}
+                    collisionPadding={8}
                     className={cn(
                       'z-50 min-w-[200px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+                      // Constrain to available viewport height + enable scroll so long
+                      // category lists (Expense + Income sections) don't clip off-screen
+                      // when the bulk action bar opens the menu upward.
+                      'max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto',
                       'data-[state=open]:animate-in data-[state=open]:fade-in-0'
                     )}
                   >

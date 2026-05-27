@@ -98,8 +98,13 @@ export function CategoryFilter({ value, onChange }: CategoryFilterProps) {
         <DropdownMenu.Content
           align="start"
           sideOffset={4}
+          collisionPadding={8}
           className={cn(
-            'z-50 min-w-[220px] max-h-[360px] overflow-y-auto rounded-lg bg-surface border border-rule shadow-lg p-1',
+            'z-50 min-w-[220px] rounded-lg bg-surface border border-rule shadow-lg p-1',
+            // Use Radix's viewport-aware available height (caps at viewport edge with
+            // padding) plus a smaller hard ceiling — whichever is smaller. Avoids
+            // clipping when the chip is opened on a small screen or near the bottom.
+            'max-h-[min(60vh,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0'
           )}
         >
