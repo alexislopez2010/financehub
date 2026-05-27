@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Upload, Sparkles } from 'lucide-react'
@@ -60,6 +60,10 @@ export function Ledger() {
     if (!filters.q) return true
     return (tx.description ?? '').toLowerCase().includes(filters.q.toLowerCase())
   })
+
+  // Ids of currently-visible (filtered) transactions, used by the master
+  // Select-all checkbox to flip the selection in one click.
+  const allTxIds = useMemo(() => filtered.map(t => t.id), [filtered])
 
   // Category options for the inline select
   const categoryOptions = (categoriesQ.data ?? []).map(c => ({ value: c.id, label: c.name }))
@@ -214,6 +218,8 @@ export function Ledger() {
           transactions={filtered}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          txIds={allTxIds}
+          onSelectAll={setSelectedIds}
           categoryOptions={categoryOptions}
           members={membersQ.data ?? []}
           onEditDescription={handleEditDescription}
