@@ -118,12 +118,21 @@ export function Ledger() {
   async function handleBulkAssignCategory(categoryId: string | null) {
     if (selectedIds.size === 0) return
     const ids = [...selectedIds]
+    // Mirror handleEditCategory: also write the category TEXT column so the
+    // row's read-only display (which reads tx.category, not the joined name)
+    // reflects the change immediately without requiring a refresh + re-click.
+    const categoryName = categoryId
+      ? categoriesQ.data?.find(c => c.id === categoryId)?.name ?? null
+      : null
     setBulkAssigningCategory(true)
     try {
       // Per-row optimistic updates via the hook. Run in parallel; one row
       // failing doesn't short-circuit the rest (Promise.allSettled).
       await Promise.allSettled(
-        ids.map(id => updateTx.mutateAsync({ id, patch: { category_id: categoryId } }))
+        ids.map(id => updateTx.mutateAsync({
+          id,
+          patch: { category_id: categoryId, category: categoryName }
+        }))
       )
       setSelectedIds(new Set())
     } finally {
