@@ -112,8 +112,10 @@ describe('<BulkActionsBar> assign-member action', () => {
 })
 
 const CATEGORIES = [
-  { id: 'cat-1', name: 'Groceries' },
-  { id: 'cat-2', name: 'Utilities' }
+  { id: 'cat-1', name: 'Groceries', type: 'expense' },
+  { id: 'cat-2', name: 'Utilities', type: 'expense' },
+  { id: 'cat-3', name: 'Bank Fees', type: 'expense' },
+  { id: 'cat-inc', name: 'Salary', type: 'income' }
 ]
 
 describe('<BulkActionsBar> assign-category action', () => {
@@ -144,7 +146,7 @@ describe('<BulkActionsBar> assign-category action', () => {
     expect(screen.queryByRole('button', { name: /assign category/i })).toBeNull()
   })
 
-  it('opens the dropdown showing (Uncategorized) plus each category', async () => {
+  it('opens the dropdown showing (Uncategorized) plus each category grouped by type', async () => {
     const user = userEvent.setup()
     render(
       <BulkActionsBar
@@ -161,6 +163,75 @@ describe('<BulkActionsBar> assign-category action', () => {
     expect(await screen.findByRole('menuitem', { name: /\(Uncategorized\)/ })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Groceries' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Utilities' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Bank Fees' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Salary' })).toBeInTheDocument()
+  })
+
+  it('renders EXPENSE and INCOME section labels with items alphabetical inside each section', async () => {
+    const user = userEvent.setup()
+    render(
+      <BulkActionsBar
+        selectedIds={['t1']}
+        onCancel={() => {}}
+        onCompleted={() => {}}
+        categories={CATEGORIES}
+        onAssignCategory={() => {}}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /assign category to selected rows/i }))
+
+    // Radix renders Label as a non-menuitem element with the section text.
+    expect(await screen.findByText('Expense')).toBeInTheDocument()
+    expect(screen.getByText('Income')).toBeInTheDocument()
+
+    const items = screen.getAllByRole('menuitem')
+    // First item is (Uncategorized) — kept at the top.
+    expect(items[0]?.textContent).toMatch(/\(Uncategorized\)/)
+
+    // Remaining items: Expense section alpha-sorted, then Income section.
+    const rest = items.slice(1).map(el => el.textContent?.trim())
+    expect(rest).toEqual(['Bank Fees', 'Groceries', 'Utilities', 'Salary'])
+  })
+
+  it('hides the INCOME section when no income categories are supplied', async () => {
+    const user = userEvent.setup()
+    render(
+      <BulkActionsBar
+        selectedIds={['t1']}
+        onCancel={() => {}}
+        onCompleted={() => {}}
+        categories={[{ id: 'e1', name: 'Groceries', type: 'expense' }]}
+        onAssignCategory={() => {}}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /assign category to selected rows/i }))
+
+    expect(await screen.findByText('Expense')).toBeInTheDocument()
+    expect(screen.queryByText('Income')).toBeNull()
+  })
+
+  it('calls onAssignCategory with the picked income-section category id', async () => {
+    const onAssignCategory = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <BulkActionsBar
+        selectedIds={['t1']}
+        onCancel={() => {}}
+        onCompleted={() => {}}
+        categories={CATEGORIES}
+        onAssignCategory={onAssignCategory}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /assign category to selected rows/i }))
+    const item = await screen.findByRole('menuitem', { name: 'Salary' })
+    await user.click(item)
+
+    expect(onAssignCategory).toHaveBeenCalledTimes(1)
+    expect(onAssignCategory).toHaveBeenCalledWith('cat-inc')
   })
 
   it('calls onAssignCategory(null) when picking (Uncategorized)', async () => {

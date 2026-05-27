@@ -16,7 +16,14 @@ export interface CategoryFilterProps {
   onChange: (next: string | null | undefined) => void
 }
 
+interface CategoryItem {
+  id: string
+  name: string
+  type?: string | null
+}
+
 const SEARCH_THRESHOLD = 15
+const SECTION_LABEL_CLASS = 'px-3 py-1.5 text-xs uppercase tracking-wider text-muted'
 
 export function CategoryFilter({ value, onChange }: CategoryFilterProps) {
   const categoriesQ = useCategories()
@@ -28,6 +35,20 @@ export function CategoryFilter({ value, onChange }: CategoryFilterProps) {
     const q = query.trim().toLowerCase()
     return categories.filter(c => c.name.toLowerCase().includes(q))
   }, [categories, query])
+
+  const grouped = useMemo(() => {
+    const expense: CategoryItem[] = []
+    const income: CategoryItem[] = []
+    for (const c of filtered) {
+      if (c.type === 'income') income.push(c)
+      else expense.push(c)
+    }
+    const byName = (a: CategoryItem, b: CategoryItem) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    expense.sort(byName)
+    income.sort(byName)
+    return { expense, income }
+  }, [filtered])
 
   const showSearch = categories.length > SEARCH_THRESHOLD
 
@@ -110,15 +131,42 @@ export function CategoryFilter({ value, onChange }: CategoryFilterProps) {
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-xs text-muted">No matches</div>
           ) : (
-            filtered.map(c => (
-              <DropdownMenu.Item
-                key={c.id}
-                onSelect={() => onChange(c.id)}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
-              >
-                {c.name}
-              </DropdownMenu.Item>
-            ))
+            <>
+              {grouped.expense.length > 0 && (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-rule" />
+                  <DropdownMenu.Label className={SECTION_LABEL_CLASS}>
+                    Expense
+                  </DropdownMenu.Label>
+                  {grouped.expense.map(c => (
+                    <DropdownMenu.Item
+                      key={c.id}
+                      onSelect={() => onChange(c.id)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
+                    >
+                      {c.name}
+                    </DropdownMenu.Item>
+                  ))}
+                </>
+              )}
+              {grouped.income.length > 0 && (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-rule" />
+                  <DropdownMenu.Label className={SECTION_LABEL_CLASS}>
+                    Income
+                  </DropdownMenu.Label>
+                  {grouped.income.map(c => (
+                    <DropdownMenu.Item
+                      key={c.id}
+                      onSelect={() => onChange(c.id)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
+                    >
+                      {c.name}
+                    </DropdownMenu.Item>
+                  ))}
+                </>
+              )}
+            </>
           )}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

@@ -2,10 +2,16 @@
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, Tag, Trash2, UserSquare2, X } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useDeleteTransaction } from '@/lib/data/transactions'
 import { buildMemberOptions } from '@/lib/ledger/memberOptions'
 import { cn } from '@/lib/cn'
+
+interface CategoryOption {
+  id: string
+  name: string
+  type?: string | null
+}
 
 export interface BulkActionsBarProps {
   selectedIds: ReadonlyArray<string>
@@ -18,12 +24,14 @@ export interface BulkActionsBarProps {
   /** When true, the Assign-member button shows a loader and is disabled. */
   isAssigning?: boolean
   /** Category roster from `useCategories`. */
-  categories?: ReadonlyArray<{ id: string; name: string }>
+  categories?: ReadonlyArray<CategoryOption>
   /** Apply the chosen category to every selected row. `null` clears the assignment. */
   onAssignCategory?: (categoryId: string | null) => void | Promise<void>
   /** When true, the Assign-category button shows a loader and is disabled. */
   isAssigningCategory?: boolean
 }
+
+const SECTION_LABEL_CLASS = 'px-3 py-1.5 text-xs uppercase tracking-wider text-muted'
 
 export function BulkActionsBar({
   selectedIds,
@@ -39,6 +47,20 @@ export function BulkActionsBar({
   const deleteTx = useDeleteTransaction()
   const [isDeleting, setIsDeleting] = useState(false)
   const [confirming, setConfirming] = useState(false)
+
+  const grouped = useMemo(() => {
+    const expense: CategoryOption[] = []
+    const income: CategoryOption[] = []
+    for (const c of categories ?? []) {
+      if (c.type === 'income') income.push(c)
+      else expense.push(c)
+    }
+    const byName = (a: CategoryOption, b: CategoryOption) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    expense.sort(byName)
+    income.sort(byName)
+    return { expense, income }
+  }, [categories])
 
   if (selectedIds.length === 0) return null
 
@@ -189,20 +211,50 @@ export function BulkActionsBar({
                     >
                       (Uncategorized)
                     </DropdownMenu.Item>
-                    {(categories ?? []).map(c => (
-                      <DropdownMenu.Item
-                        key={c.id}
-                        onSelect={() => {
-                          void onAssignCategory(c.id)
-                        }}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
-                          'text-ink hover:bg-gray-100'
-                        )}
-                      >
-                        {c.name}
-                      </DropdownMenu.Item>
-                    ))}
+                    {grouped.expense.length > 0 && (
+                      <>
+                        <DropdownMenu.Separator className="my-1 h-px bg-rule" />
+                        <DropdownMenu.Label className={SECTION_LABEL_CLASS}>
+                          Expense
+                        </DropdownMenu.Label>
+                        {grouped.expense.map(c => (
+                          <DropdownMenu.Item
+                            key={c.id}
+                            onSelect={() => {
+                              void onAssignCategory(c.id)
+                            }}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
+                              'text-ink hover:bg-gray-100'
+                            )}
+                          >
+                            {c.name}
+                          </DropdownMenu.Item>
+                        ))}
+                      </>
+                    )}
+                    {grouped.income.length > 0 && (
+                      <>
+                        <DropdownMenu.Separator className="my-1 h-px bg-rule" />
+                        <DropdownMenu.Label className={SECTION_LABEL_CLASS}>
+                          Income
+                        </DropdownMenu.Label>
+                        {grouped.income.map(c => (
+                          <DropdownMenu.Item
+                            key={c.id}
+                            onSelect={() => {
+                              void onAssignCategory(c.id)
+                            }}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-2 text-sm rounded cursor-pointer outline-none',
+                              'text-ink hover:bg-gray-100'
+                            )}
+                          >
+                            {c.name}
+                          </DropdownMenu.Item>
+                        ))}
+                      </>
+                    )}
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
