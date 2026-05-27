@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 
 const mockListFactors = vi.fn()
 const mockChallengeAndVerify = vi.fn()
+const mockRefreshSession = vi.fn()
 const mockRouterReplace = vi.fn()
 const mockRouterRefresh = vi.fn()
 const mockSearchParamsGet = vi.fn()
@@ -11,6 +12,7 @@ const mockSearchParamsGet = vi.fn()
 vi.mock('@/lib/supabase/browser', () => ({
   createClient: () => ({
     auth: {
+      refreshSession: mockRefreshSession,
       mfa: {
         listFactors: mockListFactors,
         challengeAndVerify: mockChallengeAndVerify
@@ -33,6 +35,7 @@ const FACTORS_OK = {
 beforeEach(() => {
   mockListFactors.mockReset()
   mockChallengeAndVerify.mockReset()
+  mockRefreshSession.mockReset()
   mockRouterReplace.mockReset()
   mockRouterRefresh.mockReset()
   mockSearchParamsGet.mockReset()
@@ -75,10 +78,16 @@ describe('<MfaChallengeForm>', () => {
     expect(mockChallengeAndVerify).not.toHaveBeenCalled()
   })
 
-  it('verifies on submit and redirects to ?next= when provided', async () => {
+  it('verifies on submit and hard-navigates to ?next= after refreshSession', async () => {
     mockListFactors.mockResolvedValueOnce(FACTORS_OK)
     mockChallengeAndVerify.mockResolvedValueOnce({ data: {}, error: null })
+    mockRefreshSession.mockResolvedValueOnce({ data: { session: null }, error: null })
     mockSearchParamsGet.mockReturnValue('/ledger')
+    const assignSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign: assignSpy, href: 'http://localhost/' }
+    })
     render(<MfaChallengeForm />)
     await screen.findByLabelText(/6-digit code/i)
     const user = userEvent.setup()
@@ -87,8 +96,8 @@ describe('<MfaChallengeForm>', () => {
     await waitFor(() => {
       expect(mockChallengeAndVerify).toHaveBeenCalledWith({ factorId: 'f1', code: '123456' })
     })
-    expect(mockRouterRefresh).toHaveBeenCalled()
-    expect(mockRouterReplace).toHaveBeenCalledWith('/ledger')
+    expect(mockRefreshSession).toHaveBeenCalled()
+    expect(assignSpy).toHaveBeenCalledWith('/ledger')
   })
 
   it('shows the verify error message when verification fails', async () => {

@@ -80,8 +80,16 @@ export function MfaChallengeForm() {
         setVerifyError(error.message?.trim() || fallback)
         return
       }
-      router.refresh()
-      router.replace(next)
+      // Force the local JS session to pick up the new AAL2 access token
+      // (challengeAndVerify upgrades the session server-side, but the
+      // browser client's cached JWT may still claim AAL1 until refreshed).
+      // Without this + a hard navigation, middleware on the next request
+      // sometimes sees the stale AAL1 JWT and bounces back to /mfa/challenge,
+      // making the form appear to "do nothing" until the user reloads.
+      await supabase.auth.refreshSession()
+      // Hard navigation forces the browser to re-read auth cookies fresh,
+      // avoiding the Next.js client-router cookie-propagation race.
+      window.location.assign(next)
     } catch (e: unknown) {
       setVerifyError(
         e instanceof Error && e.message.trim().length > 0
