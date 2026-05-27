@@ -177,6 +177,76 @@ describe('deriveBalances', () => {
     expect(out.accounts[0]!.currentBalance).toBe(100)
   })
 
+  describe('debt account inversion (credit / loan)', () => {
+    it('Expense on a credit account INCREASES debt balance', () => {
+      // Charge of $50 (Expense, signed -$50) on a credit card starting at $1,000
+      // owed should leave the balance at $1,050 owed.
+      const out = deriveBalances({
+        accounts: [account({ id: 'c1', type: 'credit', starting_balance: 1000 })],
+        transactions: [tx({ amount: 50, type: 'Expense', account_id: 'c1' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(1050)
+      expect(out.accounts[0]!.activity).toBe(-50)  // signedActivity stays the same
+      expect(out.totalDebt).toBe(1050)
+    })
+
+    it('Income on a credit account DECREASES debt balance', () => {
+      // Payment of $200 (Income, signed +$200) on a credit card starting at $1,000
+      // owed should leave the balance at $800 owed.
+      const out = deriveBalances({
+        accounts: [account({ id: 'c1', type: 'credit', starting_balance: 1000 })],
+        transactions: [tx({ amount: 200, type: 'Income', account_id: 'c1' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(800)
+      expect(out.accounts[0]!.activity).toBe(200)
+      expect(out.totalDebt).toBe(800)
+    })
+
+    it('Refund on a credit account DECREASES debt balance', () => {
+      // Refund of $30 (signed +$30) on a credit card starting at $1,000 owed
+      // should leave the balance at $970 owed.
+      const out = deriveBalances({
+        accounts: [account({ id: 'c1', type: 'credit', starting_balance: 1000 })],
+        transactions: [tx({ amount: 30, type: 'Refund', account_id: 'c1' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(970)
+      expect(out.totalDebt).toBe(970)
+    })
+
+    it('loan accounts use the same inversion as credit', () => {
+      // Mortgage payment of $1,500 (Income, signed +$1,500) on a loan of $200,000
+      // should reduce balance to $198,500 owed.
+      const out = deriveBalances({
+        accounts: [account({ id: 'l1', type: 'loan', starting_balance: 200000 })],
+        transactions: [tx({ amount: 1500, type: 'Income', account_id: 'l1' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(198500)
+      expect(out.totalDebt).toBe(198500)
+    })
+
+    it('Transfer on a debt account inverts the raw signed amount', () => {
+      // A transfer leg of -$500 raw (debit on the cash side) recorded against a
+      // credit card starting at $1,000 owed should DECREASE debt by $500 (payment-
+      // like effect): 1000 - (-500) = 1500? No — inversion means a -$500 raw value
+      // INCREASES debt. Documented here so future readers see the math explicitly.
+      const out = deriveBalances({
+        accounts: [account({ id: 'c1', type: 'credit', starting_balance: 1000 })],
+        transactions: [tx({ id: 't1', amount: -500, type: 'Transfer', account_id: 'c1' })]
+      })
+      // 1000 - (-500) = 1500
+      expect(out.accounts[0]!.currentBalance).toBe(1500)
+    })
+
+    it('cash account math is unchanged by the debt inversion', () => {
+      // Regression guard: cash accounts still add signed activity directly.
+      const out = deriveBalances({
+        accounts: [account({ id: 'a1', type: 'checking', starting_balance: 1000 })],
+        transactions: [tx({ amount: 100, type: 'Expense', account_id: 'a1' })]
+      })
+      expect(out.accounts[0]!.currentBalance).toBe(900)
+    })
+  })
+
   describe('starting_balance_date filtering', () => {
     it('ignores transactions dated before the anchor', () => {
       const out = deriveBalances({

@@ -141,17 +141,19 @@ describe('deriveKpis', () => {
   })
 
   it('routes activity to the correct account based on account_id', () => {
+    // New convention: debt accounts use POSITIVE starting_balance for amount owed,
+    // and signed activity is INVERTED (charge increases debt, payment decreases it).
     const accounts = [
       mkAccount('cash1', 'checking', true, 2000),
-      mkAccount('debt1', 'credit', true, -1000),
+      mkAccount('debt1', 'credit', true, 1000),
     ]
     const transactions = [
       mkTx(500, 'Income', '2025-04-01', 'cash1'),   // adds to cash
-      mkTx(200, 'Expense', '2025-04-05', 'debt1'),  // adds to credit (more negative balance)
+      mkTx(200, 'Expense', '2025-04-05', 'debt1'),  // charge → debt INCREASES
     ]
     const result = deriveKpis({ accounts, transactions, today: TODAY })
     expect(result.cash).toBe(2500)
-    expect(result.debt).toBe(1200)  // abs(-1000 + -200) = 1200
+    expect(result.debt).toBe(1200)  // 1000 - (-200) = 1200 owed
   })
 
   it('ignores transactions for unknown account_ids', () => {
@@ -284,6 +286,42 @@ describe('deriveKpis', () => {
     const result = deriveKpis({ accounts, transactions, today: TODAY })
     // cash = 0 - 300 = -300; -300 / 300 = -1.0
     expect(result.monthsOfRunway).toBe(-1)
+  })
+
+  describe('debt-activity inversion', () => {
+    it('Expense on a credit account INCREASES the debt KPI', () => {
+      // Credit card starting at $5,000 owed; one $100 charge (Expense, -$100 signed)
+      // → debt should become $5,100 owed.
+      const accounts = [mkAccount('c1', 'credit', true, 5000)]
+      const transactions = [mkTx(100, 'Expense', '2025-04-01', 'c1')]
+      const result = deriveKpis({ accounts, transactions, today: TODAY })
+      expect(result.debt).toBe(5100)
+    })
+
+    it('Income on a credit account DECREASES the debt KPI', () => {
+      // Credit card starting at $5,000 owed; a $300 payment (Income, +$300 signed)
+      // → debt should become $4,700 owed.
+      const accounts = [mkAccount('c1', 'credit', true, 5000)]
+      const transactions = [mkTx(300, 'Income', '2025-04-01', 'c1')]
+      const result = deriveKpis({ accounts, transactions, today: TODAY })
+      expect(result.debt).toBe(4700)
+    })
+
+    it('Refund on a credit account DECREASES the debt KPI', () => {
+      const accounts = [mkAccount('c1', 'credit', true, 1000)]
+      const transactions = [mkTx(40, 'Refund', '2025-04-01', 'c1')]
+      const result = deriveKpis({ accounts, transactions, today: TODAY })
+      expect(result.debt).toBe(960)
+    })
+
+    it('loan account uses the same inversion as credit', () => {
+      // Loan at $200,000 owed; one $1,500 payment (Income, +$1,500 signed)
+      // → debt should become $198,500.
+      const accounts = [mkAccount('l1', 'loan', true, 200000)]
+      const transactions = [mkTx(1500, 'Income', '2025-04-01', 'l1')]
+      const result = deriveKpis({ accounts, transactions, today: TODAY })
+      expect(result.debt).toBe(198500)
+    })
   })
 
   it('deriveKpisAndExtras returns matching monthIncome and monthExpense', () => {

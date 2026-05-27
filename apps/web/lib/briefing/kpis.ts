@@ -44,8 +44,15 @@ const RUNWAY_CAP = 99
  *   + sum of signed activity (Income/Refund positive; Expense negative;
  *     Transfer uses raw signed amount).
  *
- * Debt = same calculation across credit/loan accounts, then abs'd
- * so the result is a positive number representing what's owed.
+ * Debt = sum across active credit/loan accounts of:
+ *   (starting_balance ?? 0)            // positive = amount owed
+ *   - sum of signed activity            // INVERTED vs cash: a charge
+ *                                       // (Expense, signed -$50) raises
+ *                                       // debt by $50; a payment (Income,
+ *                                       // +$100) lowers debt by $100.
+ *
+ * Result is then abs'd as a safety net so the tile never renders a
+ * negative number even if data is in a weird state.
  *
  * thisMonthNet = (Income + Refund) - Expense for the calendar month.
  *
@@ -97,7 +104,12 @@ export function deriveKpisAndExtras(
     if (tx.account_id) {
       const signed = signedActivity(tx)
       if (cashAccountIds.has(tx.account_id)) cash += signed
-      else if (debtAccountIds.has(tx.account_id)) debt += signed
+      // DEBT accounts move INVERSELY to signed activity:
+      //   charge (Expense, -$50 signed)  → debt +$50 owed
+      //   payment (Income, +$100 signed) → debt -$100 owed
+      //   refund (Refund, +$30 signed)   → debt -$30 owed
+      // See balances.ts for the same inversion on per-account balance math.
+      else if (debtAccountIds.has(tx.account_id)) debt -= signed
     }
     const d = parseDate(tx.date)
     if (!d) continue

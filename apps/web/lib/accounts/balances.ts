@@ -80,7 +80,12 @@ export function deriveBalances(input: {
     const activity = activityByAccount.get(a.id)
     const sum = activity?.sum ?? 0
     const count = activity?.count ?? 0
-    const currentBalance = round2(starting + sum)
+    // For DEBT accounts (credit/loan), signed activity flows in the
+    // opposite direction from the balance: a charge (Expense, signed -$50)
+    // INCREASES debt by $50; a payment (Income, +$100) DECREASES debt by $100.
+    // For CASH accounts, signed activity moves balance directly.
+    const isDebt = a.type ? DEBT_TYPES.has(a.type) : false
+    const currentBalance = round2(isDebt ? starting - sum : starting + sum)
     accounts.push({
       accountId: a.id,
       name: a.name,
