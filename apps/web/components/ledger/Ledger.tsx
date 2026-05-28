@@ -8,6 +8,7 @@ import { useTransactions, useUpdateTransaction, useDeleteTransaction, useUnpairT
 import { useCategories } from '@/lib/data/categories'
 import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { parseFiltersFromUrl, serializeFiltersToUrl, toDataFilters, type LedgerFilters } from '@/lib/ledger/filters'
+import { parseSort, serializeSort, sortTransactions, type SortState } from '@/lib/ledger/sortTransactions'
 import { FilterChips } from './FilterChips'
 import { FilterSheet } from './FilterSheet'
 import { TransactionList } from './TransactionList'
@@ -25,8 +26,10 @@ export function Ledger() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initial = parseFiltersFromUrl(new URLSearchParams(searchParams?.toString() ?? ''))
+  const initialSort = parseSort(searchParams?.get('sort') ?? null, searchParams?.get('dir') ?? null)
 
   const [filters, setFilters] = useState<LedgerFilters>(initial)
+  const [sort, setSort] = useState<SortState | null>(initialSort)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [promotingTx, setPromotingTx] = useState<TxRow | null>(null)
@@ -36,12 +39,14 @@ export function Ledger() {
   const [bulkAssigningCategory, setBulkAssigningCategory] = useState(false)
   const [autoCatOpen, setAutoCatOpen] = useState(false)
 
-  // Sync filter state → URL on every change (replace, not push, so back button still escapes Ledger)
+  // Sync filter + sort state → URL on every change (replace, not push, so the
+  // back button still escapes the Ledger). Sort params are omitted when null.
   useEffect(() => {
     const params = serializeFiltersToUrl(filters)
+    serializeSort(sort, params)
     const url = params.toString().length > 0 ? `/ledger?${params.toString()}` : '/ledger'
     router.replace(url, { scroll: false })
-  }, [filters, router])
+  }, [filters, sort, router])
 
   // Clear selection whenever filters change so we don't operate on hidden rows.
   useEffect(() => {
@@ -62,8 +67,16 @@ export function Ledger() {
   })
 
   // Ids of currently-visible (filtered) transactions, used by the master
-  // Select-all checkbox to flip the selection in one click.
+  // Select-all checkbox to flip the selection in one click. Order doesn't
+  // matter here, so this stays keyed off the unsorted filtered set.
   const allTxIds = useMemo(() => filtered.map(t => t.id), [filtered])
+
+  // Rows handed to the list: globally sorted (flat) when a sort is active,
+  // otherwise the unsorted filtered set (TransactionList groups it by month).
+  const visible = useMemo(
+    () => (sort ? sortTransactions(filtered, sort) : filtered),
+    [filtered, sort]
+  )
 
   // Category options for the inline select
   const categoryOptions = (categoriesQ.data ?? []).map(c => ({ value: c.id, label: c.name }))
@@ -215,7 +228,9 @@ export function Ledger() {
         </div>
       ) : (
         <TransactionList
-          transactions={filtered}
+          transactions={visible}
+          sort={sort}
+          onSortChange={setSort}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           txIds={allTxIds}

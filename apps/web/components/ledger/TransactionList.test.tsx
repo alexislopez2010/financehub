@@ -154,3 +154,42 @@ describe('<TransactionList> Select-all wiring', () => {
     expect(screen.queryByRole('checkbox', { name: /Select all transactions/ })).toBeNull()
   })
 })
+
+describe('<TransactionList> sort header + flat-vs-grouped rendering', () => {
+  const TWO_MONTHS = [
+    makeTx({ id: 'a', date: '2025-05-15', description: 'May tx' }),
+    makeTx({ id: 'b', date: '2025-04-10', description: 'April tx' })
+  ]
+
+  it('renders month group headers when sort is null (grouped)', () => {
+    render(<TransactionList transactions={TWO_MONTHS} sort={null} onSortChange={vi.fn()} />)
+    expect(screen.getByRole('heading', { name: 'May 2025' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'April 2025' })).toBeInTheDocument()
+  })
+
+  it('renders flat (no month headers) and preserves row order when sort is set', () => {
+    render(
+      <TransactionList
+        transactions={TWO_MONTHS}
+        sort={{ key: 'amount', dir: 'desc' }}
+        onSortChange={vi.fn()}
+      />
+    )
+    // No month section headings in flat mode.
+    expect(screen.queryByRole('heading', { name: 'May 2025' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'April 2025' })).toBeNull()
+    // Rows render in the exact order the parent provided.
+    const descriptions = screen.getAllByTitle(/tx$/).map(el => el.textContent)
+    expect(descriptions).toEqual(['May tx', 'April tx'])
+  })
+
+  it('renders the SortableHeader when onSortChange is provided', () => {
+    render(<TransactionList transactions={TWO_MONTHS} sort={null} onSortChange={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Sort by Amount' })).toBeInTheDocument()
+  })
+
+  it('does NOT render the SortableHeader when onSortChange is omitted', () => {
+    render(<TransactionList transactions={TWO_MONTHS} />)
+    expect(screen.queryByRole('button', { name: 'Sort by Amount' })).toBeNull()
+  })
+})
