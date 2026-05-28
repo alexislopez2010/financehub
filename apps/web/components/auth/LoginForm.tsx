@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/browser'
+import { safeNextPath } from '@/lib/auth/safeNext'
 import { cn } from '@/lib/cn'
 
 const schema = z.object({
@@ -17,7 +18,7 @@ type FormData = z.infer<typeof schema>
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const next = searchParams?.get('next') ?? '/'
+  const next = safeNextPath(searchParams?.get('next'))
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 

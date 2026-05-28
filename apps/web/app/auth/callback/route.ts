@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { safeNextPath } from '@/lib/auth/safeNext'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/'
+  // Validate the redirect target: prevents an open redirect via ?next=.
+  const next = safeNextPath(searchParams.get('next'))
 
   if (!code) {
     // No code → bounce to login with an error hint.

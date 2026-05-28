@@ -100,6 +100,29 @@ describe('<MfaChallengeForm>', () => {
     expect(assignSpy).toHaveBeenCalledWith('/ledger')
   })
 
+  it('sanitizes a malicious ?next= to "/" before hard-navigating (open-redirect guard)', async () => {
+    mockListFactors.mockResolvedValueOnce(FACTORS_OK)
+    mockChallengeAndVerify.mockResolvedValueOnce({ data: {}, error: null })
+    mockRefreshSession.mockResolvedValueOnce({ data: { session: null }, error: null })
+    mockSearchParamsGet.mockReturnValue('https://evil.com/phish')
+    const assignSpy = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign: assignSpy, href: 'http://localhost/' }
+    })
+    render(<MfaChallengeForm />)
+    await screen.findByLabelText(/6-digit code/i)
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/6-digit code/i), '123456')
+    await user.click(screen.getByRole('button', { name: /verify/i }))
+    await waitFor(() => {
+      expect(assignSpy).toHaveBeenCalled()
+    })
+    // Never navigates to the external URL — falls back to home.
+    expect(assignSpy).toHaveBeenCalledWith('/')
+    expect(assignSpy).not.toHaveBeenCalledWith('https://evil.com/phish')
+  })
+
   it('shows the verify error message when verification fails', async () => {
     mockListFactors.mockResolvedValueOnce(FACTORS_OK)
     mockChallengeAndVerify.mockResolvedValueOnce({ data: null, error: { message: 'Invalid code' } })
