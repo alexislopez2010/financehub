@@ -7,8 +7,10 @@ const PUBLIC_PATHS = new Set<string>([
   '/login',
   '/signup',
   '/forgot-password',
-  '/reset-password',
-  '/design-system'
+  '/reset-password'
+  // NOTE: /design-system is intentionally NOT public — it's an internal
+  // component showcase. It now requires an authenticated AAL2 session like
+  // any other app route.
 ])
 
 // Routes that require a session but do NOT require AAL2 (these are how users get to AAL2).

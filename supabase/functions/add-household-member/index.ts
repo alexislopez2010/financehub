@@ -38,16 +38,49 @@ interface AddMemberResponse {
   role: string
 }
 
+// CORS origin allowlist. Defense-in-depth on top of the JWT + owner checks:
+// only same-project origins may read this function's responses from a browser.
+// - Production custom domain
+// - Vercel preview deploys for this project (financehub-*.vercel.app)
+// - Localhost for dev
+const STATIC_ALLOWED_ORIGINS = new Set<string>([
+  'https://financehub-flame.vercel.app',
+  'http://localhost:3000'
+])
+const PREVIEW_ORIGIN_RE = /^https:\/\/financehub-[a-z0-9-]+\.vercel\.app$/
+
+function resolveAllowedOrigin(reqOrigin: string | null): string {
+  if (reqOrigin && (STATIC_ALLOWED_ORIGINS.has(reqOrigin) || PREVIEW_ORIGIN_RE.test(reqOrigin))) {
+    return reqOrigin
+  }
+  // Fall back to the canonical production origin. A disallowed origin gets a
+  // mismatched ACAO header, so the browser blocks it from reading the response.
+  return 'https://financehub-flame.vercel.app'
+}
+
 Deno.serve(async (req) => {
+  const allowOrigin = resolveAllowedOrigin(req.headers.get('Origin'))
+
+  // CORS headers reused on every response. Vary: Origin so caches don't serve
+  // one origin's ACAO to another.
+  const corsHeaders: Record<string, string> = {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Vary': 'Origin'
+  }
+
+  // Local error helper closes over the per-request CORS headers.
+  function jsonError(status: number, message: string): Response {
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    })
+  }
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, content-type'
-      }
-    })
+    return new Response(null, { headers: corsHeaders })
   }
 
   if (req.method !== 'POST') {
@@ -153,22 +186,9 @@ Deno.serve(async (req) => {
 
   return new Response(JSON.stringify(response), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
+    headers: { 'Content-Type': 'application/json', ...corsHeaders }
   })
 })
-
-function jsonError(status: number, message: string): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
-  })
-}
 
 function isLikelyEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)
