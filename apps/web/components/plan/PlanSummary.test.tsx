@@ -17,6 +17,9 @@ function metrics(over: Partial<PlanSummaryMetrics> = {}): PlanSummaryMetrics {
     underCount: 0,
     totalOverage: 0,
     totalRemaining: 0,
+    plannedSavings: 0,
+    actualSavings: 0,
+    savingsDelta: 0,
     ...over
   }
 }
@@ -34,12 +37,13 @@ function row(over: Partial<BudgetVsActualRow> = {}): BudgetVsActualRow {
 }
 
 describe('<PlanSummaryTiles>', () => {
-  it('renders all 4 tiles', () => {
+  it('renders all 5 tiles', () => {
     render(<PlanSummaryTiles metrics={metrics()} />)
     expect(screen.getByText('Spend vs Budget')).toBeInTheDocument()
     expect(screen.getByText('Income vs Plan')).toBeInTheDocument()
     expect(screen.getByText('Categories Over')).toBeInTheDocument()
     expect(screen.getByText('Categories Under')).toBeInTheDocument()
+    expect(screen.getByText('Savings')).toBeInTheDocument()
   })
 
   it('over-spending → Spend tile tone is negative and caption says "over"', () => {
@@ -112,6 +116,81 @@ describe('<PlanSummaryTiles>', () => {
     expect(screen.getByText(/over by \$250/)).toBeInTheDocument()
     expect(screen.getByText(/\$1,200 remaining/)).toBeInTheDocument()
   })
+
+  it('Savings tile: positive savings ahead of plan → emerald + positive tone', () => {
+    render(
+      <PlanSummaryTiles
+        metrics={metrics({
+          actualIncome: 8000,
+          actualSpend: 5000,
+          plannedIncome: 7500,
+          budgeted: 5500,
+          actualSavings: 3000,
+          plannedSavings: 2000,
+          savingsDelta: 1000
+        })}
+      />
+    )
+    expect(screen.getByText('+$3,000')).toBeInTheDocument()
+    const cap = screen.getByText(/planned \$2,000 · ahead \$1,000/)
+    expect(cap).toHaveClass('text-emerald-600')
+  })
+
+  it('Savings tile: negative savings → red icon + negative tone', () => {
+    render(
+      <PlanSummaryTiles
+        metrics={metrics({
+          actualIncome: 4000,
+          actualSpend: 5500,
+          plannedIncome: 7500,
+          budgeted: 5000,
+          actualSavings: -1500,
+          plannedSavings: 2500,
+          savingsDelta: -4000
+        })}
+      />
+    )
+    expect(screen.getByText('-$1,500')).toBeInTheDocument()
+    const cap = screen.getByText(/planned \$2,500 · behind \$4,000/)
+    expect(cap).toHaveClass('text-red-600')
+  })
+
+  it('Savings tile: positive but behind plan → neutral tone', () => {
+    render(
+      <PlanSummaryTiles
+        metrics={metrics({
+          actualIncome: 7000,
+          actualSpend: 5500,
+          plannedIncome: 7500,
+          budgeted: 5000,
+          actualSavings: 1500,
+          plannedSavings: 2500,
+          savingsDelta: -1000
+        })}
+      />
+    )
+    const cap = screen.getByText(/planned \$2,500 · behind \$1,000/)
+    expect(cap).toHaveClass('text-gray-500')
+  })
+
+  it('Savings tile: plannedSavings <= 0 → "actual surplus" caption', () => {
+    render(
+      <PlanSummaryTiles
+        metrics={metrics({
+          actualIncome: 5000,
+          actualSpend: 3000,
+          plannedIncome: 5000,
+          budgeted: 5000,
+          actualSavings: 2000,
+          plannedSavings: 0,
+          savingsDelta: 2000
+        })}
+      />
+    )
+    expect(screen.getByText('+$2,000')).toBeInTheDocument()
+    const cap = screen.getByText('actual surplus')
+    expect(cap).toHaveClass('text-emerald-600')
+  })
 })
 
 describe('computePlanSummaryMetrics', () => {
@@ -126,6 +205,24 @@ describe('computePlanSummaryMetrics', () => {
     })
     expect(m.budgeted).toBe(300)
     expect(m.actualSpend).toBe(125)
+  })
+
+  it('derives plannedSavings, actualSavings, savingsDelta', () => {
+    const m = computePlanSummaryMetrics({
+      budgetRows: [
+        row({ budgeted: 1000, actual: 800, variance: 200 }),
+        row({ budgeted: 500, actual: 600, variance: -100 })
+      ],
+      actualIncome: 4000,
+      plannedIncome: 3500
+    })
+    // budgeted = 1500, actualSpend = 1400
+    // plannedSavings = 3500 - 1500 = 2000
+    // actualSavings  = 4000 - 1400 = 2600
+    // savingsDelta   = 2600 - 2000 = 600
+    expect(m.plannedSavings).toBe(2000)
+    expect(m.actualSavings).toBe(2600)
+    expect(m.savingsDelta).toBe(600)
   })
 
   it('classifies over/under and sums overage/remaining', () => {

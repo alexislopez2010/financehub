@@ -30,6 +30,9 @@ export interface PlanSummaryMetrics {
   underCount: number
   totalOverage: number
   totalRemaining: number
+  plannedSavings: number
+  actualSavings: number
+  savingsDelta: number
 }
 
 export function computePlanSummaryMetrics(input: {
@@ -44,6 +47,9 @@ export function computePlanSummaryMetrics(input: {
   const underRows = budgetRows.filter(r => r.budgeted > 0 && r.variance >= 0)
   const totalOverage = overRows.reduce((s, r) => s - r.variance, 0)
   const totalRemaining = underRows.reduce((s, r) => s + r.variance, 0)
+  const plannedSavings = plannedIncome - budgeted
+  const actualSavings = actualIncome - actualSpend
+  const savingsDelta = actualSavings - plannedSavings
   return {
     actualSpend,
     budgeted,
@@ -52,7 +58,10 @@ export function computePlanSummaryMetrics(input: {
     overCount: overRows.length,
     underCount: underRows.length,
     totalOverage,
-    totalRemaining
+    totalRemaining,
+    plannedSavings,
+    actualSavings,
+    savingsDelta
   }
 }
 
@@ -65,6 +74,11 @@ function formatUSDCompact(n: number): string {
     })
   }
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function formatUSDSigned(n: number): string {
+  if (n > 0) return `+${formatUSDCompact(n)}`
+  return formatUSDCompact(n)
 }
 
 interface SpendVsBudgetTone {
@@ -125,6 +139,27 @@ function incomeVsPlanView(m: PlanSummaryMetrics): SpendVsBudgetTone {
   }
 }
 
+function savingsView(m: PlanSummaryMetrics): SpendVsBudgetTone {
+  const iconTone: IconTone = m.actualSavings >= 0 ? 'emerald' : 'red'
+  if (m.plannedSavings <= 0) {
+    const tone: CaptionTone =
+      m.actualSavings > 0 ? 'positive' : m.actualSavings < 0 ? 'negative' : 'neutral'
+    return { caption: 'actual surplus', tone, iconTone }
+  }
+  const delta = m.savingsDelta
+  const direction = delta >= 0 ? 'ahead' : 'behind'
+  const caption = `planned ${formatUSDCompact(m.plannedSavings)} · ${direction} ${formatUSDCompact(Math.abs(delta))}`
+  let tone: CaptionTone
+  if (m.actualSavings < 0) {
+    tone = 'negative'
+  } else if (delta > 0) {
+    tone = 'positive'
+  } else {
+    tone = 'neutral'
+  }
+  return { caption, tone, iconTone }
+}
+
 export interface PlanSummaryTilesProps {
   metrics: PlanSummaryMetrics
 }
@@ -132,6 +167,7 @@ export interface PlanSummaryTilesProps {
 export function PlanSummaryTiles({ metrics }: PlanSummaryTilesProps) {
   const spend = spendVsBudgetView(metrics)
   const income = incomeVsPlanView(metrics)
+  const savings = savingsView(metrics)
   const overCaption =
     metrics.overCount === 0
       ? 'none over budget'
@@ -144,7 +180,7 @@ export function PlanSummaryTiles({ metrics }: PlanSummaryTilesProps) {
   const underTone: CaptionTone = metrics.underCount === 0 ? 'neutral' : 'positive'
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
       <KpiTile
         label="Spend vs Budget"
         value={formatUSDCompact(metrics.actualSpend)}
@@ -176,6 +212,14 @@ export function PlanSummaryTiles({ metrics }: PlanSummaryTilesProps) {
         captionTone={underTone}
         icon={PiggyBank}
         iconTone="emerald"
+      />
+      <KpiTile
+        label="Savings"
+        value={formatUSDSigned(metrics.actualSavings)}
+        caption={savings.caption}
+        captionTone={savings.tone}
+        icon={PiggyBank}
+        iconTone={savings.iconTone}
       />
     </div>
   )
