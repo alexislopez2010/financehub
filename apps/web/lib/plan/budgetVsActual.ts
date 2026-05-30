@@ -3,6 +3,13 @@ import type { PlanPeriod } from './period'
 
 export type BudgetRow = Tables<'budgets'>
 export type TransactionRow = Tables<'transactions'>
+export type BillRow = Tables<'bills'>
+
+/**
+ * Minimal bill shape used to compute bills committed per category.
+ * Kept structural so callers can pass narrower projections.
+ */
+export type BillForCommitment = Pick<BillRow, 'budget_amount' | 'budget_category_id' | 'is_active'>
 
 export interface BudgetVsActualRow {
   /**
@@ -23,12 +30,25 @@ export interface BudgetVsActualRow {
   actual: number
   /** budgeted - actual. Positive = under, negative = over. */
   variance: number
+  /** Sum of bills.budget_amount for active bills mapped to this category. */
+  billsCommitted: number
+  /** billsCommitted / budgeted; null when budgeted = 0. */
+  billsCoverage: number | null
+  /** true when billsCommitted > budgeted AND budgeted > 0. */
+  billsOverCommitted: boolean
 }
 
 export interface DeriveInput {
   budgets: ReadonlyArray<BudgetRow>
   transactions: ReadonlyArray<TransactionRow>
   period: PlanPeriod
+  /**
+   * Active bills with budget_category_id set. Used to compute billsCommitted per row.
+   * Bills with null budget_category_id are excluded (not yet mapped).
+   * Bills with is_active = false are excluded.
+   * Optional for callers that only render budget vs actual KPIs.
+   */
+  bills?: ReadonlyArray<BillForCommitment>
 }
 
 interface BudgetAggregate {
@@ -59,12 +79,24 @@ interface BudgetAggregate {
  *   - Sort: most over-budget first (smallest variance), then alphabetical.
  */
 export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVsActualRow> {
-  const { budgets, transactions, period } = input
+  const { budgets, transactions, period, bills = [] } = input
 
   // Period bounds for date comparison (string-compare safe via ISO).
   const yearStr = String(period.year)
   const monthStr = String(period.month).padStart(2, '0')
   const periodPrefix = `${yearStr}-${monthStr}`
+
+  // Sum budget_amount for active bills with a mapped budget_category_id.
+  // Bills with null budget_category_id are excluded (user hasn't mapped yet).
+  // is_active is nullable in the schema; treat null as inactive so we only
+  // count bills the user has explicitly turned on.
+  const billsByCategoryId = new Map<string, number>()
+  for (const b of bills) {
+    if (b.is_active !== true) continue
+    const cid = b.budget_category_id
+    if (!cid) continue
+    billsByCategoryId.set(cid, (billsByCategoryId.get(cid) ?? 0) + b.budget_amount)
+  }
 
   // Aggregate budgets for the period by lowercase category key.
   const aggregates = new Map<string, BudgetAggregate>()
@@ -110,13 +142,19 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
   for (const agg of aggregates.values()) {
     const actual = round2(actualsByCategory.get(agg.key) ?? 0)
     const budgeted = round2(agg.amount)
+    const billsCommitted = round2(
+      agg.categoryId ? (billsByCategoryId.get(agg.categoryId) ?? 0) : 0
+    )
     rows.push({
       budgetId: agg.count === 1 ? agg.firstBudgetId : null,
       category: agg.displayCategory,
       categoryId: agg.categoryId,
       budgeted,
       actual,
-      variance: round2(budgeted - actual)
+      variance: round2(budgeted - actual),
+      billsCommitted,
+      billsCoverage: budgeted > 0 ? billsCommitted / budgeted : null,
+      billsOverCommitted: budgeted > 0 && billsCommitted > budgeted
     })
   }
 
@@ -134,7 +172,12 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
       categoryId: null,
       budgeted: 0,
       actual,
-      variance: round2(-actual)
+      variance: round2(-actual),
+      // Unbudgeted rows never carry a categoryId so they can't be matched to a
+      // mapped bill — billsCommitted stays 0.
+      billsCommitted: 0,
+      billsCoverage: null,
+      billsOverCommitted: false
     })
   }
 

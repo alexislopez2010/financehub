@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { deriveBudgetVsActual, type BudgetRow, type TransactionRow } from './budgetVsActual'
+import {
+  deriveBudgetVsActual,
+  type BillForCommitment,
+  type BudgetRow,
+  type TransactionRow
+} from './budgetVsActual'
 
 const HID = '00000000-0000-0000-0000-000000000001'
+
+function bill(over: Partial<BillForCommitment> = {}): BillForCommitment {
+  return {
+    budget_amount: 100,
+    budget_category_id: 'cat-1',
+    is_active: true,
+    ...over
+  }
+}
 
 function budget(over: Partial<BudgetRow> = {}): BudgetRow {
   return {
@@ -287,6 +301,124 @@ describe('deriveBudgetVsActual', () => {
         period
       })
       expect(result.map(r => r.category)).toEqual(['Cilantro', 'Bananas', 'Apples'])
+    })
+  })
+
+  describe('billsCommitted / billsCoverage / billsOverCommitted', () => {
+    it('defaults billsCommitted to 0 when bills input is omitted', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Groceries', category_id: 'cat-1', amount: 500 })],
+        transactions: [],
+        period
+      })
+      expect(result[0]).toMatchObject({
+        billsCommitted: 0,
+        billsCoverage: 0, // 0 / 500
+        billsOverCommitted: false
+      })
+    })
+
+    it('sums bills.budget_amount per matching budget category_id', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Housing', category_id: 'cat-housing', amount: 3000 })],
+        transactions: [],
+        period,
+        bills: [bill({ budget_amount: 1500, budget_category_id: 'cat-housing' })]
+      })
+      expect(result[0]).toMatchObject({
+        billsCommitted: 1500,
+        billsCoverage: 0.5,
+        billsOverCommitted: false
+      })
+    })
+
+    it('sums multiple bills mapped to the same category', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Housing', category_id: 'cat-housing', amount: 3000 })],
+        transactions: [],
+        period,
+        bills: [
+          bill({ budget_amount: 1500, budget_category_id: 'cat-housing' }),
+          bill({ budget_amount: 1200, budget_category_id: 'cat-housing' }),
+          bill({ budget_amount: 385, budget_category_id: 'cat-housing' })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(3085)
+    })
+
+    it('excludes inactive bills (is_active false or null)', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Housing', category_id: 'cat-housing', amount: 3000 })],
+        transactions: [],
+        period,
+        bills: [
+          bill({ budget_amount: 500, budget_category_id: 'cat-housing', is_active: true }),
+          bill({ budget_amount: 999, budget_category_id: 'cat-housing', is_active: false }),
+          bill({ budget_amount: 999, budget_category_id: 'cat-housing', is_active: null })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(500)
+    })
+
+    it('excludes bills with null budget_category_id (not yet mapped)', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Housing', category_id: 'cat-housing', amount: 3000 })],
+        transactions: [],
+        period,
+        bills: [
+          bill({ budget_amount: 200, budget_category_id: 'cat-housing' }),
+          bill({ budget_amount: 999, budget_category_id: null })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(200)
+    })
+
+    it('billsCoverage is null when budgeted is 0 (actuals-only row)', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [],
+        transactions: [tx({ category: 'Surprise', amount: 50 })],
+        period,
+        bills: []
+      })
+      expect(result[0]).toMatchObject({
+        budgeted: 0,
+        billsCommitted: 0,
+        billsCoverage: null,
+        billsOverCommitted: false
+      })
+    })
+
+    it('marks billsOverCommitted when committed bills exceed the budget', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ category: 'Housing', category_id: 'cat-housing', amount: 1000 })],
+        transactions: [],
+        period,
+        bills: [bill({ budget_amount: 1500, budget_category_id: 'cat-housing' })]
+      })
+      expect(result[0]).toMatchObject({
+        billsCommitted: 1500,
+        billsCoverage: 1.5,
+        billsOverCommitted: true
+      })
+    })
+
+    it('does not credit bills to rows whose categoryId disagrees across aggregated budgets', () => {
+      // Multiple budget rows with mismatched category_ids collapse categoryId to null,
+      // so we have nothing to match bills against.
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Financial', category_id: 'cat-a', amount: 500 }),
+          budget({ id: 'b2', category: 'Financial', category_id: 'cat-b', amount: 500 })
+        ],
+        transactions: [],
+        period,
+        bills: [
+          bill({ budget_amount: 300, budget_category_id: 'cat-a' }),
+          bill({ budget_amount: 200, budget_category_id: 'cat-b' })
+        ]
+      })
+      expect(result[0]!.categoryId).toBeNull()
+      expect(result[0]!.billsCommitted).toBe(0)
     })
   })
 })

@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Wallet, Plus } from 'lucide-react'
+import { Wallet, Plus, AlertTriangle } from 'lucide-react'
 import { useBudgets, useCreateBudget, useUpdateBudget, useDeleteBudget } from '@/lib/data/budgets'
 import { useTransactions } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
+import { useBills } from '@/lib/data/bills'
 import { deriveBudgetVsActual } from '@/lib/plan/budgetVsActual'
 import { periodToRange, type PlanPeriod } from '@/lib/plan/period'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
-import { BudgetRow } from './BudgetRow'
+import { BudgetRow, BUDGET_ROW_GRID } from './BudgetRow'
 import { AddBudgetForm } from './AddBudgetForm'
 import { cn } from '@/lib/cn'
 
@@ -25,6 +26,7 @@ export function BudgetSection({ period }: BudgetSectionProps) {
   const range = periodToRange(period)
   const txsQ = useTransactions({ startDate: range.startDate, endDate: range.endDate })
   const categoriesQ = useCategories()
+  const billsQ = useBills()
   const createBudget = useCreateBudget()
   const updateBudget = useUpdateBudget()
   const deleteBudget = useDeleteBudget()
@@ -36,14 +38,19 @@ export function BudgetSection({ period }: BudgetSectionProps) {
     () => deriveBudgetVsActual({
       budgets: budgetsQ.data ?? [],
       transactions: txsQ.data ?? [],
-      period
+      period,
+      bills: billsQ.data ?? []
     }),
-    [budgetsQ.data, txsQ.data, period]
+    [budgetsQ.data, txsQ.data, billsQ.data, period]
   )
 
   const totalBudgeted = rows.reduce((s, r) => s + r.budgeted, 0)
   const totalActual = rows.reduce((s, r) => s + r.actual, 0)
   const remaining = totalBudgeted - totalActual
+  const totalBillsCommitted = rows.reduce((s, r) => s + r.billsCommitted, 0)
+  const billsPct =
+    totalBudgeted > 0 ? Math.round((totalBillsCommitted / totalBudgeted) * 100) : null
+  const billsOverCommitted = totalBudgeted > 0 && totalBillsCommitted > totalBudgeted
 
   // Categories not yet used by a budget for this period.
   const budgetedNames = new Set(
@@ -79,13 +86,13 @@ export function BudgetSection({ period }: BudgetSectionProps) {
     setShowAddForm(true)
   }
 
-  const isLoading = budgetsQ.isLoading || txsQ.isLoading
-  const error = budgetsQ.error || txsQ.error
+  const isLoading = budgetsQ.isLoading || txsQ.isLoading || billsQ.isLoading
+  const error = budgetsQ.error || txsQ.error || billsQ.error
 
   return (
     <section className="bg-surface border border-rule rounded-xl shadow-sm overflow-hidden">
       {/* Header */}
-      <header className="px-4 sm:px-5 py-4 flex items-baseline justify-between gap-3 border-b border-rule">
+      <header className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-rule">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600">
             <Wallet size={18} />
@@ -95,7 +102,7 @@ export function BudgetSection({ period }: BudgetSectionProps) {
             <p className="text-xs text-muted">vs actual spending</p>
           </div>
         </div>
-        <div className="text-right text-sm tabular">
+        <div className="text-right text-sm tabular space-y-1">
           <div className="text-ink font-medium">
             <span className="text-emerald-600">{formatUSD(totalActual)}</span>
             <span className="text-muted"> / </span>
@@ -104,13 +111,46 @@ export function BudgetSection({ period }: BudgetSectionProps) {
           <div className={cn('text-xs', remaining < 0 ? 'text-red-600' : 'text-muted')}>
             {remaining < 0 ? `over by ${formatUSD(Math.abs(remaining))}` : `${formatUSD(remaining)} left`}
           </div>
+          {totalBillsCommitted > 0 && (
+            <div
+              className={cn(
+                'text-[11px] flex items-center justify-end gap-1.5 pt-1',
+                billsOverCommitted ? 'text-red-700' : 'text-muted'
+              )}
+            >
+              {billsOverCommitted && <AlertTriangle size={12} aria-hidden="true" />}
+              <span>
+                Bills committed:{' '}
+                <span className={cn('font-semibold', billsOverCommitted ? 'text-red-700' : 'text-ink')}>
+                  {formatUSD(totalBillsCommitted)}
+                </span>
+                {totalBudgeted > 0 && (
+                  <>
+                    {' '}of {formatUSD(totalBudgeted)} budget
+                    {billsPct !== null && (
+                      <>
+                        {' ('}
+                        <span className={billsOverCommitted ? 'font-semibold' : ''}>{billsPct}%</span>
+                        {')'}
+                      </>
+                    )}
+                  </>
+                )}
+                {billsOverCommitted && <span className="font-semibold"> · over-committed</span>}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Column labels */}
-      <div className="grid grid-cols-[1fr_100px_100px_120px_28px] sm:grid-cols-[1fr_120px_120px_140px_28px] gap-3 px-4 py-2 text-[10px] uppercase tracking-[0.12em] font-semibold text-muted bg-gray-50 border-b border-rule">
+      <div className={cn(
+        BUDGET_ROW_GRID,
+        'px-4 py-2 text-[10px] uppercase tracking-[0.12em] font-semibold text-muted bg-gray-50 border-b border-rule'
+      )}>
         <div>Category</div>
         <div className="text-right">Budgeted</div>
+        <div className="hidden md:block text-right">Bills</div>
         <div className="text-right">Actual</div>
         <div className="text-right">Remaining</div>
         <div></div>

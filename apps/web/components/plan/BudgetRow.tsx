@@ -12,6 +12,15 @@ export interface BudgetRowProps {
   onCreateForUnbudgeted: () => void  // for budgetId=null rows: prompt to create a budget
 }
 
+/**
+ * Shared grid template for the row + the column header in BudgetSection.
+ * Keep these in sync — the columns are: Category | Budgeted | Bills | Actual | Remaining | gutter.
+ * Bills column hides on small screens to avoid cramping; a mobile-only
+ * subline beneath the category surfaces the same number.
+ */
+export const BUDGET_ROW_GRID =
+  'grid grid-cols-[1fr_100px_100px_120px_28px] sm:grid-cols-[1fr_120px_120px_140px_28px] md:grid-cols-[1fr_120px_100px_120px_140px_28px] lg:grid-cols-[1fr_140px_120px_140px_160px_28px] gap-3 items-center'
+
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
@@ -32,10 +41,11 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
   const overBudget = !isUnbudgeted && row.variance < 0
   const pct = pctOfBudget(row.actual, row.budgeted)
   const barPct = Math.min(100, Math.max(0, pct))
+  const hasBills = row.billsCommitted > 0
 
   return (
     <div className={cn(
-      'grid grid-cols-[1fr_100px_100px_120px_28px] sm:grid-cols-[1fr_120px_120px_140px_28px] gap-3 items-center',
+      BUDGET_ROW_GRID,
       'px-4 py-3 text-sm transition-colors hover:bg-gray-50'
     )}>
       <div className="min-w-0">
@@ -57,6 +67,18 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
             + Add a budget for this
           </button>
         )}
+        {/* Mobile-only bills subline: surfaces the Bills column data when it's hidden. */}
+        {hasBills && (
+          <div
+            className={cn(
+              'mt-0.5 text-[11px] italic md:hidden',
+              row.billsOverCommitted ? 'text-red-600' : 'text-muted'
+            )}
+          >
+            bills: {formatUSD(row.billsCommitted)}
+            {row.billsOverCommitted ? ' (over)' : ''}
+          </div>
+        )}
       </div>
 
       <div className="text-right tabular text-sm">
@@ -72,6 +94,31 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
             display={<span className="text-ink font-medium">{formatUSD(row.budgeted)}</span>}
             inputClassName="text-right"
           />
+        )}
+      </div>
+
+      {/* Bills column — hidden on small screens, surfaces in mobile subline above. */}
+      <div
+        className={cn(
+          'hidden md:flex items-center justify-end gap-1.5 text-right tabular text-sm',
+          row.billsOverCommitted ? 'text-red-600 font-semibold' : 'text-ink'
+        )}
+        title={row.billsOverCommitted ? 'Bills exceed this budget' : undefined}
+      >
+        {hasBills ? (
+          <>
+            <span>{formatUSD(row.billsCommitted)}</span>
+            {row.billsOverCommitted && (
+              <span
+                aria-label="Bills exceed this budget"
+                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
+              >
+                !
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted">—</span>
         )}
       </div>
 

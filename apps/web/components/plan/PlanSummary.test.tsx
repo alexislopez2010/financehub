@@ -32,6 +32,9 @@ function row(over: Partial<BudgetVsActualRow> = {}): BudgetVsActualRow {
     budgeted: 100,
     actual: 0,
     variance: 100,
+    billsCommitted: 0,
+    billsCoverage: 0,
+    billsOverCommitted: false,
     ...over
   }
 }

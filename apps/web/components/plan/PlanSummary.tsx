@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { Wallet, TrendingUp, AlertTriangle, PiggyBank, Coins } from 'lucide-react'
 import { KpiTile, type CaptionTone, type IconTone } from '@/components/ui/KpiTile'
 import { useBudgets } from '@/lib/data/budgets'
+import { useBills } from '@/lib/data/bills'
 import { useIncomePlan } from '@/lib/data/incomePlan'
 import { useTransactions } from '@/lib/data/transactions'
 import {
@@ -230,15 +231,17 @@ export function PlanSummary({ period }: PlanSummaryProps) {
   const range = periodToRange(period)
   const txsQ = useTransactions({ startDate: range.startDate, endDate: range.endDate })
   const incomeQ = useIncomePlan({ year: period.year })
+  const billsQ = useBills()
 
   const budgetRows = useMemo(
     () =>
       deriveBudgetVsActual({
         budgets: budgetsQ.data ?? [],
         transactions: txsQ.data ?? [],
-        period
+        period,
+        bills: billsQ.data ?? []
       }),
-    [budgetsQ.data, txsQ.data, period]
+    [budgetsQ.data, txsQ.data, billsQ.data, period]
   )
 
   const monthPlans = (incomeQ.data ?? []).filter(p => p.month === period.month)
