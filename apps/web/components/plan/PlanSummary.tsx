@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Wallet, TrendingUp, AlertTriangle, PiggyBank } from 'lucide-react'
+import { Wallet, TrendingUp, AlertTriangle, PiggyBank, Coins } from 'lucide-react'
 import { KpiTile, type CaptionTone, type IconTone } from '@/components/ui/KpiTile'
 import { useBudgets } from '@/lib/data/budgets'
 import { useIncomePlan } from '@/lib/data/incomePlan'
@@ -210,7 +210,7 @@ export function PlanSummaryTiles({ metrics }: PlanSummaryTilesProps) {
         value={String(metrics.underCount)}
         caption={underCaption}
         captionTone={underTone}
-        icon={PiggyBank}
+        icon={Coins}
         iconTone="emerald"
       />
       <KpiTile
