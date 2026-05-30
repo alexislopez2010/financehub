@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { Plus, Layers } from 'lucide-react'
 import { useBills, useCreateBill, useUpdateBill, useDeleteBill } from '@/lib/data/bills'
 import { parseSortKey, type BillSortKey } from '@/lib/bills/sort'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { BillsSummary } from './BillsSummary'
 import { BillList } from './BillList'
 import { AddBillForm } from './AddBillForm'
+import { BillsBudgetMappingDialog } from './BillsBudgetMappingDialog'
 
 export function Bills() {
   const router = useRouter()
@@ -17,6 +18,7 @@ export function Bills() {
 
   const [sortKey, setSortKey] = useState<BillSortKey>(initialSort)
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showMappingDialog, setShowMappingDialog] = useState(false)
 
   useEffect(() => {
     const url = `/bills?sort=${sortKey}`
@@ -73,14 +75,24 @@ export function Bills() {
           <h1 className="text-2xl font-bold text-ink">Bills</h1>
           <p className="text-sm text-muted">Recurring obligations, sorted by next due date.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAddForm(v => !v)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand/90"
-        >
-          <Plus size={14} />
-          Add bill
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMappingDialog(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rule bg-surface text-ink text-sm font-medium hover:bg-gray-50"
+          >
+            <Layers size={14} />
+            Map to budget categories
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAddForm(v => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand/90"
+          >
+            <Plus size={14} />
+            Add bill
+          </button>
+        </div>
       </header>
 
       <BillsSummary bills={bills} today={today} />
@@ -116,6 +128,11 @@ export function Bills() {
           />
         </>
       )}
+
+      <BillsBudgetMappingDialog
+        open={showMappingDialog}
+        onOpenChange={setShowMappingDialog}
+      />
     </div>
   )
 }

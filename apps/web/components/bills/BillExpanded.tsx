@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { useTransactions } from '@/lib/data/transactions'
 import { useBillMatchRules } from '@/lib/data/billMatchRules'
+import { useCategories } from '@/lib/data/categories'
+import { useUpdateBill } from '@/lib/data/bills'
 import { matchBills } from '@/lib/finance/billsMatch'
 import { periodToRange } from '@/lib/plan/period'
 import { cn } from '@/lib/cn'
@@ -29,6 +31,14 @@ export function BillExpanded({ bill, today }: BillExpandedProps) {
   const range = periodToRange({ year: today.year, month: today.month })
   const txsQ = useTransactions({ startDate: range.startDate, endDate: range.endDate })
   const rulesQ = useBillMatchRules()
+  const categoriesQ = useCategories()
+  const updateBill = useUpdateBill()
+
+  const categories = categoriesQ.data ?? []
+
+  function handleBudgetCategoryChange(nextId: string | null): void {
+    updateBill.mutate({ id: bill.id, patch: { budget_category_id: nextId } })
+  }
 
   const matches = useMemo(() => {
     const allTxs = txsQ.data ?? []
@@ -48,7 +58,32 @@ export function BillExpanded({ bill, today }: BillExpandedProps) {
   const variance = bill.budget_amount - matches.totalAmount
 
   return (
-    <div className="px-4 py-3 bg-gray-50 border-t border-rule">
+    <div className="px-4 py-3 bg-gray-50 border-t border-rule space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] uppercase tracking-[0.12em] font-semibold text-muted">
+          Budget category
+        </span>
+        <select
+          aria-label={`Budget category for ${bill.name}`}
+          value={bill.budget_category_id ?? ''}
+          disabled={categoriesQ.isLoading || updateBill.isPending}
+          onChange={e => handleBudgetCategoryChange(e.target.value === '' ? null : e.target.value)}
+          className={cn(
+            'rounded-md border border-rule bg-surface px-2 py-1 text-xs text-ink',
+            'disabled:opacity-60'
+          )}
+        >
+          <option value="">(none)</option>
+          {categories.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {!bill.budget_category_id && (
+          <span className="text-[11px] text-muted italic">
+            Unmapped — payments won&apos;t roll up to a budget bucket.
+          </span>
+        )}
+      </div>
       {isLoading ? (
         <div className="text-xs text-muted text-center py-2">Loading matches…</div>
       ) : matches.count === 0 ? (
