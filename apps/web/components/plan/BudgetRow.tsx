@@ -22,7 +22,13 @@ function pctOfBudget(actual: number, budgeted: number): number {
 }
 
 export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }: BudgetRowProps) {
-  const isUnbudgeted = row.budgetId === null
+  // Truly unbudgeted: no budget rows at all for this category in the period
+  // (actuals-only row). Aggregated rows have budgetId=null too but budgeted>0.
+  const isUnbudgeted = row.budgetId === null && row.budgeted === 0
+  // Aggregated rows: multiple budget rows summed into one display row.
+  // We render the full row but suppress per-row edit/delete to avoid
+  // mutating only one of several underlying rows.
+  const isAggregated = row.budgetId === null && row.budgeted > 0
   const overBudget = !isUnbudgeted && row.variance < 0
   const pct = pctOfBudget(row.actual, row.budgeted)
   const barPct = Math.min(100, Math.max(0, pct))
@@ -56,6 +62,8 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
       <div className="text-right tabular text-sm">
         {isUnbudgeted ? (
           <span className="text-muted italic text-xs">no budget</span>
+        ) : isAggregated ? (
+          <span className="text-ink font-medium">{formatUSD(row.budgeted)}</span>
         ) : (
           <EditableCell
             variant="number"
@@ -80,7 +88,7 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
       </div>
 
       <div className="text-right">
-        {!isUnbudgeted && (
+        {!isUnbudgeted && !isAggregated && (
           <button
             type="button"
             onClick={onDelete}

@@ -5,13 +5,19 @@ export type BudgetRow = Tables<'budgets'>
 export type TransactionRow = Tables<'transactions'>
 
 export interface BudgetVsActualRow {
-  /** Budget row id (uuid). Null when no budget row exists for this category in the period. */
+  /**
+   * Budget row id (uuid).
+   *  - When exactly one budget row exists for the category, this is that row's id.
+   *  - When multiple budget rows are aggregated into one display row, this is null
+   *    so the UI does not offer per-row edit/delete on what looks like a sum.
+   *  - When no budget row exists (actuals only), this is null.
+   */
   budgetId: string | null
-  /** Category name (matches budget.category text). */
+  /** Category display name (case preserved from a source row). */
   category: string
-  /** category_id FK if known. */
+  /** category_id FK if all aggregated rows agree on it; null otherwise. */
   categoryId: string | null
-  /** Budgeted amount for the period; 0 when no budget row exists. */
+  /** Sum of budget row amounts for this category in the period; 0 when no budget row exists. */
   budgeted: number
   /** Sum of |amount| for Expense transactions in this category for the period. */
   actual: number
@@ -25,13 +31,32 @@ export interface DeriveInput {
   period: PlanPeriod
 }
 
+interface BudgetAggregate {
+  /** Lowercased category text used as a stable grouping key. */
+  key: string
+  /** First budget row id, kept for the single-row case. */
+  firstBudgetId: string
+  /** Count of underlying budget rows grouped here. */
+  count: number
+  /** Display category name (case preserved from the first row). */
+  displayCategory: string
+  /** category_id if all aggregated rows agree; null otherwise. */
+  categoryId: string | null
+  /** Sum of amounts across aggregated rows. */
+  amount: number
+}
+
 /**
  * Pure derivation:
- *   - For each budget row in the period, sum matching Expense transactions
- *     for that same period AND category.
- *   - Include any category that has Expense transactions in the period but
- *     no budget row (budgetId = null).
- *   - Sort: over-budget first (most negative variance first), then alphabetical.
+ *   - Group budget rows in the period BY CATEGORY (lowercased category text as
+ *     the key, since legacy imports created multiple budget rows per
+ *     (category, year, month) and some rows lack category_id).
+ *   - For each category, sum budgeted amounts and sum matching Expense actuals.
+ *   - Include any category that has Expense transactions in the period but no
+ *     budget row (budgetId = null, budgeted = 0).
+ *   - When more than one budget row is aggregated, the output row's budgetId is
+ *     null so the UI hides per-row edit/delete affordances.
+ *   - Sort: most over-budget first (smallest variance), then alphabetical.
  */
 export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVsActualRow> {
   const { budgets, transactions, period } = input
@@ -41,12 +66,35 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
   const monthStr = String(period.month).padStart(2, '0')
   const periodPrefix = `${yearStr}-${monthStr}`
 
-  // Filter budgets to the period.
-  const periodBudgets = budgets.filter(b => b.year === period.year && b.month === period.month)
+  // Aggregate budgets for the period by lowercase category key.
+  const aggregates = new Map<string, BudgetAggregate>()
+  for (const b of budgets) {
+    if (b.year !== period.year || b.month !== period.month) continue
+    const cat = (b.category ?? '').trim()
+    if (!cat) continue
+    const key = cat.toLowerCase()
+    const existing = aggregates.get(key)
+    if (!existing) {
+      aggregates.set(key, {
+        key,
+        firstBudgetId: b.id,
+        count: 1,
+        displayCategory: cat,
+        categoryId: b.category_id,
+        amount: b.amount
+      })
+      continue
+    }
+    aggregates.set(key, {
+      ...existing,
+      count: existing.count + 1,
+      // category_id only survives if every row agrees.
+      categoryId: existing.categoryId === b.category_id ? existing.categoryId : null,
+      amount: existing.amount + b.amount
+    })
+  }
 
   // Sum expense actuals for the period, keyed by lowercase category name.
-  // (We key by name because budgets reference category as a text column;
-  // legacy + new rows both populate it.)
   const actualsByCategory = new Map<string, number>()
   for (const tx of transactions) {
     if (tx.type !== 'Expense') continue
@@ -57,19 +105,15 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
     actualsByCategory.set(key, (actualsByCategory.get(key) ?? 0) + Math.abs(tx.amount))
   }
 
-  // Build BudgetVsActualRow for each budget, consuming the matched actual.
-  const seenCategoryKeys = new Set<string>()
+  // Build one output row per aggregated category.
   const rows: BudgetVsActualRow[] = []
-  for (const b of periodBudgets) {
-    const cat = (b.category ?? '').trim()
-    const key = cat.toLowerCase()
-    seenCategoryKeys.add(key)
-    const actual = round2(actualsByCategory.get(key) ?? 0)
-    const budgeted = round2(b.amount)
+  for (const agg of aggregates.values()) {
+    const actual = round2(actualsByCategory.get(agg.key) ?? 0)
+    const budgeted = round2(agg.amount)
     rows.push({
-      budgetId: b.id,
-      category: cat,
-      categoryId: b.category_id,
+      budgetId: agg.count === 1 ? agg.firstBudgetId : null,
+      category: agg.displayCategory,
+      categoryId: agg.categoryId,
       budgeted,
       actual,
       variance: round2(budgeted - actual)
@@ -78,7 +122,7 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
 
   // Add categories that have actuals but no budget row.
   for (const [key, actualRaw] of actualsByCategory.entries()) {
-    if (seenCategoryKeys.has(key)) continue
+    if (aggregates.has(key)) continue
     // Find a canonical (case-preserving) name from any transaction with this category.
     const canonical = transactions.find(
       tx => (tx.category ?? '').trim().toLowerCase() === key && tx.type === 'Expense'

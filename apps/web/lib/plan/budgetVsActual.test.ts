@@ -185,4 +185,108 @@ describe('deriveBudgetVsActual', () => {
     expect(result).toHaveLength(1)
     expect(result[0]!.category).toBe('Real')
   })
+
+  describe('aggregation of duplicate budget rows', () => {
+    it('sums multiple budget rows with the same category text into ONE output row', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Housing', amount: 1500 }),
+          budget({ id: 'b2', category: 'Housing', amount: 1200 }),
+          budget({ id: 'b3', category: 'Housing', amount: 385 })
+        ],
+        transactions: [],
+        period
+      })
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        category: 'Housing',
+        budgeted: 3085,
+        actual: 0,
+        variance: 3085
+      })
+    })
+
+    it('sets budgetId to null when aggregating multiple rows so per-row edit is hidden', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Housing', amount: 1500 }),
+          budget({ id: 'b2', category: 'Housing', amount: 1200 })
+        ],
+        transactions: [],
+        period
+      })
+      expect(result[0]!.budgetId).toBeNull()
+    })
+
+    it('keeps budgetId set when only one budget row exists for the category', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [budget({ id: 'b-solo', category: 'Solo', amount: 500 })],
+        transactions: [],
+        period
+      })
+      expect(result[0]!.budgetId).toBe('b-solo')
+    })
+
+    it('aggregates by category text even when category_id differs (legacy data)', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Financial', category_id: 'cat-a', amount: 500 }),
+          budget({ id: 'b2', category: 'Financial', category_id: 'cat-b', amount: 300 }),
+          budget({ id: 'b3', category: 'Financial', category_id: null, amount: 500 })
+        ],
+        transactions: [],
+        period
+      })
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ category: 'Financial', budgeted: 1300 })
+      // disagreeing category_ids collapse to null
+      expect(result[0]!.categoryId).toBeNull()
+    })
+
+    it('preserves category_id when all aggregated rows agree', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Bills', category_id: 'cat-bills', amount: 100 }),
+          budget({ id: 'b2', category: 'Bills', category_id: 'cat-bills', amount: 200 })
+        ],
+        transactions: [],
+        period
+      })
+      expect(result[0]!.categoryId).toBe('cat-bills')
+    })
+
+    it('sums actuals once per category even when budget rows are duplicated', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'b1', category: 'Food', amount: 200 }),
+          budget({ id: 'b2', category: 'Food', amount: 100 })
+        ],
+        transactions: [
+          tx({ id: 't1', category: 'Food', amount: 50 }),
+          tx({ id: 't2', category: 'Food', amount: 75 })
+        ],
+        period
+      })
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({ budgeted: 300, actual: 125, variance: 175 })
+    })
+
+    it('sort still correct after aggregation', () => {
+      const result = deriveBudgetVsActual({
+        budgets: [
+          budget({ id: 'a1', category: 'Apples', amount: 50 }),
+          budget({ id: 'a2', category: 'Apples', amount: 50 }), // sum=100
+          budget({ id: 'b1', category: 'Bananas', amount: 100 }),
+          budget({ id: 'c1', category: 'Cilantro', amount: 100 })
+        ],
+        transactions: [
+          tx({ id: 'tA', category: 'Apples', amount: 50 }),    // variance +50
+          tx({ id: 'tB1', category: 'Bananas', amount: 110 }), // variance -10
+          tx({ id: 'tC', category: 'Cilantro', amount: 130 })  // variance -30
+        ],
+        period
+      })
+      expect(result.map(r => r.category)).toEqual(['Cilantro', 'Bananas', 'Apples'])
+    })
+  })
 })
