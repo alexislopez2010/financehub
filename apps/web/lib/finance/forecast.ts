@@ -58,6 +58,47 @@ export function addDay(d: DateParts): DateParts {
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() }
 }
 
+export type NormalizedCadence = 'monthly' | 'semimonthly' | 'biweekly'
+
+/**
+ * Normalize a raw cadence/frequency string from the DB (or any caller) into
+ * the internal {monthly|semimonthly|biweekly} enum.
+ *
+ * Handles all the wire shapes we've seen in the wild:
+ *   'Semi-monthly', 'semi-monthly', 'Semimonthly', 'semimonthly'
+ *   'Bi-weekly',    'bi-weekly',    'Biweekly',    'biweekly'
+ *   'Monthly',      'monthly',      null,          undefined
+ *
+ * Unknown / empty values fall back to 'monthly'.
+ */
+export function normalizeCadence(raw: string | null | undefined): NormalizedCadence {
+  if (!raw) return 'monthly'
+  const k = raw.toLowerCase().replace(/[\s_-]/g, '')
+  if (k === 'semimonthly') return 'semimonthly'
+  if (k === 'biweekly') return 'biweekly'
+  return 'monthly'
+}
+
+/** Last calendar day of (year, month). month is 1-indexed. */
+function lastDayOfMonth(year: number, month: number): number {
+  // new Date(year, month, 0) → day 0 of next month → last day of `month`.
+  return new Date(year, month, 0).getDate()
+}
+
+/** Paydays (1-indexed days of month) for a given cadence in (year, month). */
+function paydaysFor(year: number, month: number, cadence: NormalizedCadence): ReadonlyArray<number> {
+  if (cadence === 'semimonthly') return [15, lastDayOfMonth(year, month)]
+  if (cadence === 'biweekly') return [15, lastDayOfMonth(year, month)] // approximation
+  return [1]
+}
+
+interface AggregatedPlan {
+  year: number
+  month: number
+  cadence: NormalizedCadence
+  total: number
+}
+
 /**
  * 30-day cash-basis forecast.
  *
@@ -72,13 +113,18 @@ export function addDay(d: DateParts): DateParts {
  *        stored). This matches legacy commit 83a1827.
  *   2. Subtract any bill whose isDueOn(bill, date) is true and is_active.
  *      Each bill contributes -budget_amount (positive number).
- *   3. Add planned income: for an IncomePlanRow that's active and matches
- *      the year+month of the date, distribute expected_amount across the
- *      month per the cadence:
- *      - 'monthly' (or null): one credit on the 1st of the month
- *      - 'semimonthly': two credits — 1st and 15th — each = expected_amount/2
- *      - 'biweekly': every 14 days starting from the 1st of the month,
- *        each = expected_amount / 2 (approximate; matches legacy)
+ *   3. Add planned income. Income plan rows are first AGGREGATED by
+ *      (member, source, year, month) into a single monthly total — the
+ *      legacy import pattern produces multiple rows per person per month
+ *      and we must not double-count. The aggregated total is then split
+ *      across the cadence's paydays for that month:
+ *      - 'monthly' (default): one credit on the 1st of the month
+ *      - 'semimonthly': two credits — 15th and last day of month — each
+ *        = total / 2. US semimonthly payroll lands on the 15th and the
+ *        last day of the month, not the 1st and 15th.
+ *      - 'biweekly': two credits — 15th and last day of month — each
+ *        = total / 2 (approximation; the real biweekly cadence drifts
+ *        relative to month boundaries).
  *      Only the relevant day(s) inside the forecast window receive credits.
  *
  * The starting balance is the END-OF-DAY balance before startDate. The
@@ -105,6 +151,43 @@ export function forecast30Day(
       txByDate.set(tx.date, list)
     }
     list.push(tx)
+  }
+
+  // Aggregate income_plan rows by (member, source, year, month). The legacy
+  // import pattern can produce multiple rows per person per month — either
+  // because each row represents one pay event or because of a duplicate
+  // import. Aggregating up-front and then splitting by cadence makes the
+  // projection correct regardless of which shape the data has.
+  const aggregatedPlans = new Map<string, AggregatedPlan>()
+  for (const p of incomePlan) {
+    if (!p.is_active) continue
+    const memberKey = (p.member ?? '').toLowerCase()
+    const sourceKey = (p.source ?? '').toLowerCase()
+    const key = `${memberKey}|${sourceKey}|${p.year}-${p.month}`
+    // Be defensive about which field the caller mapped. The Briefing's older
+    // mapping set `cadence` to a raw `frequency` string ("Semi-monthly"),
+    // and some callers may still pass `frequency` directly. normalizeCadence
+    // handles both shapes and any casing/hyphen variant.
+    const rawCadence =
+      (p as { cadence?: string | null }).cadence ??
+      (p as { frequency?: string | null }).frequency ??
+      null
+    const cadence = normalizeCadence(rawCadence)
+    const existing = aggregatedPlans.get(key)
+    if (existing) {
+      aggregatedPlans.set(key, {
+        ...existing,
+        total: existing.total + p.expected_amount,
+        cadence
+      })
+    } else {
+      aggregatedPlans.set(key, {
+        year: p.year,
+        month: p.month,
+        cadence,
+        total: p.expected_amount
+      })
+    }
   }
 
   const out: ForecastPoint[] = []
@@ -143,19 +226,13 @@ export function forecast30Day(
       }
     }
 
-    // 3. Planned income credits.
-    for (const p of incomePlan) {
-      if (!p.is_active) continue
-      if (p.year !== cursor.year || p.month !== cursor.month) continue
-      const cadence = p.cadence ?? 'monthly'
-      if (cadence === 'monthly') {
-        if (cursor.day === 1) inflow += p.expected_amount
-      } else if (cadence === 'semimonthly') {
-        if (cursor.day === 1 || cursor.day === 15) inflow += p.expected_amount / 2
-      } else if (cadence === 'biweekly') {
-        // 1st, 15th, 29th — approximate biweekly. Two credits per month at half each.
-        if (cursor.day === 1 || cursor.day === 15) inflow += p.expected_amount / 2
-      }
+    // 3. Planned income credits — split each aggregated monthly total across
+    //    its cadence's paydays for the month.
+    for (const plan of aggregatedPlans.values()) {
+      if (plan.year !== cursor.year || plan.month !== cursor.month) continue
+      const paydays = paydaysFor(plan.year, plan.month, plan.cadence)
+      if (!paydays.includes(cursor.day)) continue
+      inflow += plan.total / paydays.length
     }
 
     const netChange = round2(inflow - outflow)

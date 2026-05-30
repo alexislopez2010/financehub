@@ -30,7 +30,7 @@ import { SpendByCategoryCard } from '@/components/briefing/SpendByCategoryCard'
 import { BudgetSnapshotCard } from '@/components/briefing/BudgetSnapshotCard'
 import { IncomeVsExpenseCard } from '@/components/briefing/IncomeVsExpenseCard'
 import { TopMerchantsCard } from '@/components/briefing/TopMerchantsCard'
-import { forecast30Day } from '@/lib/finance/forecast'
+import { forecast30Day, normalizeCadence } from '@/lib/finance/forecast'
 import type {
   TransactionRow as FinanceTransactionRow,
   BillRow as FinanceBillRow,
@@ -165,7 +165,7 @@ export function Briefing() {
         month: p.month,
         expected_amount: p.expected_amount,
         is_active: p.is_active,
-        cadence: (p.frequency as FinanceIncomePlanRow['cadence']) ?? null
+        cadence: normalizeCadence(p.frequency)
       })),
     [incomePlan]
   )

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { forecast30Day, parseISODate, formatISODate, addDay } from './forecast'
+import { forecast30Day, parseISODate, formatISODate, addDay, normalizeCadence } from './forecast'
 import type { TransactionRow, BillRow, IncomePlanRow } from './types'
 
 const HID = '00000000-0000-0000-0000-000000000001'
@@ -215,12 +215,15 @@ describe('forecast30Day — income plan', () => {
     expect(out[1]!.inflow).toBe(0)
   })
 
-  it('credits semimonthly plan on the 1st and 15th', () => {
+  it('credits semimonthly plan on the 15th and last day of the month', () => {
+    // US semimonthly payroll: 15th + last day of month. May 2025 has 31 days.
     const p = plan({ year: 2025, month: 5, expected_amount: 4000, cadence: 'semimonthly' })
-    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 16 })
-    expect(out[0]!.inflow).toBe(2000)
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    expect(out[0]!.inflow).toBe(0)  // 1st no longer a payday
     expect(out[14]!.date).toBe('2025-05-15')
     expect(out[14]!.inflow).toBe(2000)
+    expect(out[30]!.date).toBe('2025-05-31')
+    expect(out[30]!.inflow).toBe(2000)
   })
 
   it('treats null cadence as monthly', () => {
@@ -250,6 +253,190 @@ describe('forecast30Day — income plan', () => {
     expect(out[0]!.inflow).toBe(5000)
     const jun1 = out.find(p => p.date === '2025-06-01')!
     expect(jun1.inflow).toBe(5500)
+  })
+})
+
+describe('normalizeCadence', () => {
+  it('returns monthly for null/undefined/empty', () => {
+    expect(normalizeCadence(null)).toBe('monthly')
+    expect(normalizeCadence(undefined)).toBe('monthly')
+    expect(normalizeCadence('')).toBe('monthly')
+  })
+
+  it('returns monthly for "Monthly" / "monthly"', () => {
+    expect(normalizeCadence('Monthly')).toBe('monthly')
+    expect(normalizeCadence('monthly')).toBe('monthly')
+  })
+
+  it('returns semimonthly for every shape of semimonthly', () => {
+    expect(normalizeCadence('Semi-monthly')).toBe('semimonthly')
+    expect(normalizeCadence('semi-monthly')).toBe('semimonthly')
+    expect(normalizeCadence('Semimonthly')).toBe('semimonthly')
+    expect(normalizeCadence('semimonthly')).toBe('semimonthly')
+    expect(normalizeCadence('semi_monthly')).toBe('semimonthly')
+    expect(normalizeCadence('Semi monthly')).toBe('semimonthly')
+  })
+
+  it('returns biweekly for every shape of biweekly', () => {
+    expect(normalizeCadence('Bi-weekly')).toBe('biweekly')
+    expect(normalizeCadence('bi-weekly')).toBe('biweekly')
+    expect(normalizeCadence('Biweekly')).toBe('biweekly')
+    expect(normalizeCadence('biweekly')).toBe('biweekly')
+    expect(normalizeCadence('bi_weekly')).toBe('biweekly')
+  })
+
+  it('returns monthly for unknown strings', () => {
+    expect(normalizeCadence('quarterly')).toBe('monthly')
+    expect(normalizeCadence('weekly')).toBe('monthly')
+    expect(normalizeCadence('xyz')).toBe('monthly')
+  })
+})
+
+describe('forecast30Day — semimonthly paydays + cadence normalization', () => {
+  it('semimonthly: $10,000 in May 2025 → $5,000 on May 15 + $5,000 on May 31', () => {
+    // Use frequency (not cadence) to exercise the Briefing's wire shape.
+    const p = plan({
+      year: 2025,
+      month: 5,
+      expected_amount: 10000,
+      cadence: undefined,
+      frequency: 'Semi-monthly'
+    } as unknown as IncomePlanRow & { frequency?: string })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    expect(out[0]!.inflow).toBe(0)
+    expect(out[14]!.date).toBe('2025-05-15')
+    expect(out[14]!.inflow).toBe(5000)
+    expect(out[30]!.date).toBe('2025-05-31')
+    expect(out[30]!.inflow).toBe(5000)
+    // Sanity: no other day got an inflow.
+    const otherDays = out.filter(p => p.date !== '2025-05-15' && p.date !== '2025-05-31')
+    expect(otherDays.every(p => p.inflow === 0)).toBe(true)
+  })
+
+  it('semimonthly Feb 2026 (non-leap) → paydays 15 + 28', () => {
+    const p = plan({ year: 2026, month: 2, expected_amount: 2000, cadence: 'semimonthly' })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2026-02-01', days: 28 })
+    expect(out[14]!.date).toBe('2026-02-15')
+    expect(out[14]!.inflow).toBe(1000)
+    expect(out[27]!.date).toBe('2026-02-28')
+    expect(out[27]!.inflow).toBe(1000)
+  })
+
+  it('semimonthly Feb 2024 (leap) → paydays 15 + 29', () => {
+    const p = plan({ year: 2024, month: 2, expected_amount: 2000, cadence: 'semimonthly' })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2024-02-01', days: 29 })
+    expect(out[14]!.date).toBe('2024-02-15')
+    expect(out[14]!.inflow).toBe(1000)
+    expect(out[28]!.date).toBe('2024-02-29')
+    expect(out[28]!.inflow).toBe(1000)
+  })
+
+  it.each([
+    ['Semi-monthly'],
+    ['semi-monthly'],
+    ['Semimonthly'],
+    ['semimonthly']
+  ])('normalizes frequency=%s → projects on 15 + last day', (raw) => {
+    const p = plan({
+      year: 2025,
+      month: 5,
+      expected_amount: 4000,
+      cadence: undefined,
+      frequency: raw
+    } as unknown as IncomePlanRow & { frequency?: string })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    expect(out[14]!.inflow).toBe(2000)
+    expect(out[30]!.inflow).toBe(2000)
+  })
+
+  it('biweekly frequency=Bi-weekly → projects on 15 + last day', () => {
+    const p = plan({
+      year: 2025,
+      month: 5,
+      expected_amount: 4000,
+      cadence: undefined,
+      frequency: 'Bi-weekly'
+    } as unknown as IncomePlanRow & { frequency?: string })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    expect(out[14]!.inflow).toBe(2000)
+    expect(out[30]!.inflow).toBe(2000)
+  })
+
+  it('monthly default kicks in for unknown/null frequency', () => {
+    const p = plan({
+      year: 2025,
+      month: 5,
+      expected_amount: 5000,
+      cadence: undefined,
+      frequency: null
+    } as unknown as IncomePlanRow & { frequency?: string | null })
+    const out = forecast30Day([], [], [p], { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    expect(out[0]!.inflow).toBe(5000)
+    expect(out.slice(1).every(p => p.inflow === 0)).toBe(true)
+  })
+})
+
+describe('forecast30Day — income plan aggregation', () => {
+  it('aggregates 2 duplicate rows into one monthly total, then splits per cadence', () => {
+    // Real-world case: 2 rows of $5,038 for the same member+source+month.
+    // Whether they represent 2 pay events OR a duplicate import, the
+    // projection must be the same: $5,038 per payday across the 2 semimonthly paydays.
+    const plans = [
+      plan({
+        id: 'p1',
+        member: 'Alexis Lopez',
+        source: 'Omnicom Shared Services',
+        year: 2026,
+        month: 5,
+        expected_amount: 5038,
+        cadence: 'semimonthly'
+      }),
+      plan({
+        id: 'p2',
+        member: 'Alexis Lopez',
+        source: 'Omnicom Shared Services',
+        year: 2026,
+        month: 5,
+        expected_amount: 5038,
+        cadence: 'semimonthly'
+      })
+    ]
+    const out = forecast30Day([], [], plans, { startBalance: 0, startDate: '2026-05-01', days: 31 })
+    const may15 = out.find(p => p.date === '2026-05-15')!
+    const may31 = out.find(p => p.date === '2026-05-31')!
+    expect(may15.inflow).toBe(5038)
+    expect(may31.inflow).toBe(5038)
+    // Total across the month: $10,076 — NOT 4 × $5,038 = $20,152.
+    const totalInflow = out.reduce((acc, p) => acc + p.inflow, 0)
+    expect(totalInflow).toBe(10076)
+  })
+
+  it('aggregation is case-insensitive on member/source', () => {
+    const plans = [
+      plan({ id: 'p1', member: 'Alexis Lopez', source: 'Employer', year: 2025, month: 5, expected_amount: 1000, cadence: 'semimonthly' }),
+      plan({ id: 'p2', member: 'alexis lopez', source: 'EMPLOYER', year: 2025, month: 5, expected_amount: 1000, cadence: 'semimonthly' })
+    ]
+    const out = forecast30Day([], [], plans, { startBalance: 0, startDate: '2025-05-01', days: 31 })
+    const totalInflow = out.reduce((acc, p) => acc + p.inflow, 0)
+    expect(totalInflow).toBe(2000)  // $1k per payday × 2 paydays
+  })
+
+  it('different members are aggregated separately', () => {
+    const plans = [
+      plan({ id: 'p1', member: 'Alexis', source: 'Employer', year: 2025, month: 5, expected_amount: 5000, cadence: 'monthly' }),
+      plan({ id: 'p2', member: 'Marilyn', source: 'Employer', year: 2025, month: 5, expected_amount: 3000, cadence: 'monthly' })
+    ]
+    const out = forecast30Day([], [], plans, { startBalance: 0, startDate: '2025-05-01', days: 1 })
+    expect(out[0]!.inflow).toBe(8000)
+  })
+
+  it('inactive rows are excluded from aggregation', () => {
+    const plans = [
+      plan({ id: 'p1', member: 'Alexis', source: 'Employer', year: 2025, month: 5, expected_amount: 5000, is_active: true, cadence: 'monthly' }),
+      plan({ id: 'p2', member: 'Alexis', source: 'Employer', year: 2025, month: 5, expected_amount: 99999, is_active: false, cadence: 'monthly' })
+    ]
+    const out = forecast30Day([], [], plans, { startBalance: 0, startDate: '2025-05-01', days: 1 })
+    expect(out[0]!.inflow).toBe(5000)
   })
 })
 
