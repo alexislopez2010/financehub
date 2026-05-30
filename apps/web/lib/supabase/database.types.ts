@@ -147,6 +147,7 @@ export type Database = {
         Row: {
           account: string | null
           budget_amount: number
+          budget_category_id: string | null
           category: string | null
           created_at: string | null
           due_day: number | null
@@ -161,6 +162,7 @@ export type Database = {
         Insert: {
           account?: string | null
           budget_amount?: number
+          budget_category_id?: string | null
           category?: string | null
           created_at?: string | null
           due_day?: number | null
@@ -175,6 +177,7 @@ export type Database = {
         Update: {
           account?: string | null
           budget_amount?: number
+          budget_category_id?: string | null
           category?: string | null
           created_at?: string | null
           due_day?: number | null

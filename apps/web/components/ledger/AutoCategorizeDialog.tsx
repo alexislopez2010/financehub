@@ -6,6 +6,7 @@ import { X, Sparkles, Wand2, ListChecks, HelpCircle } from 'lucide-react'
 import { useTransactions, useUpdateTransaction, type TransactionRow } from '@/lib/data/transactions'
 import { useCategories, type CategoryRow } from '@/lib/data/categories'
 import { useBillMatchRules } from '@/lib/data/billMatchRules'
+import { useBills } from '@/lib/data/bills'
 import { suggestCategories, type MerchantGroup } from '@/lib/ledger/autoCategorize'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { cn } from '@/lib/cn'
@@ -51,7 +52,7 @@ interface ConfidencePillProps {
 }
 
 function ConfidencePill({ confidence }: ConfidencePillProps) {
-  if (confidence === 'rule') {
+  if (confidence === 'bill' || confidence === 'rule') {
     return (
       <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
         High
@@ -76,6 +77,7 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
   const txQ = useTransactions()
   const categoriesQ = useCategories()
   const rulesQ = useBillMatchRules()
+  const billsQ = useBills()
   const updateTx = useUpdateTransaction()
 
   const txs: ReadonlyArray<TransactionRow> = txQ.data ?? []
@@ -102,12 +104,17 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
         category: t.category
       })),
       billMatchRules: (rulesQ.data ?? []).map(r => ({
+        bill_id: r.bill_id,
         name_keyword: r.keyword,
         category: r.category
       })),
+      bills: (billsQ.data ?? []).map(b => ({
+        id: b.id,
+        budget_category_id: b.budget_category_id
+      })),
       categories: categories.map(c => ({ id: c.id, name: c.name }))
     })
-  }, [uncategorized, categorized, categoriesQ.data, rulesQ.data, categories])
+  }, [uncategorized, categorized, categoriesQ.data, rulesQ.data, billsQ.data, categories])
 
   // Per-group user choice keyed by normalized merchant.
   const [groupChoices, setGroupChoices] = useState<Record<string, GroupChoice>>({})
@@ -140,7 +147,7 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
     }
   }, [open])
 
-  const isLoading = txQ.isLoading || categoriesQ.isLoading || rulesQ.isLoading
+  const isLoading = txQ.isLoading || categoriesQ.isLoading || rulesQ.isLoading || billsQ.isLoading
 
   // Derived counts.
   const haveSuggestionCount = groups.filter(g => g.confidence !== 'none').length
@@ -238,8 +245,8 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             <Dialog.Description className="text-xs text-muted">
               {uncategorized.length} uncategorized rows · {groups.length} merchants. Suggestions
-              seeded from your bill rules, history, and built-in patterns. Already-categorized
-              rows are never touched.
+              seeded from your bills, bill rules, history, and built-in patterns.
+              Already-categorized rows are never touched.
             </Dialog.Description>
 
             {isLoading ? (

@@ -404,4 +404,110 @@ describe('suggestCategories', () => {
     expect(out[0]!.confidence).toBe('rule')
     expect(out[0]!.suggestedCategoryName).toBe('Utilities')
   })
+
+  describe('bill signal (Phase 3I T2a)', () => {
+    it('bill-mapped category beats rule.category as HIGH+ priority', () => {
+      // Rule says "Utilities", but the linked bill is mapped to "Housing"
+      // (the real budget bucket). Bill mapping wins.
+      const out = suggestCategories(
+        makeInput({
+          uncategorizedTxs: [{ id: 't1', description: 'CHASE BILL PAY PSEG 6789' }],
+          billMatchRules: [
+            { bill_id: 'bill-electric', name_keyword: 'pseg', category: 'Utilities' },
+          ],
+          bills: [{ id: 'bill-electric', budget_category_id: 'cat-housing' }],
+          categories: [
+            ...CATEGORIES,
+            { id: 'cat-housing', name: 'Housing' },
+          ],
+        })
+      )
+
+      expect(out[0]).toMatchObject({
+        confidence: 'bill',
+        suggestedCategoryName: 'Housing',
+        suggestedCategoryId: 'cat-housing',
+      })
+    })
+
+    it('falls back to rule.category when bill has no budget_category_id', () => {
+      const out = suggestCategories(
+        makeInput({
+          uncategorizedTxs: [{ id: 't1', description: 'CHASE BILL PAY PSEG 6789' }],
+          billMatchRules: [
+            { bill_id: 'bill-electric', name_keyword: 'pseg', category: 'Utilities' },
+          ],
+          bills: [{ id: 'bill-electric', budget_category_id: null }],
+        })
+      )
+
+      expect(out[0]!.confidence).toBe('rule')
+      expect(out[0]!.suggestedCategoryName).toBe('Utilities')
+    })
+
+    it('falls back to rule.category when rule has no bill_id', () => {
+      const out = suggestCategories(
+        makeInput({
+          uncategorizedTxs: [{ id: 't1', description: 'CHASE BILL PAY PSEG 6789' }],
+          billMatchRules: [
+            // No bill_id at all (legacy BILL_TX_MAP-style rule).
+            { name_keyword: 'pseg', category: 'Utilities' },
+          ],
+          bills: [{ id: 'bill-electric', budget_category_id: 'cat-housing' }],
+          categories: [
+            ...CATEGORIES,
+            { id: 'cat-housing', name: 'Housing' },
+          ],
+        })
+      )
+
+      expect(out[0]!.confidence).toBe('rule')
+      expect(out[0]!.suggestedCategoryName).toBe('Utilities')
+    })
+
+    it('picks the first matching rule whose linked bill has a mapping', () => {
+      // Two rules match the same description. First links to an unmapped
+      // bill (no budget_category_id); second links to a mapped bill. The
+      // 'bill' loop runs first across ALL rules and picks the first whose
+      // bill is mapped — which is rule 2.
+      const out = suggestCategories(
+        makeInput({
+          uncategorizedTxs: [{ id: 't1', description: 'PAYMENT BIGCO XYZ' }],
+          billMatchRules: [
+            { bill_id: 'bill-unmapped', name_keyword: 'bigco', category: 'Shopping' },
+            { bill_id: 'bill-mapped', name_keyword: 'payment', category: 'Financial' },
+          ],
+          bills: [
+            { id: 'bill-unmapped', budget_category_id: null },
+            { id: 'bill-mapped', budget_category_id: 'cat-housing' },
+          ],
+          categories: [
+            ...CATEGORIES,
+            { id: 'cat-housing', name: 'Housing' },
+          ],
+        })
+      )
+
+      expect(out[0]!.confidence).toBe('bill')
+      expect(out[0]!.suggestedCategoryName).toBe('Housing')
+    })
+
+    it('falls through when bill.budget_category_id does not resolve to a real category', () => {
+      // Defensive: bill points to a category id that no longer exists in
+      // the categories list. The 'bill' signal must NOT propose a phantom
+      // category — fall through to the next tier (rule.category).
+      const out = suggestCategories(
+        makeInput({
+          uncategorizedTxs: [{ id: 't1', description: 'CHASE BILL PAY PSEG 6789' }],
+          billMatchRules: [
+            { bill_id: 'bill-electric', name_keyword: 'pseg', category: 'Utilities' },
+          ],
+          bills: [{ id: 'bill-electric', budget_category_id: 'ghost-cat-id' }],
+        })
+      )
+
+      expect(out[0]!.confidence).toBe('rule')
+      expect(out[0]!.suggestedCategoryName).toBe('Utilities')
+    })
+  })
 })

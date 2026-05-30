@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { TransactionRow } from '@/lib/data/transactions'
 import type { CategoryRow } from '@/lib/data/categories'
 import type { BillMatchRuleRow } from '@/lib/data/billMatchRules'
+import type { BillRow } from '@/lib/data/bills'
 
 const HOUSEHOLD = '00000000-0000-0000-0000-000000000001'
 
@@ -22,6 +23,10 @@ const mockUseBillMatchRules = vi.fn<() => {
   data: ReadonlyArray<BillMatchRuleRow>
   isLoading: boolean
 }>()
+const mockUseBills = vi.fn<() => {
+  data: ReadonlyArray<BillRow>
+  isLoading: boolean
+}>()
 
 vi.mock('@/lib/data/transactions', async () => {
   const actual = await vi.importActual<typeof import('@/lib/data/transactions')>('@/lib/data/transactions')
@@ -38,6 +43,10 @@ vi.mock('@/lib/data/categories', async () => ({
 
 vi.mock('@/lib/data/billMatchRules', async () => ({
   useBillMatchRules: () => mockUseBillMatchRules()
+}))
+
+vi.mock('@/lib/data/bills', async () => ({
+  useBills: () => mockUseBills()
 }))
 
 import { AutoCategorizeDialog } from './AutoCategorizeDialog'
@@ -93,8 +102,10 @@ beforeEach(() => {
   mockUseTransactions.mockReset()
   mockUseCategories.mockReset()
   mockUseBillMatchRules.mockReset()
+  mockUseBills.mockReset()
   mockUseCategories.mockReturnValue({ data: CATEGORIES, isLoading: false })
   mockUseBillMatchRules.mockReturnValue({ data: [], isLoading: false })
+  mockUseBills.mockReturnValue({ data: [], isLoading: false })
 })
 
 describe('<AutoCategorizeDialog>', () => {

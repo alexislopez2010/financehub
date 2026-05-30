@@ -53,6 +53,7 @@ function mkBill(overrides: {
     id: overrides.id,
     name: overrides.name,
     budget_amount: overrides.budget_amount,
+    budget_category_id: null,
     due_day: overrides.due_day,
     is_active: overrides.is_active ?? true,
     household_id: 'hh1',

@@ -54,6 +54,7 @@ export function useCreateBill(): UseMutationResult<BillRow, Error, BillInsert, B
         created_at: null,
         account: null,
         budget_amount: 0,
+        budget_category_id: null,
         category: null,
         due_day: null,
         frequency: null,

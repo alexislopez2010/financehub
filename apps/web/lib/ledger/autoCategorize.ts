@@ -2,11 +2,16 @@
  * Pure suggestion engine for auto-categorizing uncategorized transactions.
  *
  * Groups uncategorized rows by normalized merchant and proposes a single
- * category per group from three ranked signal sources:
+ * category per group from four ranked signal sources:
  *
- *   1. `bill_match_rules`     (confidence='rule')       HIGH
- *   2. Learned from history   (confidence='learned')    MEDIUM
- *   3. Built-in dictionary    (confidence='dictionary') MEDIUM
+ *   1. Bill-mapped category   (confidence='bill')       HIGH
+ *      A bill_match_rule whose linked bill has a `budget_category_id`
+ *      mapped to a real category. Bridges bill payments into the right
+ *      budget bucket regardless of the rule's text `category` column.
+ *   2. `bill_match_rules`     (confidence='rule')       HIGH
+ *      The rule's own text `category` column (legacy / unmapped bills).
+ *   3. Learned from history   (confidence='learned')    MEDIUM
+ *   4. Built-in dictionary    (confidence='dictionary') MEDIUM
  *   else                        confidence='none'        — no suggestion
  *
  * First signal source to fire wins; later sources are not consulted.
@@ -38,7 +43,7 @@ export interface MerchantGroup {
   /** Display name for the suggestion. */
   suggestedCategoryName: string | null
   /** Where the suggestion came from. */
-  confidence: 'rule' | 'learned' | 'dictionary' | 'none'
+  confidence: 'bill' | 'rule' | 'learned' | 'dictionary' | 'none'
 }
 
 export interface SuggestInput {
@@ -55,8 +60,20 @@ export interface SuggestInput {
     category: string | null
   }>
   billMatchRules: ReadonlyArray<{
+    /** Optional FK to a bill; enables the 'bill' signal when set. */
+    bill_id?: string | null
     name_keyword: string | null
     category: string | null
+  }>
+  /**
+   * Bills with their mapped budget category. Used for the 'bill' signal:
+   * when a rule's `bill_id` resolves to a bill whose `budget_category_id`
+   * resolves to a real category, that category becomes the suggestion.
+   * Defaults to [] when omitted.
+   */
+  bills?: ReadonlyArray<{
+    id: string
+    budget_category_id: string | null
   }>
   categories: ReadonlyArray<{ id: string; name: string }>
 }
@@ -148,6 +165,7 @@ interface GroupedTx {
  */
 export function suggestCategories(input: SuggestInput): ReadonlyArray<MerchantGroup> {
   const { uncategorizedTxs, categorizedTxs, billMatchRules, categories } = input
+  const bills = input.bills ?? []
 
   // 1. Group uncategorized txs by normalized merchant.
   const groupsByMerchant = new Map<string, GroupedTx>()
@@ -181,12 +199,22 @@ export function suggestCategories(input: SuggestInput): ReadonlyArray<MerchantGr
     else learnedByMerchant.set(merchant, [cat])
   }
 
-  // 3. Build a lowercase index for category id resolution.
+  // 3. Build a lowercase index for category id resolution + the inverse
+  //    id→name map (used for the 'bill' signal to look up the mapped
+  //    category name from a bill's budget_category_id).
   const categoryIdByName = new Map<string, string>()
+  const categoryNameById = new Map<string, string>()
   for (const c of categories) {
     const key = c.name.trim().toLowerCase()
     if (!key) continue
     if (!categoryIdByName.has(key)) categoryIdByName.set(key, c.id)
+    if (!categoryNameById.has(c.id)) categoryNameById.set(c.id, c.name)
+  }
+
+  // 3a. Bill index: id → budget_category_id (skip bills with no mapping).
+  const billBudgetCategoryById = new Map<string, string>()
+  for (const b of bills) {
+    if (b.budget_category_id) billBudgetCategoryById.set(b.id, b.budget_category_id)
   }
 
   // 4. For each group, compute its suggestion.
@@ -196,6 +224,8 @@ export function suggestCategories(input: SuggestInput): ReadonlyArray<MerchantGr
       group,
       billMatchRules,
       learnedByMerchant,
+      billBudgetCategoryById,
+      categoryNameById,
     })
 
     const id = name ? categoryIdByName.get(name.trim().toLowerCase()) ?? null : null
@@ -228,6 +258,10 @@ interface ComputeSuggestionInput {
   group: GroupedTx
   billMatchRules: SuggestInput['billMatchRules']
   learnedByMerchant: ReadonlyMap<string, ReadonlyArray<string>>
+  /** Bill id → budget_category_id (only bills with a mapping). */
+  billBudgetCategoryById: ReadonlyMap<string, string>
+  /** Category id → display name (for 'bill' signal resolution). */
+  categoryNameById: ReadonlyMap<string, string>
 }
 
 interface ComputedSuggestion {
@@ -236,10 +270,34 @@ interface ComputedSuggestion {
 }
 
 function computeSuggestion(input: ComputeSuggestionInput): ComputedSuggestion {
-  const { group, billMatchRules, learnedByMerchant } = input
+  const {
+    group,
+    billMatchRules,
+    learnedByMerchant,
+    billBudgetCategoryById,
+    categoryNameById,
+  } = input
   const lowerDescriptions = group.descriptions.map(d => d.toLowerCase())
 
-  // (1) Rule match — any rule.name_keyword found in any description.
+  // (1) Bill signal — any rule.name_keyword matches AND that rule links
+  //     to a bill with a mapped budget_category_id that resolves to a
+  //     real category. Highest priority: ranks ABOVE rule.category.
+  for (const rule of billMatchRules) {
+    const kw = rule.name_keyword?.trim().toLowerCase()
+    if (!kw) continue
+    const matches = lowerDescriptions.some(d => d.includes(kw))
+    if (!matches) continue
+    const billId = rule.bill_id ?? null
+    if (!billId) continue
+    const mappedCategoryId = billBudgetCategoryById.get(billId)
+    if (!mappedCategoryId) continue
+    const categoryName = categoryNameById.get(mappedCategoryId)
+    if (!categoryName) continue
+    return { name: categoryName, confidence: 'bill' }
+  }
+
+  // (2) Rule match — any rule.name_keyword found in any description.
+  //     Falls through to here when no rule had a bill-mapped category.
   for (const rule of billMatchRules) {
     const kw = rule.name_keyword?.trim().toLowerCase()
     if (!kw) continue
@@ -250,14 +308,14 @@ function computeSuggestion(input: ComputeSuggestionInput): ComputedSuggestion {
     return { name: cat, confidence: 'rule' }
   }
 
-  // (2) Learned — same normalized merchant in categorized history.
+  // (3) Learned — same normalized merchant in categorized history.
   const learned = learnedByMerchant.get(group.merchant)
   if (learned && learned.length > 0) {
     const mostCommon = pickMostCommon(learned)
     if (mostCommon) return { name: mostCommon, confidence: 'learned' }
   }
 
-  // (3) Dictionary — substring of any description matches a pattern.
+  // (4) Dictionary — substring of any description matches a pattern.
   for (const entry of BUILTIN_DICTIONARY) {
     const p = entry.pattern.toLowerCase()
     const matches = lowerDescriptions.some(d => d.includes(p))

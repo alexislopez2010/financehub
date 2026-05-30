@@ -36,6 +36,7 @@ function makeBill(over: Partial<BillRow> = {}): BillRow {
     household_id: HOUSEHOLD,
     name: 'Mortgage',
     budget_amount: 2000,
+    budget_category_id: null,
     account: null,
     category: null,
     created_at: null,

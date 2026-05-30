@@ -14,6 +14,7 @@ function mkBill(
     id,
     name,
     budget_amount,
+    budget_category_id: null,
     due_day,
     is_active,
     household_id: 'hh1',
