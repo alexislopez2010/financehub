@@ -8,6 +8,10 @@ import { useCategories } from '@/lib/data/categories'
 import { useBills } from '@/lib/data/bills'
 import { deriveBudgetVsActual } from '@/lib/plan/budgetVsActual'
 import { periodToRange, type PlanPeriod } from '@/lib/plan/period'
+import {
+  computeOverBudgetReconciliation,
+  type ReconciliationTone
+} from '@/lib/plan/reconcile'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { BudgetRow, BUDGET_ROW_GRID } from './BudgetRow'
 import { AddBudgetForm } from './AddBudgetForm'
@@ -15,13 +19,32 @@ import { cn } from '@/lib/cn'
 
 export interface BudgetSectionProps {
   period: PlanPeriod
+  /**
+   * Planned income for the period, lifted from Plan.tsx so the header can
+   * reconcile over-budget spend against unplanned income variance. Optional
+   * for callers that don't have the data — the reconciliation line simply
+   * won't render in that case.
+   */
+  plannedIncome?: number
+  /** Actual income for the period. See `plannedIncome` for rationale. */
+  actualIncome?: number
+}
+
+const RECONCILIATION_TONE_CLASSES: Record<ReconciliationTone, string> = {
+  positive: 'text-emerald-700',
+  warning: 'text-amber-600',
+  negative: 'text-red-700'
 }
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 }
 
-export function BudgetSection({ period }: BudgetSectionProps) {
+export function BudgetSection({
+  period,
+  plannedIncome,
+  actualIncome
+}: BudgetSectionProps) {
   const budgetsQ = useBudgets(period)
   const range = periodToRange(period)
   const txsQ = useTransactions({ startDate: range.startDate, endDate: range.endDate })
@@ -47,10 +70,19 @@ export function BudgetSection({ period }: BudgetSectionProps) {
   const totalBudgeted = rows.reduce((s, r) => s + r.budgeted, 0)
   const totalActual = rows.reduce((s, r) => s + r.actual, 0)
   const remaining = totalBudgeted - totalActual
+  const overBudgetAmount = Math.max(0, totalActual - totalBudgeted)
   const totalBillsCommitted = rows.reduce((s, r) => s + r.billsCommitted, 0)
   const billsPct =
     totalBudgeted > 0 ? Math.round((totalBillsCommitted / totalBudgeted) * 100) : null
   const billsOverCommitted = totalBudgeted > 0 && totalBillsCommitted > totalBudgeted
+
+  const reconciliation = useMemo(() => {
+    if (plannedIncome === undefined || actualIncome === undefined) return null
+    return computeOverBudgetReconciliation({
+      overBudgetAmount,
+      incomeVariance: actualIncome - plannedIncome
+    })
+  }, [overBudgetAmount, plannedIncome, actualIncome])
 
   // Categories not yet used by a budget for this period.
   const budgetedNames = new Set(
@@ -111,6 +143,18 @@ export function BudgetSection({ period }: BudgetSectionProps) {
           <div className={cn('text-xs', remaining < 0 ? 'text-red-600' : 'text-muted')}>
             {remaining < 0 ? `over by ${formatUSD(Math.abs(remaining))}` : `${formatUSD(remaining)} left`}
           </div>
+          {reconciliation && (
+            <div
+              data-testid="over-budget-reconciliation"
+              className={cn(
+                'text-[11px] pt-0.5',
+                RECONCILIATION_TONE_CLASSES[reconciliation.tone]
+              )}
+            >
+              <span aria-hidden="true">{'· '}</span>
+              {reconciliation.text}
+            </div>
+          )}
           {totalBillsCommitted > 0 && (
             <div
               className={cn(

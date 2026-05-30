@@ -5,17 +5,19 @@ import { Wallet, TrendingUp, AlertTriangle, PiggyBank, Coins } from 'lucide-reac
 import { KpiTile, type CaptionTone, type IconTone } from '@/components/ui/KpiTile'
 import { useBudgets } from '@/lib/data/budgets'
 import { useBills } from '@/lib/data/bills'
-import { useIncomePlan } from '@/lib/data/incomePlan'
 import { useTransactions } from '@/lib/data/transactions'
 import {
   deriveBudgetVsActual,
   type BudgetVsActualRow
 } from '@/lib/plan/budgetVsActual'
-import { matchIncome } from '@/lib/finance/incomeMatching'
 import { periodToRange, type PlanPeriod } from '@/lib/plan/period'
 
 export interface PlanSummaryProps {
   period: PlanPeriod
+  /** Planned income for the period (sum of expected_amount). Computed at Plan.tsx. */
+  plannedIncome: number
+  /** Actual income for the period (sum of matched income tx amounts). Computed at Plan.tsx. */
+  actualIncome: number
 }
 
 /**
@@ -226,11 +228,10 @@ export function PlanSummaryTiles({ metrics }: PlanSummaryTilesProps) {
   )
 }
 
-export function PlanSummary({ period }: PlanSummaryProps) {
+export function PlanSummary({ period, plannedIncome, actualIncome }: PlanSummaryProps) {
   const budgetsQ = useBudgets(period)
   const range = periodToRange(period)
   const txsQ = useTransactions({ startDate: range.startDate, endDate: range.endDate })
-  const incomeQ = useIncomePlan({ year: period.year })
   const billsQ = useBills()
 
   const budgetRows = useMemo(
@@ -243,20 +244,6 @@ export function PlanSummary({ period }: PlanSummaryProps) {
       }),
     [budgetsQ.data, txsQ.data, billsQ.data, period]
   )
-
-  const monthPlans = (incomeQ.data ?? []).filter(p => p.month === period.month)
-  const matchResults = useMemo(
-    () =>
-      matchIncome(
-        monthPlans as unknown as Parameters<typeof matchIncome>[0],
-        (txsQ.data ?? []) as unknown as Parameters<typeof matchIncome>[1],
-        { year: period.year, months: [period.month] }
-      ),
-    [monthPlans, txsQ.data, period]
-  )
-
-  const plannedIncome = monthPlans.reduce((s, p) => s + p.expected_amount, 0)
-  const actualIncome = matchResults.reduce((s, r) => s + r.actual, 0)
 
   const metrics = useMemo(
     () => computePlanSummaryMetrics({ budgetRows, actualIncome, plannedIncome }),
