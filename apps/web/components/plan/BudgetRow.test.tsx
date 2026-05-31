@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { BudgetRow } from './BudgetRow'
 import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
 
@@ -27,7 +27,7 @@ describe('<BudgetRow> bills column', () => {
         row={row({ billsCommitted: 1500, billsCoverage: 1.5, billsOverCommitted: true })}
         onEditBudget={noop}
         onDelete={noop}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     // Bills committed amount renders in both the desktop column and the mobile subline.
@@ -41,7 +41,7 @@ describe('<BudgetRow> bills column', () => {
         row={row({ billsCommitted: 0 })}
         onEditBudget={noop}
         onDelete={noop}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     expect(screen.getByText('—')).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('<BudgetRow> bills column', () => {
         })}
         onEditBudget={noop}
         onDelete={noop}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     expect(screen.getByLabelText('Bills exceed this budget')).toBeInTheDocument()
@@ -73,7 +73,7 @@ describe('<BudgetRow> bills column', () => {
         row={row({ budgeted: 1000, billsCommitted: 500, billsCoverage: 0.5 })}
         onEditBudget={noop}
         onDelete={noop}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     expect(screen.queryByLabelText('Bills exceed this budget')).not.toBeInTheDocument()
@@ -85,7 +85,7 @@ describe('<BudgetRow> bills column', () => {
         row={row({ billsCommitted: 250 })}
         onEditBudget={noop}
         onDelete={noop}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     // The mobile subline is the only element marked `md:hidden` that mentions "bills:".
@@ -101,10 +101,138 @@ describe('<BudgetRow> bills column', () => {
         row={row({ billsCommitted: 100 })}
         onEditBudget={onEdit}
         onDelete={onDelete}
-        onCreateForUnbudgeted={noop}
+        onCreateBudget={noop}
       />
     )
     expect(onEdit).not.toHaveBeenCalled()
     expect(onDelete).not.toHaveBeenCalled()
+  })
+})
+
+describe('<BudgetRow> inline-add for unbudgeted rows', () => {
+  function unbudgeted(over: Partial<BudgetVsActualRow> = {}): BudgetVsActualRow {
+    return row({
+      budgetId: null,
+      categoryId: null,
+      category: 'Cash & ATM',
+      budgeted: 0,
+      actual: 6200,
+      variance: -6200,
+      billsCommitted: 0,
+      billsCoverage: null,
+      billsOverCommitted: false,
+      ...over
+    })
+  }
+
+  it('shows "+ Add a budget for this" trigger on actuals-only rows', () => {
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+      />
+    )
+    expect(screen.getByRole('button', { name: /\+ Add a budget for this/i })).toBeInTheDocument()
+  })
+
+  it('reveals an amount input when the trigger is clicked', () => {
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    expect(screen.getByLabelText('Budget amount for Cash & ATM')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument()
+  })
+
+  it('calls onCreateBudget with the parsed amount when Save is clicked', () => {
+    const onCreate = vi.fn()
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={onCreate}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    const input = screen.getByLabelText('Budget amount for Cash & ATM')
+    fireEvent.change(input, { target: { value: '250' } })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(onCreate).toHaveBeenCalledWith(250)
+  })
+
+  it('commits on Enter key', () => {
+    const onCreate = vi.fn()
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={onCreate}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    const input = screen.getByLabelText('Budget amount for Cash & ATM')
+    fireEvent.change(input, { target: { value: '500' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onCreate).toHaveBeenCalledWith(500)
+  })
+
+  it('reverts to the trigger on Cancel without calling onCreateBudget', () => {
+    const onCreate = vi.fn()
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={onCreate}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(onCreate).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /\+ Add a budget for this/i })).toBeInTheDocument()
+  })
+
+  it('reverts to the trigger on Escape key', () => {
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    fireEvent.keyDown(screen.getByLabelText('Budget amount for Cash & ATM'), { key: 'Escape' })
+    expect(screen.getByRole('button', { name: /\+ Add a budget for this/i })).toBeInTheDocument()
+  })
+
+  it('does not call onCreateBudget when the amount is empty or zero', () => {
+    const onCreate = vi.fn()
+    render(
+      <BudgetRow
+        row={unbudgeted()}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={onCreate}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /\+ Add a budget for this/i }))
+    // Empty
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(onCreate).not.toHaveBeenCalled()
+    // Zero
+    fireEvent.change(screen.getByLabelText('Budget amount for Cash & ATM'), { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    expect(onCreate).not.toHaveBeenCalled()
   })
 })

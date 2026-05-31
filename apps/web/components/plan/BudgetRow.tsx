@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useRef, type KeyboardEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { EditableCell } from '@/components/ledger/EditableCell'
 import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
@@ -9,7 +10,12 @@ export interface BudgetRowProps {
   row: BudgetVsActualRow
   onEditBudget: (next: number) => void
   onDelete: () => void
-  onCreateForUnbudgeted: () => void  // for budgetId=null rows: prompt to create a budget
+  /**
+   * For budgetId=null rows with no budget (actuals-only): create a new budget
+   * row for this category in this period. Called with the user-entered amount.
+   * Wired to inline-edit in-place — no separate form to scroll to.
+   */
+  onCreateBudget: (amount: number) => void
 }
 
 /**
@@ -30,7 +36,7 @@ function pctOfBudget(actual: number, budgeted: number): number {
   return (actual / budgeted) * 100
 }
 
-export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }: BudgetRowProps) {
+export function BudgetRow({ row, onEditBudget, onDelete, onCreateBudget }: BudgetRowProps) {
   // Truly unbudgeted: no budget rows at all for this category in the period
   // (actuals-only row). Aggregated rows have budgetId=null too but budgeted>0.
   const isUnbudgeted = row.budgetId === null && row.budgeted === 0
@@ -59,13 +65,7 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
           </div>
         )}
         {isUnbudgeted && (
-          <button
-            type="button"
-            onClick={onCreateForUnbudgeted}
-            className="mt-1 text-xs text-brand hover:underline"
-          >
-            + Add a budget for this
-          </button>
+          <InlineAddBudget categoryName={row.category} onCreate={onCreateBudget} />
         )}
         {/* Mobile-only bills subline: surfaces the Bills column data when it's hidden. */}
         {hasBills && (
@@ -146,6 +146,101 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateForUnbudgeted }
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Inline "+ Add a budget for this" → reveals an amount input in-place.
+ * Enter or click Save commits; Escape or click Cancel reverts. Owns its own
+ * local state so each row toggles independently and there's no bottom-of-section
+ * form to scroll to.
+ */
+interface InlineAddBudgetProps {
+  categoryName: string
+  onCreate: (amount: number) => void
+}
+
+function InlineAddBudget({ categoryName, onCreate }: InlineAddBudgetProps) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  function commit() {
+    const n = parseFloat(draft)
+    if (!Number.isNaN(n) && n > 0) {
+      onCreate(n)
+      setDraft('')
+      setEditing(false)
+    } else {
+      // Invalid input — keep the editor open so the user can correct it.
+      inputRef.current?.focus()
+    }
+  }
+
+  function cancel() {
+    setDraft('')
+    setEditing(false)
+  }
+
+  function onKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      cancel()
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="mt-1 text-xs text-brand hover:underline"
+      >
+        + Add a budget for this
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <span aria-hidden="true" className="text-xs text-muted">$</span>
+      <input
+        ref={inputRef}
+        type="number"
+        step="0.01"
+        min="0"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={onKey}
+        placeholder="0.00"
+        aria-label={`Budget amount for ${categoryName}`}
+        className="w-24 rounded border border-brand bg-white px-1 py-0.5 text-xs tabular text-ink focus:outline-none focus:ring-1 focus:ring-brand/40"
+      />
+      <button
+        type="button"
+        onClick={commit}
+        className="text-xs text-brand hover:underline"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={cancel}
+        className="text-xs text-muted hover:text-ink"
+      >
+        Cancel
+      </button>
     </div>
   )
 }

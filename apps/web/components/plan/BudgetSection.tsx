@@ -13,6 +13,7 @@ import {
   type ReconciliationTone
 } from '@/lib/plan/reconcile'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
+import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
 import { BudgetRow, BUDGET_ROW_GRID } from './BudgetRow'
 import { AddBudgetForm } from './AddBudgetForm'
 import { cn } from '@/lib/cn'
@@ -55,7 +56,6 @@ export function BudgetSection({
   const deleteBudget = useDeleteBudget()
 
   const [showAddForm, setShowAddForm] = useState(false)
-  const [preselected, setPreselected] = useState<{ id: string | null; name: string } | null>(null)
 
   const rows = useMemo(
     () => deriveBudgetVsActual({
@@ -102,7 +102,6 @@ export function BudgetSection({
       amount: input.amount
     })
     setShowAddForm(false)
-    setPreselected(null)
   }
 
   function handleEditBudget(budgetId: string, next: number) {
@@ -113,9 +112,23 @@ export function BudgetSection({
     deleteBudget.mutate(budgetId)
   }
 
-  function handleCreateForUnbudgeted(category: string, categoryId: string | null) {
-    setPreselected({ id: categoryId, name: category })
-    setShowAddForm(true)
+  /**
+   * Inline-create for an actuals-only row. Resolves the free-text category
+   * name back to a categories row when possible so the FK is set — the
+   * unbudgeted-row derivation drops categoryId, so we look it up here.
+   */
+  function handleCreateBudgetForRow(row: BudgetVsActualRow, amount: number) {
+    const matched = (categoriesQ.data ?? []).find(
+      c => c.name.trim().toLowerCase() === row.category.trim().toLowerCase()
+    )
+    createBudget.mutate({
+      household_id: LOPEZ_HOUSEHOLD_ID,
+      year: period.year,
+      month: period.month,
+      category: matched?.name ?? row.category,
+      category_id: matched?.id ?? null,
+      amount
+    })
   }
 
   const isLoading = budgetsQ.isLoading || txsQ.isLoading || billsQ.isLoading
@@ -219,7 +232,7 @@ export function BudgetSection({
                 row={r}
                 onEditBudget={(next) => r.budgetId && handleEditBudget(r.budgetId, next)}
                 onDelete={() => r.budgetId && handleDelete(r.budgetId)}
-                onCreateForUnbudgeted={() => handleCreateForUnbudgeted(r.category, r.categoryId)}
+                onCreateBudget={(amount) => handleCreateBudgetForRow(r, amount)}
               />
             </li>
           ))}
@@ -230,11 +243,9 @@ export function BudgetSection({
       {showAddForm ? (
         <AddBudgetForm
           availableCategories={availableCategories}
-          {...(preselected?.id !== undefined ? { initialCategoryId: preselected.id } : {})}
-          {...(preselected?.name !== undefined ? { initialCategoryName: preselected.name } : {})}
           isSubmitting={createBudget.isPending}
           onSubmit={handleCreate}
-          onCancel={() => { setShowAddForm(false); setPreselected(null) }}
+          onCancel={() => setShowAddForm(false)}
         />
       ) : (
         <button
