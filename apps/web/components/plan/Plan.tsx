@@ -10,6 +10,7 @@ import { PeriodSelector } from './PeriodSelector'
 import { PlanSummary } from './PlanSummary'
 import { BudgetSection } from './BudgetSection'
 import { IncomeSection } from './IncomeSection'
+import { OrphanBillsCard } from './OrphanBillsCard'
 
 export function Plan() {
   const router = useRouter()
@@ -55,6 +56,7 @@ export function Plan() {
       </header>
 
       <PlanSummary period={period} plannedIncome={plannedIncome} actualIncome={actualIncome} />
+      <OrphanBillsCard period={period} />
       <BudgetSection
         period={period}
         plannedIncome={plannedIncome}
