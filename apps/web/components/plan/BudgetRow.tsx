@@ -16,6 +16,15 @@ export interface BudgetRowProps {
    * Wired to inline-edit in-place — no separate form to scroll to.
    */
   onCreateBudget: (amount: number) => void
+  /**
+   * Toggle the inline drawer that lists the transactions summing to `actual`.
+   * The parent owns the open/closed state so only one row's drawer is visible
+   * at a time and so the drawer can be rendered between rows in the parent's
+   * list (a child can't reach outside its grid row).
+   */
+  onToggleActuals?: () => void
+  /** True when this row's drawer is currently open — styles the Actual cell active. */
+  isActualsOpen?: boolean
 }
 
 /**
@@ -36,7 +45,14 @@ function pctOfBudget(actual: number, budgeted: number): number {
   return (actual / budgeted) * 100
 }
 
-export function BudgetRow({ row, onEditBudget, onDelete, onCreateBudget }: BudgetRowProps) {
+export function BudgetRow({
+  row,
+  onEditBudget,
+  onDelete,
+  onCreateBudget,
+  onToggleActuals,
+  isActualsOpen
+}: BudgetRowProps) {
   // Truly unbudgeted: no budget rows at all for this category in the period
   // (actuals-only row). Aggregated rows have budgetId=null too but budgeted>0.
   const isUnbudgeted = row.budgetId === null && row.budgeted === 0
@@ -123,7 +139,24 @@ export function BudgetRow({ row, onEditBudget, onDelete, onCreateBudget }: Budge
       </div>
 
       <div className="text-right tabular text-sm text-ink font-medium">
-        {formatUSD(row.actual)}
+        {row.actual > 0 && onToggleActuals ? (
+          <button
+            type="button"
+            onClick={onToggleActuals}
+            aria-expanded={isActualsOpen ?? false}
+            aria-label={`Show transactions for ${row.category}`}
+            title="Show contributing transactions"
+            className={cn(
+              'inline-flex rounded -mx-1 px-1 py-0.5 text-ink font-medium',
+              'hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand/40',
+              isActualsOpen && 'bg-brand/10 text-brand'
+            )}
+          >
+            {formatUSD(row.actual)}
+          </button>
+        ) : (
+          formatUSD(row.actual)
+        )}
       </div>
 
       <div className={cn(

@@ -109,6 +109,65 @@ describe('<BudgetRow> bills column', () => {
   })
 })
 
+describe('<BudgetRow> actuals drill-down', () => {
+  it('renders the actual amount as a button that fires onToggleActuals when clicked', () => {
+    const onToggle = vi.fn()
+    render(
+      <BudgetRow
+        row={row({ actual: 1234.56 })}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+        onToggleActuals={onToggle}
+        isActualsOpen={false}
+      />
+    )
+    const btn = screen.getByRole('button', { name: /show transactions for Housing/i })
+    expect(btn).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(btn)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports aria-expanded=true when the drawer is open', () => {
+    render(
+      <BudgetRow
+        row={row({ actual: 100 })}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+        onToggleActuals={noop}
+        isActualsOpen={true}
+      />
+    )
+    expect(screen.getByRole('button', { name: /show transactions/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('renders the actual amount as plain text when actual is zero (nothing to drill into)', () => {
+    render(
+      <BudgetRow
+        row={row({ actual: 0 })}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+        onToggleActuals={noop}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /show transactions/i })).not.toBeInTheDocument()
+  })
+
+  it('renders the actual amount as plain text when no onToggleActuals is supplied (back-compat)', () => {
+    render(
+      <BudgetRow
+        row={row({ actual: 500 })}
+        onEditBudget={noop}
+        onDelete={noop}
+        onCreateBudget={noop}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /show transactions/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('<BudgetRow> inline-add for unbudgeted rows', () => {
   function unbudgeted(over: Partial<BudgetVsActualRow> = {}): BudgetVsActualRow {
     return row({

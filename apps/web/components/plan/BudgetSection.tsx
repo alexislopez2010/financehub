@@ -14,7 +14,10 @@ import {
 } from '@/lib/plan/reconcile'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
+import { transactionsForBudgetRow } from '@/lib/plan/budgetRowTransactions'
+import type { TransactionRow as FinanceTransactionRow } from '@/lib/finance/types'
 import { BudgetRow, BUDGET_ROW_GRID } from './BudgetRow'
+import { BudgetRowDrawer } from './BudgetRowDrawer'
 import { AddBudgetForm } from './AddBudgetForm'
 import { cn } from '@/lib/cn'
 
@@ -56,6 +59,13 @@ export function BudgetSection({
   const deleteBudget = useDeleteBudget()
 
   const [showAddForm, setShowAddForm] = useState(false)
+  /**
+   * Which row's "Actual" drawer is currently expanded. Lifted here (rather
+   * than per-row state) so only one drawer is open at a time, and so the
+   * drawer can render BELOW the row in the parent's list. Keyed by the
+   * lowercased category name — matches whatever budgetVsActual emits.
+   */
+  const [expandedActuals, setExpandedActuals] = useState<string | null>(null)
 
   const rows = useMemo(
     () => deriveBudgetVsActual({
@@ -226,16 +236,34 @@ export function BudgetSection({
         </div>
       ) : (
         <ul className="divide-y divide-gray-100">
-          {rows.map(r => (
-            <li key={r.budgetId ?? `unbudgeted:${r.category}`} className="group">
-              <BudgetRow
-                row={r}
-                onEditBudget={(next) => r.budgetId && handleEditBudget(r.budgetId, next)}
-                onDelete={() => r.budgetId && handleDelete(r.budgetId)}
-                onCreateBudget={(amount) => handleCreateBudgetForRow(r, amount)}
-              />
-            </li>
-          ))}
+          {rows.map(r => {
+            const key = r.category.toLowerCase()
+            const isOpen = expandedActuals === key
+            return (
+              <li key={r.budgetId ?? `unbudgeted:${r.category}`} className="group">
+                <BudgetRow
+                  row={r}
+                  onEditBudget={(next) => r.budgetId && handleEditBudget(r.budgetId, next)}
+                  onDelete={() => r.budgetId && handleDelete(r.budgetId)}
+                  onCreateBudget={(amount) => handleCreateBudgetForRow(r, amount)}
+                  onToggleActuals={() => setExpandedActuals(prev => (prev === key ? null : key))}
+                  isActualsOpen={isOpen}
+                />
+                {isOpen && (
+                  <BudgetRowDrawer
+                    category={r.category}
+                    totalActual={r.actual}
+                    transactions={transactionsForBudgetRow({
+                      transactions: (txsQ.data ?? []) as unknown as ReadonlyArray<FinanceTransactionRow>,
+                      period,
+                      category: r.category
+                    })}
+                    onClose={() => setExpandedActuals(null)}
+                  />
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 
