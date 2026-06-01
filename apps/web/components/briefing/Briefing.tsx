@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Wallet,
   CreditCard,
@@ -18,7 +18,7 @@ import { useIncomePlan } from '@/lib/data/incomePlan'
 import { useBudgets } from '@/lib/data/budgets'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { RulerList, type RulerListItem } from '@/components/ui/RulerList'
-import { Sparkline } from '@/components/charts/Sparkline'
+import { ForecastChart, type ForecastChartPoint } from '@/components/charts/ForecastChart'
 import { deriveKpisAndExtras } from '@/lib/briefing/kpis'
 import { comingDueWithin } from '@/lib/briefing/comingDue'
 import { notableCallouts } from '@/lib/briefing/notable'
@@ -31,6 +31,9 @@ import { BudgetSnapshotCard } from '@/components/briefing/BudgetSnapshotCard'
 import { IncomeVsExpenseCard } from '@/components/briefing/IncomeVsExpenseCard'
 import { TopMerchantsCard } from '@/components/briefing/TopMerchantsCard'
 import { forecast30Day, normalizeCadence } from '@/lib/finance/forecast'
+import { PeriodSelector } from '@/components/plan/PeriodSelector'
+import { currentPeriod, periodLabel as formatPeriodLabel, type PlanPeriod } from '@/lib/plan/period'
+import { daysInMonth } from '@/lib/finance/dueDate'
 import type {
   TransactionRow as FinanceTransactionRow,
   BillRow as FinanceBillRow,
@@ -38,7 +41,10 @@ import type {
 } from '@/lib/finance/types'
 
 export function Briefing() {
-  const today = useMemo(() => {
+  // Real wall-clock date — never shifts when the user navigates periods.
+  // Forward-looking cards (Coming Due, 30-Day Forecast) stay anchored to this
+  // so they don't become nonsense when viewing past or future months.
+  const realToday = useMemo(() => {
     const d = new Date()
     return {
       year: d.getFullYear(),
@@ -47,10 +53,32 @@ export function Briefing() {
     }
   }, [])
 
+  // Selected period for the period-scoped cards (KPIs, Spend by Category,
+  // Budget Snapshot, Top Merchants, Income vs Expense). Defaults to the
+  // current calendar month and updates via PeriodSelector.
+  const [period, setPeriod] = useState<PlanPeriod>(() => currentPeriod())
+
+  const isCurrentPeriod =
+    period.year === realToday.year && period.month === realToday.month
+
+  // The "today" passed into period-scoped derivations. For the current month
+  // we use the real today (so this-month aggregates are month-to-date). For
+  // other months we use the last day of the period so the full month's data
+  // is included in aggregates and the trailing-30-day burn window lands at
+  // the end of that month.
+  const viewToday = useMemo(() => {
+    if (isCurrentPeriod) return realToday
+    return {
+      year: period.year,
+      month: period.month,
+      day: daysInMonth(period.year, period.month)
+    }
+  }, [period, realToday, isCurrentPeriod])
+
   const todayIso = useMemo(
     () =>
-      `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`,
-    [today]
+      `${realToday.year}-${String(realToday.month).padStart(2, '0')}-${String(realToday.day).padStart(2, '0')}`,
+    [realToday]
   )
 
   const todayLabel = useMemo(
@@ -64,26 +92,14 @@ export function Briefing() {
     []
   )
 
-  const periodLabel = useMemo(() => {
-    const d = new Date()
-    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) + ' · all accounts'
-  }, [])
-
-  const monthLabel = useMemo(
-    () =>
-      new Date(today.year, today.month - 1, 1).toLocaleDateString(undefined, {
-        month: 'long',
-        year: 'numeric'
-      }),
-    [today]
-  )
+  const monthLabel = useMemo(() => formatPeriodLabel(period), [period])
 
   // Pull data
   const accountsQ = useAccounts()
   const billsQ = useBills()
   const txsQ = useTransactions()
-  const incomeQ = useIncomePlan({ year: today.year })
-  const budgetsQ = useBudgets({ year: today.year, month: today.month })
+  const incomeQ = useIncomePlan({ year: period.year })
+  const budgetsQ = useBudgets({ year: period.year, month: period.month })
 
   const EMPTY_ACCOUNTS = useMemo(() => [] as const, [])
   const EMPTY_BILLS = useMemo(() => [] as const, [])
@@ -97,35 +113,37 @@ export function Briefing() {
   const incomePlan = incomeQ.data ?? EMPTY_INCOME
   const budgets = budgetsQ.data ?? EMPTY_BUDGETS
 
-  // Derive
+  // Derive — period-scoped derivations use viewToday (so they reflect the
+  // navigated month). Forward-looking derivations (comingDueWithin, forecast30Day)
+  // stay anchored to realToday so "next 14 days" / "next 30 days" stays true.
   const { kpis, extras } = useMemo(
     () =>
       deriveKpisAndExtras({
         accounts,
         transactions: txs,
-        today: { year: today.year, month: today.month, day: today.day }
+        today: { year: viewToday.year, month: viewToday.month, day: viewToday.day }
       }),
-    [accounts, txs, today]
+    [accounts, txs, viewToday]
   )
 
   const coming = useMemo(
-    () => comingDueWithin(bills, today, 14),
-    [bills, today]
+    () => comingDueWithin(bills, realToday, 14),
+    [bills, realToday]
   )
 
   const notable = useMemo(
-    () => notableCallouts({ transactions: txs, bills, today, top: 3 }),
-    [txs, bills, today]
+    () => notableCallouts({ transactions: txs, bills, today: viewToday, top: 3 }),
+    [txs, bills, viewToday]
   )
 
   const categorySpend = useMemo(
     () =>
       deriveSpendByCategory({
         transactions: txs,
-        today: { year: today.year, month: today.month },
+        today: { year: viewToday.year, month: viewToday.month },
         top: 7
       }),
-    [txs, today]
+    [txs, viewToday]
   )
 
   const budgetSnap = useMemo(
@@ -133,19 +151,19 @@ export function Briefing() {
       deriveBudgetSnapshot({
         budgets,
         transactions: txs,
-        today: { year: today.year, month: today.month }
+        today: { year: viewToday.year, month: viewToday.month }
       }),
-    [budgets, txs, today]
+    [budgets, txs, viewToday]
   )
 
   const merchantSpend = useMemo(
     () =>
       deriveTopMerchants({
         transactions: txs,
-        today: { year: today.year, month: today.month },
+        today: { year: viewToday.year, month: viewToday.month },
         top: 5
       }),
-    [txs, today]
+    [txs, viewToday]
   )
 
   // Suppress unused — lead is computed so buildLead stays exercised with real data
@@ -182,7 +200,16 @@ export function Briefing() {
     [financeTxs, financeBills, financeIncomePlan, kpis.cash, todayIso]
   )
 
-  const forecastPoints = useMemo(() => forecast.map(p => p.balance), [forecast])
+  const forecastChartPoints = useMemo<ReadonlyArray<ForecastChartPoint>>(
+    () => forecast.map(p => ({
+      date: p.date,
+      balance: p.balance,
+      netChange: p.netChange,
+      inflow: p.inflow,
+      outflow: p.outflow
+    })),
+    [forecast]
+  )
 
   const anyError =
     accountsQ.error ?? billsQ.error ?? txsQ.error ?? incomeQ.error ?? budgetsQ.error
@@ -256,12 +283,30 @@ export function Briefing() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <header className="flex items-center justify-between">
+      <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-ink">Lopez Family · Briefing</h1>
-          <div className="text-xs text-muted mt-0.5">{todayLabel}</div>
+          <div className="text-xs text-muted mt-0.5">
+            {todayLabel}
+            {!isCurrentPeriod && (
+              <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium">
+                Viewing {monthLabel}
+              </span>
+            )}
+          </div>
         </div>
-        <div className="text-xs text-muted">{periodLabel}</div>
+        <div className="flex items-center gap-3">
+          {!isCurrentPeriod && (
+            <button
+              type="button"
+              onClick={() => setPeriod(currentPeriod())}
+              className="text-xs text-brand hover:underline"
+            >
+              Jump to current
+            </button>
+          )}
+          <PeriodSelector period={period} onChange={setPeriod} />
+        </div>
       </header>
 
       {/* KPI tiles (6) */}
@@ -339,6 +384,9 @@ export function Briefing() {
                 <Calendar size={16} strokeWidth={2} />
               </div>
               <h2 className="text-sm font-semibold text-ink">Coming Due — 14 days</h2>
+              {!isCurrentPeriod && (
+                <span className="text-[10px] text-muted italic">(from today)</span>
+              )}
             </div>
             {coming.length > 0 && (
               <span className="text-xs text-muted">{formatUSD(dueTotal)} total</span>
@@ -353,16 +401,21 @@ export function Briefing() {
 
         <section className="bg-surface border border-rule rounded-xl p-5 shadow-sm">
           <div className="flex items-baseline justify-between mb-4">
-            <h2 className="text-sm font-semibold text-ink">30-Day Forecast</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-ink">30-Day Forecast</h2>
+              {!isCurrentPeriod && (
+                <span className="text-[10px] text-muted italic">(from today)</span>
+              )}
+            </div>
             <span className="text-xs text-muted">
               ends {formatUSDCompact(forecastEnd)}
             </span>
           </div>
-          <Sparkline
-            points={forecastPoints}
+          <ForecastChart
+            points={forecastChartPoints}
             baseline={kpis.cash}
             label="Projected cash balance over the next 30 days"
-            className="h-24"
+            className="pb-6"
           />
         </section>
       </div>
