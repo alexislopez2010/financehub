@@ -243,22 +243,29 @@ function ForecastTooltip({ point, pointer, formatValue, formatDate }: TooltipPro
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed z-50 whitespace-nowrap rounded-lg bg-ink/95 text-white px-3 py-2 shadow-xl ring-1 ring-white/10"
+      className={cn(
+        'pointer-events-none fixed z-50 whitespace-nowrap rounded-lg px-3 py-2',
+        // Solid white surface with explicit black text — bg-ink/text-white was
+        // unreadable in production where --color-ink renders pale.
+        'bg-white text-gray-900',
+        // Strong border + drop shadow so the tooltip pops on any page background.
+        'border border-gray-300 shadow-[0_10px_30px_-5px_rgba(0,0,0,0.25)]'
+      )}
       style={style}
     >
-      <div className="text-[10px] uppercase tracking-wide text-white/60">Balance</div>
-      <div className="text-base font-semibold tabular-nums">{formatValue(point.balance)}</div>
-      <div className="text-[11px] text-white/70 tabular-nums mt-0.5">{formatDate(point.date)}</div>
+      <div className="text-[10px] uppercase tracking-wide text-gray-500">Balance</div>
+      <div className="text-base font-semibold tabular-nums text-gray-900">{formatValue(point.balance)}</div>
+      <div className="text-[11px] text-gray-500 tabular-nums mt-0.5">{formatDate(point.date)}</div>
       {hasActivity && (
-        <div className="mt-1.5 pt-1.5 border-t border-white/15 text-[11px] tabular-nums space-y-0.5">
+        <div className="mt-1.5 pt-1.5 border-t border-gray-200 text-[11px] tabular-nums space-y-0.5">
           {inflow > 0 && (
-            <div className="text-emerald-300">+{formatValue(inflow)} in</div>
+            <div className="text-emerald-700 font-medium">+{formatValue(inflow)} in</div>
           )}
           {outflow > 0 && (
-            <div className="text-red-300">−{formatValue(outflow)} out</div>
+            <div className="text-red-700 font-medium">−{formatValue(outflow)} out</div>
           )}
           {inflow > 0 && outflow > 0 && (
-            <div className={cn(flow >= 0 ? 'text-emerald-200' : 'text-red-200')}>
+            <div className={cn('font-semibold', flow >= 0 ? 'text-emerald-700' : 'text-red-700')}>
               net {flow >= 0 ? '+' : '−'}{formatValue(Math.abs(flow))}
             </div>
           )}
