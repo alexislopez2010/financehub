@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Layers } from 'lucide-react'
 import { useBills, useCreateBill, useUpdateBill, useDeleteBill } from '@/lib/data/bills'
+import { useCategories } from '@/lib/data/categories'
+import { useAccounts } from '@/lib/data/accounts'
 import { parseSortKey, type BillSortKey } from '@/lib/bills/sort'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { BillsSummary } from './BillsSummary'
@@ -26,9 +28,22 @@ export function Bills() {
   }, [sortKey, router])
 
   const billsQ = useBills()
+  const categoriesQ = useCategories()
+  const accountsQ = useAccounts()
   const createBill = useCreateBill()
   const updateBill = useUpdateBill()
   const deleteBill = useDeleteBill()
+
+  // Strip everything AddBillForm doesn't need so we don't leak full DB rows
+  // into the form component's prop surface.
+  const categoryOptions = useMemo(
+    () => (categoriesQ.data ?? []).map(c => ({ name: c.name, type: c.type })),
+    [categoriesQ.data]
+  )
+  const accountOptions = useMemo(
+    () => (accountsQ.data ?? []).map(a => ({ name: a.name })),
+    [accountsQ.data]
+  )
 
   const today = useMemo(() => {
     const d = new Date()
@@ -110,6 +125,8 @@ export function Bills() {
           {showAddForm && (
             <section className="bg-surface border border-rule rounded-xl shadow-sm overflow-hidden">
               <AddBillForm
+                categoryOptions={categoryOptions}
+                accountOptions={accountOptions}
                 isSubmitting={createBill.isPending}
                 onSubmit={handleCreate}
                 onCancel={() => setShowAddForm(false)}
