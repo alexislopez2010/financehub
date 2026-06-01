@@ -93,8 +93,30 @@ export function ForecastChart({
   const hovered = hoverIdx != null ? points[hoverIdx] : undefined
   const hoveredCoord = hoverIdx != null && hovered ? coordForIndex({ index: hoverIdx, total: points.length, value: hovered.balance, geom }) : null
 
+  // Pixel-rounded y-axis values for the scale gutter. Falls back to the
+  // baseline (when supplied) for the "now" tag.
+  const scaleMin = geom.linePath != null ? geom.min : null
+  const scaleMax = geom.linePath != null ? geom.max : null
+
   return (
-    <div className={cn('relative w-full', className)}>
+    <div className={cn('relative w-full pl-14 pr-3', className)}>
+      {/* Y-axis scale gutter — fixed-width column on the left so the user
+          can always read what the top/bottom of the chart represent without
+          having to hover. Numbers are rounded down/up to a $1k step so the
+          gutter doesn't compete visually with the line. */}
+      {scaleMin != null && scaleMax != null && (
+        <div
+          className="pointer-events-none absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[10px] text-muted tabular-nums text-right pr-2"
+          aria-hidden="true"
+        >
+          <span>{valueFn(scaleMax)}</span>
+          {baseline !== undefined && baseline !== scaleMin && baseline !== scaleMax && (
+            <span className="text-brand">{valueFn(baseline)} now</span>
+          )}
+          <span>{valueFn(scaleMin)}</span>
+        </div>
+      )}
+
       <svg
         ref={svgRef}
         role="img"
@@ -156,9 +178,10 @@ export function ForecastChart({
         )}
       </svg>
 
-      {/* Permanent start/end markers when not hovering */}
+      {/* Permanent start/end date markers. Aligned to the chart area (inside
+          the padding) so they sit below the line's first and last points. */}
       {points.length >= 2 && hoverIdx == null && (
-        <div className="pointer-events-none absolute inset-x-0 -bottom-5 flex justify-between text-[10px] text-muted tabular-nums">
+        <div className="pointer-events-none absolute left-14 right-3 bottom-0 flex justify-between text-[10px] text-muted tabular-nums">
           <span>{dateFn(points[0]!.date)}</span>
           <span>{dateFn(points[points.length - 1]!.date)}</span>
         </div>
@@ -186,26 +209,36 @@ interface TooltipProps {
 function ForecastTooltip({ point, xRatio, formatValue, formatDate }: TooltipProps) {
   // Anchor the tooltip just above the chart at xRatio across the container.
   // Pull it leftward as xRatio approaches 1 so the tooltip can't clip off the
-  // right edge; push rightward near 0 so it can't clip off the left.
-  const translateX = `calc(${(xRatio * 100).toFixed(2)}% - ${Math.round(xRatio * 100)}px)`
-  const flow = (point.inflow ?? 0) - (point.outflow ?? 0)
+  // right edge; push rightward near 0 so it can't clip off the left. The
+  // gutter offset (56px ≈ pl-14) keeps the tooltip aligned to the data area.
+  const translateX = `calc(56px + (${(xRatio * 100).toFixed(2)}% - 56px - 12px) - ${Math.round(xRatio * 100)}px)`
+  const inflow = point.inflow ?? 0
+  const outflow = point.outflow ?? 0
+  const flow = inflow - outflow
+  const hasActivity = inflow > 0 || outflow > 0
   return (
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none absolute -top-2 z-10 -translate-y-full whitespace-nowrap rounded-md bg-ink/95 text-white px-2 py-1 text-[11px] shadow-lg"
-      style={{ left: translateX }}
+      className="pointer-events-none absolute -top-2 z-10 -translate-y-full whitespace-nowrap rounded-lg bg-ink/95 text-white px-3 py-2 shadow-lg"
+      style={{ left: `max(0px, ${translateX})` }}
     >
-      <div className="font-semibold tabular-nums">{formatValue(point.balance)}</div>
-      <div className="text-white/70 tabular-nums">{formatDate(point.date)}</div>
-      {(point.netChange != null && point.netChange !== 0) && (
-        <div
-          className={cn(
-            'mt-0.5 tabular-nums',
-            flow >= 0 ? 'text-emerald-300' : 'text-red-300'
+      <div className="text-[10px] uppercase tracking-wide text-white/60">Balance</div>
+      <div className="text-base font-semibold tabular-nums">{formatValue(point.balance)}</div>
+      <div className="text-[11px] text-white/70 tabular-nums mt-0.5">{formatDate(point.date)}</div>
+      {hasActivity && (
+        <div className="mt-1.5 pt-1.5 border-t border-white/15 text-[11px] tabular-nums space-y-0.5">
+          {inflow > 0 && (
+            <div className="text-emerald-300">+{formatValue(inflow)} in</div>
           )}
-        >
-          {flow > 0 ? '+' : ''}{formatValue(flow)} today
+          {outflow > 0 && (
+            <div className="text-red-300">−{formatValue(outflow)} out</div>
+          )}
+          {inflow > 0 && outflow > 0 && (
+            <div className={cn(flow >= 0 ? 'text-emerald-200' : 'text-red-200')}>
+              net {flow >= 0 ? '+' : '−'}{formatValue(Math.abs(flow))}
+            </div>
+          )}
         </div>
       )}
     </div>

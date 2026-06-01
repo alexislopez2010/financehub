@@ -129,4 +129,67 @@ describe('<ForecastChart>', () => {
     const dashed = container.querySelector('line[stroke-dasharray="2 3"]')
     expect(dashed).not.toBeNull()
   })
+
+  it('renders y-axis scale labels at min and max of the data', () => {
+    render(<ForecastChart points={POINTS} label="x" />)
+    // Min of POINTS balances = 900, max = 1500. Default formatter is USD, no fractional digits.
+    expect(screen.getByText(/\$900/)).toBeInTheDocument()
+    expect(screen.getByText(/\$1,500/)).toBeInTheDocument()
+  })
+
+  it('labels the baseline with a "now" caption when the baseline differs from min/max', () => {
+    render(<ForecastChart points={POINTS} baseline={1200} label="x" />)
+    expect(screen.getByText(/\$1,200\s+now/i)).toBeInTheDocument()
+  })
+
+  it('omits the "now" caption when baseline coincides with min or max (no visual room)', () => {
+    // baseline=900 equals the data min — caption would overlap the min label.
+    render(<ForecastChart points={POINTS} baseline={900} label="x" />)
+    expect(screen.queryByText(/now/i)).not.toBeInTheDocument()
+  })
+
+  it('tooltip breaks the day into separate inflow / outflow lines when both are present', () => {
+    const { container } = render(
+      <ForecastChart
+        points={[
+          p('2026-06-01', 1000),
+          p('2026-06-02', 950, { inflow: 200, outflow: 250, netChange: -50 })
+        ]}
+        label="x"
+      />
+    )
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 80, width: 320, height: 80, toJSON: () => ({})
+    } as DOMRect)
+    fireEvent.mouseMove(svg, { clientX: 320 })
+
+    const tip = screen.getByRole('status')
+    const text = tip.textContent ?? ''
+    expect(text).toMatch(/\+\$200 in/)
+    expect(text).toMatch(/−\$250 out/)
+    expect(text).toMatch(/net −\$50/)
+  })
+
+  it('tooltip omits the activity block on days with no inflow and no outflow', () => {
+    const { container } = render(
+      <ForecastChart
+        points={[
+          p('2026-06-01', 1000),
+          p('2026-06-02', 1000)   // no change
+        ]}
+        label="x"
+      />
+    )
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 320, bottom: 80, width: 320, height: 80, toJSON: () => ({})
+    } as DOMRect)
+    fireEvent.mouseMove(svg, { clientX: 320 })
+
+    const tip = screen.getByRole('status')
+    const text = tip.textContent ?? ''
+    expect(text).not.toMatch(/in\b|out\b|net/)
+    expect(text).toMatch(/\$1,000/)
+  })
 })
