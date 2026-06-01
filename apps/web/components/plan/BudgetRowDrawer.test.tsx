@@ -112,4 +112,80 @@ describe('<BudgetRowDrawer>', () => {
     expect(screen.getByText(/Chase Checking/)).toBeInTheDocument()
     expect(screen.getByText(/Alexis/)).toBeInTheDocument()
   })
+
+  describe('category recategorize', () => {
+    const options: ReadonlyArray<{ value: string; label: string }> = [
+      { value: 'cat-food', label: 'Food' },
+      { value: 'cat-fun', label: 'Entertainment' }
+    ]
+
+    it('renders the current category as a clickable chip when categoryOptions + onUpdateCategory are supplied', () => {
+      render(
+        <BudgetRowDrawer
+          category="Food"
+          transactions={[tx({ id: 't1', description: 'Pizza', category: 'Food', category_id: 'cat-food', amount: -25 })]}
+          totalActual={25}
+          onClose={() => {}}
+          categoryOptions={options}
+          onUpdateCategory={() => {}}
+        />
+      )
+      // Display button reads "Food" — the EditableCell renders this as a button
+      // (not the underlying select) until it enters edit mode.
+      expect(screen.getByRole('button', { name: /food/i })).toBeInTheDocument()
+    })
+
+    it('calls onUpdateCategory(txId, nextCategoryId) when the user picks a new category', () => {
+      const onUpdate = vi.fn()
+      render(
+        <BudgetRowDrawer
+          category="Food"
+          transactions={[tx({ id: 't1', description: 'Pizza', category: 'Food', category_id: 'cat-food', amount: -25 })]}
+          totalActual={25}
+          onClose={() => {}}
+          categoryOptions={options}
+          onUpdateCategory={onUpdate}
+        />
+      )
+      // Click the chip to enter edit mode, then change the select value.
+      fireEvent.click(screen.getByRole('button', { name: /food/i }))
+      const select = screen.getByRole('combobox') as HTMLSelectElement
+      fireEvent.change(select, { target: { value: 'cat-fun' } })
+      // EditableCell commits on blur.
+      fireEvent.blur(select)
+      expect(onUpdate).toHaveBeenCalledWith('t1', 'cat-fun')
+    })
+
+    it('allows clearing the category by picking the leading "(uncategorized)" option', () => {
+      const onUpdate = vi.fn()
+      render(
+        <BudgetRowDrawer
+          category="Food"
+          transactions={[tx({ id: 't1', description: 'Pizza', category: 'Food', category_id: 'cat-food', amount: -25 })]}
+          totalActual={25}
+          onClose={() => {}}
+          categoryOptions={options}
+          onUpdateCategory={onUpdate}
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: /food/i }))
+      const select = screen.getByRole('combobox') as HTMLSelectElement
+      fireEvent.change(select, { target: { value: '' } })
+      fireEvent.blur(select)
+      expect(onUpdate).toHaveBeenCalledWith('t1', '')
+    })
+
+    it('keeps the category as static text when no edit handler is provided (back-compat)', () => {
+      render(
+        <BudgetRowDrawer
+          category="Food"
+          transactions={[tx({ id: 't1', description: 'Pizza', category: 'Food', category_id: 'cat-food', amount: -25 })]}
+          totalActual={25}
+          onClose={() => {}}
+        />
+      )
+      // No clickable category button is rendered — only the close button + textual content.
+      expect(screen.queryByRole('button', { name: /food/i })).not.toBeInTheDocument()
+    })
+  })
 })

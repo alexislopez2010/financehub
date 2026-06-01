@@ -39,7 +39,8 @@ vi.mock('@/lib/data/budgets', () => ({
 }))
 
 vi.mock('@/lib/data/transactions', () => ({
-  useTransactions: () => mockUseTransactions()
+  useTransactions: () => mockUseTransactions(),
+  useUpdateTransaction: () => mutationHandle
 }))
 
 vi.mock('@/lib/data/categories', () => ({

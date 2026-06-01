@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Wallet, Plus, AlertTriangle } from 'lucide-react'
 import { useBudgets, useCreateBudget, useUpdateBudget, useDeleteBudget } from '@/lib/data/budgets'
-import { useTransactions } from '@/lib/data/transactions'
+import { useTransactions, useUpdateTransaction } from '@/lib/data/transactions'
 import { useCategories } from '@/lib/data/categories'
 import { useBills } from '@/lib/data/bills'
 import { deriveBudgetVsActual } from '@/lib/plan/budgetVsActual'
@@ -57,6 +57,7 @@ export function BudgetSection({
   const createBudget = useCreateBudget()
   const updateBudget = useUpdateBudget()
   const deleteBudget = useDeleteBudget()
+  const updateTx = useUpdateTransaction()
 
   const [showAddForm, setShowAddForm] = useState(false)
   /**
@@ -121,6 +122,34 @@ export function BudgetSection({
   function handleDelete(budgetId: string) {
     deleteBudget.mutate(budgetId)
   }
+
+  /**
+   * Reclassify a single transaction from inside the drawer. Mirrors the
+   * Ledger's handleEditCategory: write both `category_id` (FK) and
+   * `category` (text) so display layers downstream don't see drift between
+   * the two columns. An empty string clears both.
+   */
+  function handleRecategorize(txId: string, nextCategoryId: string) {
+    const cat = (categoriesQ.data ?? []).find(c => c.id === nextCategoryId)
+    updateTx.mutate({
+      id: txId,
+      patch: nextCategoryId === ''
+        ? { category_id: null, category: null }
+        : { category_id: nextCategoryId, category: cat?.name ?? null }
+    })
+  }
+
+  // Flat options list for EditableCell's select. Limited to expense
+  // categories — the drawer only opens on budget rows (which are expense)
+  // and an "(uncategorized)" option is prepended inside the drawer.
+  const expenseCategoryOptions = useMemo(
+    () =>
+      (categoriesQ.data ?? [])
+        .filter(c => c.type === 'expense')
+        .map(c => ({ value: c.id, label: c.name }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [categoriesQ.data]
+  )
 
   /**
    * Inline-create for an actuals-only row. Resolves the free-text category
@@ -258,6 +287,8 @@ export function BudgetSection({
                       period,
                       category: r.category
                     })}
+                    categoryOptions={expenseCategoryOptions}
+                    onUpdateCategory={handleRecategorize}
                     onClose={() => setExpandedActuals(null)}
                   />
                 )}

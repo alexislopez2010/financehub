@@ -1,6 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
+import { EditableCell, type SelectOption } from '@/components/ledger/EditableCell'
 import type { TransactionRow } from '@/lib/finance/types'
 import { cn } from '@/lib/cn'
 
@@ -12,6 +13,17 @@ export interface BudgetRowDrawerProps {
   /** Row's actual total — shown in the header and validated to match. */
   totalActual: number
   onClose: () => void
+  /**
+   * Category options for the per-row category dropdown. Same shape as
+   * EditableCell's select options; the leading "(uncategorized)" entry is
+   * appended by this component so callers don't have to.
+   */
+  categoryOptions?: ReadonlyArray<SelectOption>
+  /**
+   * Called when the user picks a different category from a row's dropdown.
+   * `categoryId` is the categories.id (empty string clears it).
+   */
+  onUpdateCategory?: (transactionId: string, categoryId: string) => void
 }
 
 function formatUSD(n: number): string {
@@ -35,8 +47,20 @@ function formatShortDate(iso: string): string {
  * displayed amounts matches the header `totalActual` exactly (using the
  * same match rule as deriveBudgetVsActual).
  */
-export function BudgetRowDrawer({ category, transactions, totalActual, onClose }: BudgetRowDrawerProps) {
+export function BudgetRowDrawer({
+  category,
+  transactions,
+  totalActual,
+  onClose,
+  categoryOptions,
+  onUpdateCategory
+}: BudgetRowDrawerProps) {
   const isEmpty = transactions.length === 0
+  const canEditCategory = categoryOptions != null && onUpdateCategory != null
+  // Prepend the (uncategorized) option so users have an explicit "clear" choice.
+  const optionsWithClear: ReadonlyArray<SelectOption> = categoryOptions
+    ? [{ value: '', label: '(uncategorized)' }, ...categoryOptions]
+    : []
 
   return (
     <div className="bg-gray-50 border-t border-rule px-4 py-3">
@@ -68,8 +92,10 @@ export function BudgetRowDrawer({ category, transactions, totalActual, onClose }
             <li
               key={tx.id}
               className={cn(
-                'grid grid-cols-[64px_1fr_auto] gap-3 items-center px-3 py-2 text-xs',
-                'hover:bg-gray-50'
+                'grid gap-3 items-center px-3 py-2 text-xs hover:bg-gray-50',
+                canEditCategory
+                  ? 'grid-cols-[64px_1fr_140px_auto]'
+                  : 'grid-cols-[64px_1fr_auto]'
               )}
             >
               <span className="text-muted tabular">{formatShortDate(tx.date)}</span>
@@ -82,6 +108,25 @@ export function BudgetRowDrawer({ category, transactions, totalActual, onClose }
                   <span className="text-muted ml-1.5">· {tx.member}</span>
                 )}
               </span>
+              {canEditCategory && (
+                <EditableCell
+                  variant="select"
+                  value={tx.category_id ?? ''}
+                  options={optionsWithClear}
+                  onCommit={(next) => onUpdateCategory!(tx.id, next)}
+                  display={
+                    <span
+                      className={cn(
+                        'inline-flex items-center px-2 py-0.5 rounded-md text-[11px]',
+                        'bg-gray-100 text-gray-700'
+                      )}
+                      title="Click to recategorize"
+                    >
+                      {tx.category ?? 'Uncategorized'}
+                    </span>
+                  }
+                />
+              )}
               <span className="text-right tabular text-ink font-medium">
                 {formatUSD(Math.abs(tx.amount))}
               </span>

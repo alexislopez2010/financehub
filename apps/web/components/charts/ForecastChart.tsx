@@ -46,6 +46,10 @@ export function ForecastChart({
 }: ForecastChartProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  // Tracked separately from hoverIdx so the floating tooltip can sit next to
+  // the actual cursor position, not the snapped data point. Stored in viewport
+  // coordinates because the tooltip is `position: fixed`.
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null)
 
   const valueFn = formatValue ?? defaultValueFormatter
   const dateFn = formatDate ?? defaultDateFormatter
@@ -73,22 +77,27 @@ export function ForecastChart({
     return Math.round(ratio * (points.length - 1))
   }
 
-  function handleMove(clientX: number) {
+  function handleMove(clientX: number, clientY: number) {
     const idx = indexFromClientX(clientX)
     setHoverIdx(idx)
+    setPointer({ x: clientX, y: clientY })
+  }
+  function clearHover() {
+    setHoverIdx(null)
+    setPointer(null)
   }
 
-  function onMouseMove(e: MouseEvent<SVGSVGElement>) { handleMove(e.clientX) }
-  function onMouseLeave() { setHoverIdx(null) }
+  function onMouseMove(e: MouseEvent<SVGSVGElement>) { handleMove(e.clientX, e.clientY) }
+  function onMouseLeave() { clearHover() }
   function onTouchMove(e: TouchEvent<SVGSVGElement>) {
     const t = e.touches[0]
-    if (t) handleMove(t.clientX)
+    if (t) handleMove(t.clientX, t.clientY)
   }
   function onTouchStart(e: TouchEvent<SVGSVGElement>) {
     const t = e.touches[0]
-    if (t) handleMove(t.clientX)
+    if (t) handleMove(t.clientX, t.clientY)
   }
-  function onTouchEnd() { setHoverIdx(null) }
+  function onTouchEnd() { clearHover() }
 
   const hovered = hoverIdx != null ? points[hoverIdx] : undefined
   const hoveredCoord = hoverIdx != null && hovered ? coordForIndex({ index: hoverIdx, total: points.length, value: hovered.balance, geom }) : null
@@ -187,10 +196,10 @@ export function ForecastChart({
         </div>
       )}
 
-      {hovered && hoveredCoord && (
+      {hovered && pointer && (
         <ForecastTooltip
           point={hovered}
-          xRatio={hoverIdx! / Math.max(1, points.length - 1)}
+          pointer={pointer}
           formatValue={valueFn}
           formatDate={dateFn}
         />
@@ -201,27 +210,41 @@ export function ForecastChart({
 
 interface TooltipProps {
   point: ForecastChartPoint
-  xRatio: number
+  pointer: { x: number; y: number }   // viewport coordinates of the cursor
   formatValue: (v: number) => string
   formatDate: (iso: string) => string
 }
 
-function ForecastTooltip({ point, xRatio, formatValue, formatDate }: TooltipProps) {
-  // Anchor the tooltip just above the chart at xRatio across the container.
-  // Pull it leftward as xRatio approaches 1 so the tooltip can't clip off the
-  // right edge; push rightward near 0 so it can't clip off the left. The
-  // gutter offset (56px ≈ pl-14) keeps the tooltip aligned to the data area.
-  const translateX = `calc(56px + (${(xRatio * 100).toFixed(2)}% - 56px - 12px) - ${Math.round(xRatio * 100)}px)`
+// Approximate tooltip width — used to detect right-edge collisions and flip
+// the tooltip to the left of the cursor. Conservative; doesn't need to be
+// pixel-exact, just enough to avoid clipping off-screen.
+const TOOLTIP_WIDTH_APPROX = 180
+const CURSOR_OFFSET = 14
+
+function ForecastTooltip({ point, pointer, formatValue, formatDate }: TooltipProps) {
   const inflow = point.inflow ?? 0
   const outflow = point.outflow ?? 0
   const flow = inflow - outflow
   const hasActivity = inflow > 0 || outflow > 0
+
+  // Default: tooltip sits to the right of the cursor. Flip to the left when
+  // the cursor is close enough to the right viewport edge that the tooltip
+  // would clip. SSR-safe via the typeof check.
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const flipLeft = pointer.x + CURSOR_OFFSET + TOOLTIP_WIDTH_APPROX > viewportW
+
+  const style: React.CSSProperties = {
+    top: pointer.y,
+    left: flipLeft ? pointer.x - CURSOR_OFFSET : pointer.x + CURSOR_OFFSET,
+    transform: flipLeft ? 'translate(-100%, -50%)' : 'translate(0, -50%)'
+  }
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none absolute -top-2 z-10 -translate-y-full whitespace-nowrap rounded-lg bg-ink/95 text-white px-3 py-2 shadow-lg"
-      style={{ left: `max(0px, ${translateX})` }}
+      className="pointer-events-none fixed z-50 whitespace-nowrap rounded-lg bg-ink/95 text-white px-3 py-2 shadow-xl ring-1 ring-white/10"
+      style={style}
     >
       <div className="text-[10px] uppercase tracking-wide text-white/60">Balance</div>
       <div className="text-base font-semibold tabular-nums">{formatValue(point.balance)}</div>
