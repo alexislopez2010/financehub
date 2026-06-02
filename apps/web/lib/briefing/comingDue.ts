@@ -1,5 +1,5 @@
 import type { Tables } from '@/lib/supabase/database.types'
-import { daysUntilDue, clampDay } from '@/lib/finance/dueDate'
+import { billOccurrencesIn } from '@/lib/finance/billCadence'
 
 export type BillRow = Tables<'bills'>
 
@@ -14,6 +14,9 @@ export interface BillDueItem {
 /**
  * Returns the next-N-days due list, sorted ascending by daysUntil.
  * Skips inactive bills + bills with null due_day.
+ *
+ * Cadence-aware: a biweekly bill with due_day=1 emits TWO items in a 14-day
+ * window (day 1 and day 15). Monthly bills behave identically to before.
  */
 export function comingDueWithin(
   bills: ReadonlyArray<BillRow>,
@@ -24,35 +27,28 @@ export function comingDueWithin(
   for (const b of bills) {
     if (!b.is_active) continue
     if (b.due_day == null) continue
-    const days = daysUntilDue({ due_day: b.due_day }, from)
-    if (days == null) continue
-    if (days > withinDays) continue
-    items.push({
-      billId: b.id,
-      name: b.name,
-      amount: b.budget_amount,
-      daysUntil: days,
-      dueDate: computeDueDate(from, b.due_day)
-    })
+    const occurrences = billOccurrencesIn(
+      { due_day: b.due_day, frequency: b.frequency },
+      from,
+      withinDays
+    )
+    for (const occ of occurrences) {
+      items.push({
+        billId: b.id,
+        name: b.name,
+        amount: b.budget_amount,
+        daysUntil: occ.daysUntil,
+        dueDate: iso(occ.date.year, occ.date.month, occ.date.day)
+      })
+    }
   }
-  items.sort((a, b) => a.daysUntil - b.daysUntil)
+  // Sort ascending by daysUntil, then by amount desc within the same day so
+  // bigger bills surface first on tie days.
+  items.sort((a, b) => {
+    if (a.daysUntil !== b.daysUntil) return a.daysUntil - b.daysUntil
+    return b.amount - a.amount
+  })
   return items
-}
-
-function computeDueDate(
-  from: { year: number; month: number; day: number },
-  nominalDay: number
-): string {
-  // The clamped day in `from`'s month — if it's already past or today and >= from.day, this month;
-  // otherwise next month. Matches the daysUntilDue walk.
-  const thisMonthClamped = clampDay(nominalDay, from.year, from.month)
-  if (thisMonthClamped >= from.day) {
-    return iso(from.year, from.month, thisMonthClamped)
-  }
-  // Next month
-  const nextMonth = from.month === 12 ? 1 : from.month + 1
-  const nextYear = from.month === 12 ? from.year + 1 : from.year
-  return iso(nextYear, nextMonth, clampDay(nominalDay, nextYear, nextMonth))
 }
 
 function iso(year: number, month: number, day: number): string {

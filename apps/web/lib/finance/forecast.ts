@@ -1,5 +1,6 @@
 import type { BillRow, IncomePlanRow, TransactionRow } from './types'
 import { clampDay } from './dueDate'
+import { isBillDueOn } from './billCadence'
 
 export interface ForecastPoint {
   /** ISO yyyy-mm-dd. */
@@ -217,11 +218,14 @@ export function forecast30Day(
     //    already covered them — but cash-basis forecast doesn't try to match;
     //    bills add to outflow regardless. The Briefing's "notable: slipped
     //    bill" feature catches duplication separately).
+    //
+    //    Frequency-aware via isBillDueOn: biweekly bills are counted twice
+    //    per month, not just on the nominal due_day. Monthly bills are still
+    //    counted exactly once.
     for (const b of bills) {
       if (!b.is_active) continue
       if (b.due_day == null) continue
-      const clamped = clampDay(b.due_day, cursor.year, cursor.month)
-      if (clamped === cursor.day) {
+      if (isBillDueOn({ due_day: b.due_day, frequency: b.frequency }, cursor)) {
         outflow += b.budget_amount
       }
     }

@@ -8,7 +8,8 @@ function mkBill(
   name: string,
   budget_amount: number,
   due_day: number | null,
-  is_active: boolean | null = true
+  is_active: boolean | null = true,
+  frequency: string | null = null
 ): BillRow {
   return {
     id,
@@ -21,7 +22,7 @@ function mkBill(
     account: null,
     category: null,
     created_at: null,
-    frequency: null,
+    frequency,
     linked_debt_id: null,
     notes: null,
   }
@@ -123,5 +124,63 @@ describe('comingDueWithin', () => {
     const result = comingDueWithin(bills, from, 14)
     expect(result).toHaveLength(1)
     expect(result[0]!.dueDate).toBe('2026-01-05')
+  })
+
+  describe('biweekly bills', () => {
+    it('emits TWO entries for the Church Tithe scenario (Biweekly + due_day=1) in a 14-day window starting day 1', () => {
+      const from = { year: 2026, month: 6, day: 1 }
+      const bills = [mkBill('b1', 'Church Tithe', 1000, 1, true, 'Biweekly')]
+      const result = comingDueWithin(bills, from, 14)
+      expect(result).toHaveLength(2)
+      expect(result[0]!.daysUntil).toBe(0)
+      expect(result[0]!.dueDate).toBe('2026-06-01')
+      expect(result[1]!.daysUntil).toBe(14)
+      expect(result[1]!.dueDate).toBe('2026-06-15')
+    })
+
+    it('emits only ONE entry per month for a Monthly bill (back-compat)', () => {
+      const from = { year: 2026, month: 6, day: 1 }
+      const bills = [mkBill('b1', 'Mortgage', 2469.40, 1, true, 'Monthly')]
+      const result = comingDueWithin(bills, from, 14)
+      expect(result).toHaveLength(1)
+      expect(result[0]!.daysUntil).toBe(0)
+    })
+
+    it('emits only the first occurrence for biweekly when the second falls outside the window', () => {
+      // Window: Jun 5 → Jun 12 (7 days). Bill due_day=10 biweekly → first
+      // occurrence Jun 10 (in window), second occurrence Jun 24 (outside).
+      const from = { year: 2026, month: 6, day: 5 }
+      const bills = [mkBill('b1', 'Bi', 50, 10, true, 'Biweekly')]
+      const result = comingDueWithin(bills, from, 7)
+      expect(result).toHaveLength(1)
+      expect(result[0]!.dueDate).toBe('2026-06-10')
+    })
+
+    it('still works for Semi-monthly / Semimonthly frequency strings', () => {
+      for (const freq of ['Semi-monthly', 'Semimonthly']) {
+        const result = comingDueWithin(
+          [mkBill('b1', 'Bi', 100, 1, true, freq)],
+          { year: 2026, month: 6, day: 1 },
+          14
+        )
+        expect(result.map(r => r.dueDate)).toEqual(['2026-06-01', '2026-06-15'])
+      }
+    })
+
+    it('sorts biweekly + monthly entries together by daysUntil ascending', () => {
+      const from = { year: 2026, month: 6, day: 1 }
+      const bills = [
+        mkBill('b1', 'Church Tithe', 1000, 1, true, 'Biweekly'),
+        mkBill('b2', 'Electric', 220, 2, true, 'Monthly'),
+        mkBill('b3', 'Other Monthly', 50, 14, true, 'Monthly')
+      ]
+      const result = comingDueWithin(bills, from, 14)
+      expect(result.map(r => `${r.daysUntil}:${r.name}`)).toEqual([
+        '0:Church Tithe',
+        '1:Electric',
+        '13:Other Monthly',
+        '14:Church Tithe'
+      ])
+    })
   })
 })
