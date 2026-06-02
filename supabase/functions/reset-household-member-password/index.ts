@@ -42,11 +42,16 @@ function resolveAllowedOrigin(reqOrigin: string | null): string {
 
 Deno.serve(async (req) => {
   const allowOrigin = resolveAllowedOrigin(req.headers.get('Origin'))
+  // Echo back the requested headers so the supabase-js client's additional
+  // headers (apikey, x-client-info, x-supabase-api-version, …) pass the
+  // preflight without us having to enumerate them. Fall back to the
+  // explicit minimal set when the browser didn't ask for any.
+  const requestedHeaders = req.headers.get('Access-Control-Request-Headers')
   const corsHeaders: Record<string, string> = {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
-    'Vary': 'Origin'
+    'Access-Control-Allow-Headers': requestedHeaders ?? 'authorization, content-type, apikey, x-client-info',
+    'Vary': 'Origin, Access-Control-Request-Headers'
   }
   function jsonError(status: number, message: string): Response {
     return new Response(JSON.stringify({ error: message }), {
