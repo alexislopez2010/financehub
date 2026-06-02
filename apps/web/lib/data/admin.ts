@@ -283,6 +283,96 @@ export function useAddHouseholdMember(): UseMutationResult<
   })
 }
 
+export interface PromoteFamilyMemberArgs {
+  family_member_id: string
+  email: string
+  displayName?: string
+  role?: HouseholdRole
+}
+
+export interface PromoteFamilyMemberResult {
+  userId: string
+  email: string
+  initialPassword: string
+  displayName: string
+  role: string
+}
+
+function isPromoteFamilyMemberResponse(v: unknown): v is Required<{
+  user_id: string
+  email: string
+  initial_password: string
+  display_name: string
+  role: string
+}> {
+  if (!v || typeof v !== 'object') return false
+  const r = v as RawAddMemberResponse
+  return (
+    typeof r.user_id === 'string' &&
+    typeof r.email === 'string' &&
+    typeof r.initial_password === 'string' &&
+    typeof r.display_name === 'string' &&
+    typeof r.role === 'string'
+  )
+}
+
+/**
+ * Promotes a placeholder family_members row into a real auth-backed
+ * household_members row via the `promote-family-member` Edge Function.
+ * The Edge Function holds the service-role key and:
+ *   - re-verifies the caller is an owner
+ *   - creates the auth user with auth.admin.createUser
+ *   - inserts the household_members row
+ *   - deletes the family_members placeholder row
+ *
+ * Returns the new user's id, email, role, display name, and a one-time
+ * initial password (mirrors useAddHouseholdMember). The dialog shows the
+ * password once with a copy button; it is never persisted client-side.
+ *
+ * Invalidates BOTH `householdMembers` (the new login appears) AND
+ * `familyMembers` (the placeholder is gone).
+ */
+export function usePromoteFamilyMember(): UseMutationResult<
+  PromoteFamilyMemberResult,
+  Error,
+  PromoteFamilyMemberArgs,
+  never
+> {
+  const queryClient = useQueryClient()
+
+  return useMutation<PromoteFamilyMemberResult, Error, PromoteFamilyMemberArgs, never>({
+    async mutationFn(args) {
+      const supabase = createClient()
+      const body: Record<string, unknown> = {
+        household_id: LOPEZ_HOUSEHOLD_ID,
+        family_member_id: args.family_member_id,
+        email: args.email
+      }
+      if (args.displayName !== undefined) body.display_name = args.displayName
+      if (args.role !== undefined) body.role = args.role
+
+      const { data, error } = await supabase.functions.invoke('promote-family-member', {
+        body
+      })
+      if (error) throw error
+      if (!isPromoteFamilyMemberResponse(data)) {
+        throw new Error('promote-family-member returned an unexpected response')
+      }
+      return {
+        userId: data.user_id,
+        email: data.email,
+        initialPassword: data.initial_password,
+        displayName: data.display_name,
+        role: data.role
+      }
+    },
+    onSuccess() {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.householdMembers() })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.familyMembers() })
+    }
+  })
+}
+
 export interface ResetMemberPasswordArgs {
   household_id: string
   target_user_id: string

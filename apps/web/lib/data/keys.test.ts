@@ -51,4 +51,8 @@ describe('queryKeys', () => {
   it('allTransactions is the same prefix as transactions() — useful for invalidations', () => {
     expect(queryKeys.allTransactions()).toEqual(queryKeys.transactions())
   })
+
+  it('familyMembers returns a constant single-element key', () => {
+    expect(queryKeys.familyMembers()).toEqual(['familyMembers'])
+  })
 })

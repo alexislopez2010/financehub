@@ -36,8 +36,10 @@ import {
   useRemoveHouseholdMember,
   useAddHouseholdMember,
   useResetHouseholdMemberPassword,
-  useSetHouseholdMemberActive
+  useSetHouseholdMemberActive,
+  usePromoteFamilyMember
 } from './admin'
+import { queryKeys as qk } from './keys'
 
 function makeWrapper(client: QueryClient) {
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -589,5 +591,73 @@ describe('useSetHouseholdMemberActive', () => {
         active: false
       })
     ).rejects.toThrow(/unexpected response/)
+  })
+})
+
+describe('usePromoteFamilyMember', () => {
+  it('maps the Edge Function response to camelCase and invalidates both caches on success', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    mockInvoke.mockResolvedValueOnce({
+      data: {
+        user_id: 'new-user-uuid',
+        email: 'olivia@example.com',
+        initial_password: 'abc123XYZ!@#$',
+        display_name: 'Olivia Lopez',
+        role: 'member'
+      },
+      error: null
+    })
+
+    const { result } = renderHook(() => usePromoteFamilyMember(), { wrapper })
+
+    const res = await result.current.mutateAsync({
+      family_member_id: 'fm1',
+      email: 'olivia@example.com',
+      displayName: 'Olivia Lopez',
+      role: 'member'
+    })
+
+    expect(mockInvoke).toHaveBeenCalledWith('promote-family-member', {
+      body: {
+        household_id: '00000000-0000-0000-0000-000000000001',
+        family_member_id: 'fm1',
+        email: 'olivia@example.com',
+        display_name: 'Olivia Lopez',
+        role: 'member'
+      }
+    })
+
+    expect(res).toEqual({
+      userId: 'new-user-uuid',
+      email: 'olivia@example.com',
+      initialPassword: 'abc123XYZ!@#$',
+      displayName: 'Olivia Lopez',
+      role: 'member'
+    })
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: qk.householdMembers() })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: qk.familyMembers() })
+  })
+
+  it('throws when the Edge Function returns an error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'only owners can promote' }
+    })
+
+    const { result } = renderHook(() => usePromoteFamilyMember(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        family_member_id: 'fm1',
+        email: 'olivia@example.com'
+      })
+    ).rejects.toMatchObject({ message: 'only owners can promote' })
   })
 })

@@ -5,7 +5,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { X, CheckCircle, Copy, AlertTriangle } from 'lucide-react'
 import type { HouseholdRole, AddHouseholdMemberResult } from '@/lib/data/admin'
 import { useAddHouseholdMember } from '@/lib/data/admin'
+import { useCreateFamilyMember } from '@/lib/data/familyMembers'
 import { cn } from '@/lib/cn'
+
+type MemberKind = 'login' | 'placeholder'
 
 export interface AddMemberDialogProps {
   open: boolean
@@ -14,9 +17,13 @@ export interface AddMemberDialogProps {
 
 export function AddMemberDialog({ open, onClose }: AddMemberDialogProps) {
   const addMember = useAddHouseholdMember()
+  const createPlaceholder = useCreateFamilyMember()
 
+  const [kind, setKind] = useState<MemberKind>('login')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [name, setName] = useState('')
+  const [relationship, setRelationship] = useState('')
   const [role, setRole] = useState<HouseholdRole>('member')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -24,14 +31,18 @@ export function AddMemberDialog({ open, onClose }: AddMemberDialogProps) {
   // Reset form + mutation state whenever the dialog re-opens.
   useEffect(() => {
     if (open) {
+      setKind('login')
       setEmail('')
       setDisplayName('')
+      setName('')
+      setRelationship('')
       setRole('member')
       setSubmitError(null)
       setCopied(false)
       addMember.reset()
+      createPlaceholder.reset()
     }
-    // We intentionally don't depend on `addMember` to avoid loop-on-mutation-state-change.
+    // We intentionally don't depend on the mutation refs to avoid loop-on-mutation-state-change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -41,11 +52,21 @@ export function AddMemberDialog({ open, onClose }: AddMemberDialogProps) {
     e.preventDefault()
     setSubmitError(null)
     try {
-      await addMember.mutateAsync({
-        email: email.trim(),
-        displayName: displayName.trim(),
-        role
-      })
+      if (kind === 'placeholder') {
+        const trimmedName = name.trim()
+        const trimmedRel = relationship.trim()
+        await createPlaceholder.mutateAsync({
+          name: trimmedName,
+          relationship: trimmedRel.length > 0 ? trimmedRel : null
+        })
+        onClose()
+      } else {
+        await addMember.mutateAsync({
+          email: email.trim(),
+          displayName: displayName.trim(),
+          role
+        })
+      }
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to add member')
     }
@@ -78,7 +99,9 @@ export function AddMemberDialog({ open, onClose }: AddMemberDialogProps) {
               </Dialog.Title>
               {!result && (
                 <Dialog.Description className="text-xs text-muted mt-0.5">
-                  Create a new household member account. They&apos;ll get a temporary password to sign in with.
+                  {kind === 'login'
+                    ? "Create a new household member account. They'll get a temporary password to sign in with."
+                    : 'Add a placeholder for someone without a login (e.g. a child or family reference).'}
                 </Dialog.Description>
               )}
             </div>
@@ -100,61 +123,125 @@ export function AddMemberDialog({ open, onClose }: AddMemberDialogProps) {
                 </div>
               )}
 
-              <label className="block">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Email</span>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Display name</span>
-                <input
-                  type="text"
-                  required
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
-                />
-              </label>
-
               <fieldset>
-                <legend className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Role</legend>
+                <legend className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Type</legend>
                 <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-gray-100">
-                  {(['member', 'owner'] as const).map(r => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRole(r)}
-                      aria-pressed={role === r}
-                      className={cn(
-                        'px-3 py-1.5 rounded-md text-sm transition-colors',
-                        role === r
-                          ? 'bg-white text-ink shadow-sm font-medium'
-                          : 'text-muted hover:text-ink'
-                      )}
-                    >
-                      {r}
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setKind('login')}
+                    aria-pressed={kind === 'login'}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-sm transition-colors',
+                      kind === 'login'
+                        ? 'bg-white text-ink shadow-sm font-medium'
+                        : 'text-muted hover:text-ink'
+                    )}
+                  >
+                    Login account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setKind('placeholder')}
+                    aria-pressed={kind === 'placeholder'}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-sm transition-colors',
+                      kind === 'placeholder'
+                        ? 'bg-white text-ink shadow-sm font-medium'
+                        : 'text-muted hover:text-ink'
+                    )}
+                  >
+                    Placeholder (no login)
+                  </button>
                 </div>
               </fieldset>
+
+              {kind === 'login' ? (
+                <>
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Email</span>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Display name</span>
+                    <input
+                      type="text"
+                      required
+                      value={displayName}
+                      onChange={e => setDisplayName(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+
+                  <fieldset>
+                    <legend className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Role</legend>
+                    <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-gray-100">
+                      {(['member', 'owner'] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setRole(r)}
+                          aria-pressed={role === r}
+                          className={cn(
+                            'px-3 py-1.5 rounded-md text-sm transition-colors',
+                            role === r
+                              ? 'bg-white text-ink shadow-sm font-medium'
+                              : 'text-muted hover:text-ink'
+                          )}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </>
+              ) : (
+                <>
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Name</span>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">
+                      Relationship <span className="text-muted/70 normal-case font-normal">(optional)</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={relationship}
+                      onChange={e => setRelationship(e.target.value)}
+                      placeholder="e.g. Son, Daughter"
+                      className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+                </>
+              )}
 
               <div className="pt-2 flex justify-end gap-2">
                 <Dialog.Close className="px-3 py-1.5 text-sm text-muted hover:text-ink">Cancel</Dialog.Close>
                 <button
                   type="submit"
-                  disabled={addMember.isPending}
+                  disabled={addMember.isPending || createPlaceholder.isPending}
                   className={cn(
                     'px-4 py-1.5 rounded-lg bg-brand text-white text-sm font-medium',
                     'hover:bg-brand/90 disabled:opacity-60'
                   )}
                 >
-                  {addMember.isPending ? 'Adding…' : 'Add member'}
+                  {kind === 'login'
+                    ? (addMember.isPending ? 'Adding…' : 'Add member')
+                    : (createPlaceholder.isPending ? 'Adding…' : 'Add placeholder')}
                 </button>
               </div>
             </form>

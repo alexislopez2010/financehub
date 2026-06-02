@@ -8,15 +8,24 @@ import {
   useSetHouseholdMemberActive,
   type HouseholdMemberRow
 } from '@/lib/data/admin'
+import {
+  useFamilyMembers,
+  useDeleteFamilyMember,
+  type FamilyMemberRow
+} from '@/lib/data/familyMembers'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { createClient } from '@/lib/supabase/browser'
 import { MemberRow } from './MemberRow'
+import { PlaceholderMemberRow } from './PlaceholderMemberRow'
 import { EditMemberDialog } from './EditMemberDialog'
+import { EditPlaceholderDialog } from './EditPlaceholderDialog'
 import { ResetMfaDialog } from './ResetMfaDialog'
 import { RemoveMemberDialog } from './RemoveMemberDialog'
 import { AddMemberDialog } from './AddMemberDialog'
+import { PromotePlaceholderDialog } from './PromotePlaceholderDialog'
 
 type ActiveDialog = 'edit' | 'reset-mfa' | 'remove' | null
+type PlaceholderDialog = 'edit' | 'promote' | null
 
 interface FlashMessage {
   readonly tone: 'success' | 'error'
@@ -25,11 +34,15 @@ interface FlashMessage {
 
 export function MembersSection() {
   const membersQ = useHouseholdMembers()
+  const familyQ = useFamilyMembers()
   const resetPassword = useResetHouseholdMemberPassword()
   const setActive = useSetHouseholdMemberActive()
+  const deletePlaceholder = useDeleteFamilyMember()
 
   const [target, setTarget] = useState<HouseholdMemberRow | null>(null)
   const [active, setActiveDialog] = useState<ActiveDialog>(null)
+  const [placeholderTarget, setPlaceholderTarget] = useState<FamilyMemberRow | null>(null)
+  const [placeholderDialog, setPlaceholderDialog] = useState<PlaceholderDialog>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [flash, setFlash] = useState<FlashMessage | null>(null)
@@ -57,6 +70,36 @@ export function MembersSection() {
   function close() {
     setActiveDialog(null)
     setTarget(null)
+  }
+
+  function openPlaceholder(dialog: PlaceholderDialog, placeholder: FamilyMemberRow) {
+    setPlaceholderTarget(placeholder)
+    setPlaceholderDialog(dialog)
+  }
+
+  function closePlaceholder() {
+    setPlaceholderDialog(null)
+    setPlaceholderTarget(null)
+  }
+
+  async function handleRemovePlaceholder(placeholder: FamilyMemberRow): Promise<void> {
+    const label = placeholder.name.trim() || 'this placeholder'
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Remove placeholder ${label}?`)
+    ) {
+      return
+    }
+    setFlash(null)
+    try {
+      await deletePlaceholder.mutateAsync(placeholder.id)
+      setFlash({ tone: 'success', text: `Removed placeholder ${label}.` })
+    } catch (err: unknown) {
+      setFlash({
+        tone: 'error',
+        text: err instanceof Error ? err.message : 'Failed to remove placeholder'
+      })
+    }
   }
 
   async function handleResetPassword(member: HouseholdMemberRow): Promise<void> {
@@ -118,6 +161,7 @@ export function MembersSection() {
   }
 
   const members = membersQ.data ?? []
+  const placeholders = familyQ.data ?? []
 
   return (
     <>
@@ -154,6 +198,12 @@ export function MembersSection() {
           </div>
         )}
 
+        <div className="px-4 py-2 bg-bg/40 border-b border-rule">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Login accounts
+          </h3>
+        </div>
+
         {membersQ.isLoading ? (
           <div className="px-4 py-8 text-center text-sm text-muted">Loading…</div>
         ) : membersQ.error ? (
@@ -161,7 +211,7 @@ export function MembersSection() {
             Failed to load members: {membersQ.error.message}
           </div>
         ) : members.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted">No members.</div>
+          <div className="px-4 py-8 text-center text-sm text-muted">No login accounts.</div>
         ) : (
           <ul className="divide-y divide-gray-100">
             {members.map(m => (
@@ -180,12 +230,48 @@ export function MembersSection() {
             ))}
           </ul>
         )}
+
+        <div className="px-4 py-2 bg-bg/40 border-y border-rule">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Placeholder members
+          </h3>
+        </div>
+
+        {familyQ.isLoading ? (
+          <div className="px-4 py-8 text-center text-sm text-muted">Loading…</div>
+        ) : familyQ.error ? (
+          <div role="alert" className="px-4 py-4 text-sm text-red-700 bg-red-50">
+            Failed to load placeholders: {familyQ.error.message}
+          </div>
+        ) : placeholders.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-muted">No placeholder members.</div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {placeholders.map(p => (
+              <PlaceholderMemberRow
+                key={p.id}
+                member={p}
+                onEdit={() => openPlaceholder('edit', p)}
+                onPromote={() => openPlaceholder('promote', p)}
+                onRemove={() => { void handleRemovePlaceholder(p) }}
+              />
+            ))}
+          </ul>
+        )}
       </section>
 
       <EditMemberDialog member={active === 'edit' ? target : null} onClose={close} />
       <ResetMfaDialog member={active === 'reset-mfa' ? target : null} onClose={close} />
       <RemoveMemberDialog member={active === 'remove' ? target : null} onClose={close} />
       <AddMemberDialog open={showAdd} onClose={() => setShowAdd(false)} />
+      <EditPlaceholderDialog
+        placeholder={placeholderDialog === 'edit' ? placeholderTarget : null}
+        onClose={closePlaceholder}
+      />
+      <PromotePlaceholderDialog
+        placeholder={placeholderDialog === 'promote' ? placeholderTarget : null}
+        onClose={closePlaceholder}
+      />
     </>
   )
 }

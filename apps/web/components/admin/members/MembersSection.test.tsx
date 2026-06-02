@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { HouseholdMemberRow } from '@/lib/data/admin'
+import type { FamilyMemberRow } from '@/lib/data/familyMembers'
 
 const mockUseHouseholdMembers = vi.fn()
 const mockUseUpdate = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
 const mockUseResetMfa = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
 const mockUseRemove = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
 const mockUseAdd = vi.fn(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+  data: undefined,
+  reset: vi.fn()
+}))
+const mockUsePromote = vi.fn(() => ({
   mutateAsync: vi.fn(),
   isPending: false,
   data: undefined,
@@ -25,6 +32,19 @@ const mockUseSetActive = vi.fn(() => ({
   isPending: false
 }))
 
+const mockUseFamilyMembers = vi.fn()
+const mockUseCreateFamily = vi.fn(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+  reset: vi.fn()
+}))
+const mockUseUpdateFamily = vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false }))
+const mockDeleteFamilyMutate = vi.fn()
+const mockUseDeleteFamily = vi.fn(() => ({
+  mutateAsync: mockDeleteFamilyMutate,
+  isPending: false
+}))
+
 vi.mock('@/lib/data/admin', async () => {
   return {
     useHouseholdMembers: () => mockUseHouseholdMembers(),
@@ -33,7 +53,17 @@ vi.mock('@/lib/data/admin', async () => {
     useRemoveHouseholdMember: () => mockUseRemove(),
     useAddHouseholdMember: () => mockUseAdd(),
     useResetHouseholdMemberPassword: () => mockUseResetPassword(),
-    useSetHouseholdMemberActive: () => mockUseSetActive()
+    useSetHouseholdMemberActive: () => mockUseSetActive(),
+    usePromoteFamilyMember: () => mockUsePromote()
+  }
+})
+
+vi.mock('@/lib/data/familyMembers', async () => {
+  return {
+    useFamilyMembers: () => mockUseFamilyMembers(),
+    useCreateFamilyMember: () => mockUseCreateFamily(),
+    useUpdateFamilyMember: () => mockUseUpdateFamily(),
+    useDeleteFamilyMember: () => mockUseDeleteFamily()
   }
 })
 
@@ -60,12 +90,27 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
   }
 }
 
+function makePlaceholder(over: Partial<FamilyMemberRow> = {}): FamilyMemberRow {
+  return {
+    id: 'fm1',
+    household_id: '00000000-0000-0000-0000-000000000001',
+    name: 'Olivia Lopez',
+    relationship: 'Daughter',
+    created_at: '2025-05-01T00:00:00Z',
+    ...over
+  }
+}
+
 beforeEach(() => {
   mockUseHouseholdMembers.mockReset()
+  mockUseFamilyMembers.mockReset()
   mockResetPasswordMutate.mockReset()
   mockSetActiveMutate.mockReset()
+  mockDeleteFamilyMutate.mockReset()
   mockGetUser.mockReset()
   mockGetUser.mockResolvedValue({ data: { user: null } })
+  // Default: no placeholders. Specific tests override.
+  mockUseFamilyMembers.mockReturnValue({ data: [], isLoading: false, error: null })
 })
 
 describe('<MembersSection>', () => {
@@ -185,5 +230,30 @@ describe('<MembersSection>', () => {
     })
     render(<MembersSection />)
     expect(screen.getByText(/inactive/i)).toBeInTheDocument()
+  })
+
+  it('renders placeholder members in their own list with the PLACEHOLDER pill', () => {
+    mockUseHouseholdMembers.mockReturnValue({
+      data: [makeMember()],
+      isLoading: false,
+      error: null
+    })
+    mockUseFamilyMembers.mockReturnValue({
+      data: [
+        makePlaceholder({ id: 'fm1', name: 'Olivia Lopez', relationship: 'Daughter' }),
+        makePlaceholder({ id: 'fm2', name: 'Jedidiah Lopez', relationship: 'Son' })
+      ],
+      isLoading: false,
+      error: null
+    })
+
+    render(<MembersSection />)
+
+    expect(screen.getByText('Login accounts')).toBeInTheDocument()
+    expect(screen.getByText('Placeholder members')).toBeInTheDocument()
+    expect(screen.getByText('Olivia Lopez')).toBeInTheDocument()
+    expect(screen.getByText('Jedidiah Lopez')).toBeInTheDocument()
+    // Both placeholders carry the PLACEHOLDER pill.
+    expect(screen.getAllByText(/placeholder/i).length).toBeGreaterThanOrEqual(2)
   })
 })

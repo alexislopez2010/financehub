@@ -13,8 +13,22 @@ const mockUseAdd = vi.fn(() => ({
   error: null as Error | null
 }))
 
+const mockCreateFamilyMutate = vi.fn()
+const mockCreateFamilyReset = vi.fn()
+const mockUseCreateFamily = vi.fn(() => ({
+  mutateAsync: mockCreateFamilyMutate,
+  reset: mockCreateFamilyReset,
+  isPending: false,
+  data: undefined,
+  error: null
+}))
+
 vi.mock('@/lib/data/admin', async () => ({
   useAddHouseholdMember: () => mockUseAdd()
+}))
+
+vi.mock('@/lib/data/familyMembers', async () => ({
+  useCreateFamilyMember: () => mockUseCreateFamily()
 }))
 
 import { AddMemberDialog } from './AddMemberDialog'
@@ -26,6 +40,16 @@ beforeEach(() => {
   mockUseAdd.mockReturnValue({
     mutateAsync: mockMutateAsync,
     reset: mockReset,
+    isPending: false,
+    data: undefined,
+    error: null
+  })
+  mockCreateFamilyMutate.mockReset()
+  mockCreateFamilyReset.mockReset()
+  mockUseCreateFamily.mockReset()
+  mockUseCreateFamily.mockReturnValue({
+    mutateAsync: mockCreateFamilyMutate,
+    reset: mockCreateFamilyReset,
     isPending: false,
     data: undefined,
     error: null
