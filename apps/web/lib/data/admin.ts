@@ -7,9 +7,44 @@ import {
   type UseQueryResult,
   type UseMutationResult
 } from '@tanstack/react-query'
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/browser'
 import { queryKeys } from './keys'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
+
+/**
+ * supabase-js wraps non-2xx Edge Function responses in FunctionsHttpError
+ * but doesn't surface the response body by default — callers see a generic
+ * "Edge Function returned a non-2xx status code" string. This helper pulls
+ * out the body so the user can actually see why their request failed.
+ *
+ * Safe to call with anything: only acts on FunctionsHttpError; everything
+ * else is rethrown unchanged.
+ */
+async function unwrapFunctionError(err: unknown): Promise<Error> {
+  if (err instanceof FunctionsHttpError) {
+    try {
+      const body = await err.context.json()
+      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+        return new Error(body.error)
+      }
+    } catch {
+      // Body wasn't JSON; fall through to text.
+      try {
+        const text = await err.context.text()
+        if (text) return new Error(text)
+      } catch {
+        // Body was unreadable; surface the original error.
+      }
+    }
+  }
+  if (err instanceof Error) return err
+  // Plain object shaped like { message: string }? Surface the message.
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return new Error((err as { message: string }).message)
+  }
+  return new Error(String(err))
+}
 
 /**
  * One household member row as returned by `admin_list_household_users`.
@@ -354,7 +389,7 @@ export function usePromoteFamilyMember(): UseMutationResult<
       const { data, error } = await supabase.functions.invoke('promote-family-member', {
         body
       })
-      if (error) throw error
+      if (error) throw await unwrapFunctionError(error)
       if (!isPromoteFamilyMemberResponse(data)) {
         throw new Error('promote-family-member returned an unexpected response')
       }
@@ -420,7 +455,7 @@ export function useResetHouseholdMemberPassword(): UseMutationResult<
           target_user_id: args.target_user_id
         }
       })
-      if (error) throw error
+      if (error) throw await unwrapFunctionError(error)
       if (!isResetPasswordResponse(data)) {
         throw new Error('reset-household-member-password returned an unexpected response')
       }
@@ -477,7 +512,7 @@ export function useSetHouseholdMemberActive(): UseMutationResult<
           active: args.active
         }
       })
-      if (error) throw error
+      if (error) throw await unwrapFunctionError(error)
       if (!isSetActiveResponse(data)) {
         throw new Error('set-household-member-active returned an unexpected response')
       }

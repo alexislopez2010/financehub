@@ -115,21 +115,37 @@ Deno.serve(async (req) => {
   // Look up the target user's email so we can pass it to generateLink.
   const { data: userInfo, error: userErr } = await adminClient.auth.admin.getUserById(body.target_user_id)
   if (userErr || !userInfo.user?.email) {
-    return jsonError(500, userErr?.message ?? 'target user has no email on file')
+    console.error('reset-password: getUserById failed', { userErr, has_user: !!userInfo?.user })
+    return jsonError(500, `getUserById: ${userErr?.message ?? 'target user has no email on file'}`)
   }
   const targetEmail = userInfo.user.email
 
   // Generate a recovery link. Supabase sends the email automatically via
   // the project's GoTrue email config; the link drops the user onto
   // /reset-password with a recovery code.
-  const { error: linkErr } = await adminClient.auth.admin.generateLink({
-    type: 'recovery',
-    email: targetEmail,
-    options: {
-      redirectTo: `${allowOrigin}/reset-password`
+  //
+  // generateLink emits the actual error in the `error` field on failure.
+  // We surface it verbatim — usually it's a Site URL / Redirect URL
+  // allowlist mismatch ("redirect_to is not allowed") or an SMTP/email
+  // provider misconfiguration.
+  try {
+    const { data: linkData, error: linkErr } = await adminClient.auth.admin.generateLink({
+      type: 'recovery',
+      email: targetEmail,
+      options: {
+        redirectTo: `${allowOrigin}/reset-password`
+      }
+    })
+    if (linkErr) {
+      console.error('reset-password: generateLink failed', { msg: linkErr.message, status: linkErr.status, name: linkErr.name })
+      return jsonError(500, `generateLink: ${linkErr.message}`)
     }
-  })
-  if (linkErr) return jsonError(500, linkErr.message)
+    console.log('reset-password: generated link for', targetEmail, 'action_link present:', !!linkData?.properties?.action_link)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('reset-password: generateLink threw', msg)
+    return jsonError(500, `generateLink threw: ${msg}`)
+  }
 
   const response: ResetResponse = { ok: true, email: targetEmail }
   return new Response(JSON.stringify(response), {
