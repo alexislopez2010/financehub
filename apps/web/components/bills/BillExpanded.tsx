@@ -8,6 +8,7 @@ import { useCategories } from '@/lib/data/categories'
 import { useUpdateBill } from '@/lib/data/bills'
 import { matchBills } from '@/lib/finance/billsMatch'
 import { periodToRange } from '@/lib/plan/period'
+import { BillDetailsEditor } from './BillDetailsEditor'
 import { cn } from '@/lib/cn'
 
 type Bill = Tables<'bills'>
@@ -59,6 +60,13 @@ export function BillExpanded({ bill, today }: BillExpandedProps) {
 
   return (
     <div className="px-4 py-3 bg-gray-50 border-t border-rule space-y-3">
+      {/* Full bill editor — every column on the row is editable here. */}
+      <BillDetailsEditor bill={bill} />
+
+      {/* Budget mapping lives outside the main editor because it doesn't
+          alter the bill's identity — it links the bill to a Plan budget
+          bucket so payments roll up correctly. Keeping it separate also
+          makes the "Unmapped" warning more obvious. */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] uppercase tracking-[0.12em] font-semibold text-muted">
           Budget category

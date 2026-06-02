@@ -33,6 +33,11 @@ vi.mock('@/lib/data/categories', () => ({
   useCategories: () => mockUseCategories()
 }))
 
+// BillExpanded now renders BillDetailsEditor which pulls accounts too.
+vi.mock('@/lib/data/accounts', () => ({
+  useAccounts: () => ({ data: [], isLoading: false })
+}))
+
 import { BillExpanded } from './BillExpanded'
 
 function bill(over: Partial<BillRow> = {}): BillRow {
