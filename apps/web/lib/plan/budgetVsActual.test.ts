@@ -13,6 +13,8 @@ function bill(over: Partial<BillForCommitment> = {}): BillForCommitment {
     budget_amount: 100,
     budget_category_id: 'cat-1',
     is_active: true,
+    frequency: null,
+    due_day: null,
     ...over
   }
 }
@@ -419,6 +421,57 @@ describe('deriveBudgetVsActual', () => {
       })
       expect(result[0]!.categoryId).toBeNull()
       expect(result[0]!.billsCommitted).toBe(0)
+    })
+
+    it('multiplies biweekly bills by 2 when summing into bills committed', () => {
+      // The Church Tithe scenario: $1,000 nominal biweekly, mapped to
+      // "Family & Gifts" — should contribute $2,000 to billsCommitted.
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 5 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-gifts', amount: 3000, category: 'Family & Gifts' })],
+        bills: [
+          bill({
+            budget_amount: 1000,
+            budget_category_id: 'cat-gifts',
+            frequency: 'Biweekly',
+            due_day: 1
+          })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(2000)
+    })
+
+    it('keeps monthly bills at 1× their per-occurrence amount', () => {
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 5 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing' })],
+        bills: [
+          bill({
+            budget_amount: 2469.40,
+            budget_category_id: 'cat-h',
+            frequency: 'Monthly',
+            due_day: 1
+          })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(2469.40)
+    })
+
+    it('mixes monthly and biweekly under the same category correctly', () => {
+      // E.g., a Monthly $500 bill + a Biweekly $1,000 bill in the same
+      // category → 500 + (1000 × 2) = 2500.
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 5 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-mix', amount: 3000, category: 'Mixed' })],
+        bills: [
+          bill({ budget_amount: 500,  budget_category_id: 'cat-mix', frequency: 'Monthly',  due_day: 5 }),
+          bill({ budget_amount: 1000, budget_category_id: 'cat-mix', frequency: 'Biweekly', due_day: 1 })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(2500)
     })
   })
 })

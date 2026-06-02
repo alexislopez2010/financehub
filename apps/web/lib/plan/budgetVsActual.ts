@@ -1,5 +1,6 @@
 import type { Tables } from '@/lib/supabase/database.types'
 import type { PlanPeriod } from './period'
+import { monthlyOccurrenceCount } from '@/lib/finance/billCadence'
 
 export type BudgetRow = Tables<'budgets'>
 export type TransactionRow = Tables<'transactions'>
@@ -7,9 +8,14 @@ export type BillRow = Tables<'bills'>
 
 /**
  * Minimal bill shape used to compute bills committed per category.
- * Kept structural so callers can pass narrower projections.
+ * Kept structural so callers can pass narrower projections. `frequency` and
+ * `due_day` feed monthlyOccurrenceCount so a biweekly bill contributes 2×
+ * its per-occurrence amount to the monthly commitment, not 1×.
  */
-export type BillForCommitment = Pick<BillRow, 'budget_amount' | 'budget_category_id' | 'is_active'>
+export type BillForCommitment = Pick<
+  BillRow,
+  'budget_amount' | 'budget_category_id' | 'is_active' | 'frequency' | 'due_day'
+>
 
 export interface BudgetVsActualRow {
   /**
@@ -90,12 +96,19 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
   // Bills with null budget_category_id are excluded (user hasn't mapped yet).
   // is_active is nullable in the schema; treat null as inactive so we only
   // count bills the user has explicitly turned on.
+  //
+  // Each bill is multiplied by its monthlyOccurrenceCount so biweekly bills
+  // contribute 2× their per-occurrence amount. Monthly stays ×1 (no change).
   const billsByCategoryId = new Map<string, number>()
   for (const b of bills) {
     if (b.is_active !== true) continue
     const cid = b.budget_category_id
     if (!cid) continue
-    billsByCategoryId.set(cid, (billsByCategoryId.get(cid) ?? 0) + b.budget_amount)
+    const monthly = b.budget_amount * monthlyOccurrenceCount({
+      due_day: b.due_day,
+      frequency: b.frequency
+    })
+    billsByCategoryId.set(cid, (billsByCategoryId.get(cid) ?? 0) + monthly)
   }
 
   // Aggregate budgets for the period by lowercase category key.

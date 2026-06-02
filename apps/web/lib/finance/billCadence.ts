@@ -83,6 +83,27 @@ export function isBillDueOn(
 }
 
 /**
+ * Average number of times this bill recurs in a calendar month, given its
+ * frequency. Used to convert a per-occurrence `budget_amount` into a
+ * monthly-equivalent commitment (e.g., for the Plan surface's
+ * "bills committed" column).
+ *
+ * Returns an integer count for monthly/biweekly today. If we ever surface
+ * weekly/quarterly/annual cadences, this is the right place to extend.
+ */
+export function monthlyOccurrenceCount(bill: BillCadenceInput): number {
+  // due_day being null only affects schedulability on a specific calendar
+  // day; for monthly aggregate commitment we still count the bill once.
+  // Callers that need to know whether the bill is schedulable should check
+  // due_day separately.
+  switch (normalizeBillCadence(bill.frequency)) {
+    case 'biweekly': return 2
+    case 'monthly':
+    default:         return 1
+  }
+}
+
+/**
  * All calendar dates inside [start, start + windowDays] (inclusive) on which
  * the bill is due. Returned in ascending chronological order. Same cadence
  * rules as {@link isBillDueOn}.
