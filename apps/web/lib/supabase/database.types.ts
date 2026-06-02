@@ -68,6 +68,7 @@ export type Database = {
           is_active: boolean | null
           last_four: string | null
           name: string
+          owner: string | null
           starting_balance: number | null
           starting_balance_date: string | null
           type: string | null
@@ -83,6 +84,7 @@ export type Database = {
           is_active?: boolean | null
           last_four?: string | null
           name: string
+          owner?: string | null
           starting_balance?: number | null
           starting_balance_date?: string | null
           type?: string | null
@@ -98,6 +100,7 @@ export type Database = {
           is_active?: boolean | null
           last_four?: string | null
           name?: string
+          owner?: string | null
           starting_balance?: number | null
           starting_balance_date?: string | null
           type?: string | null

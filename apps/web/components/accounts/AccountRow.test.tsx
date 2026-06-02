@@ -8,6 +8,7 @@ function makeBalance(over: Partial<AccountBalance> = {}): AccountBalance {
     accountId: 'a1',
     name: 'Chase Checking',
     type: 'checking',
+    owner: null,
     currentBalance: 1000,
     activity: 0,
     txCount: 0,
@@ -28,5 +29,23 @@ describe('<AccountRow>', () => {
     expect(
       screen.queryByRole('button', { name: /edit account/i })
     ).not.toBeInTheDocument()
+  })
+
+  it('renders the owner badge when an owner is set', () => {
+    render(<AccountRow balance={makeBalance({ owner: 'Alexis' })} />)
+    expect(screen.getByText('Alexis')).toBeInTheDocument()
+    expect(screen.getByTitle('Owned by Alexis')).toBeInTheDocument()
+  })
+
+  it('renders the shared badge with a distinct title for Shared accounts', () => {
+    render(<AccountRow balance={makeBalance({ owner: 'Shared' })} />)
+    expect(screen.getByText('Shared')).toBeInTheDocument()
+    expect(screen.getByTitle('Shared account')).toBeInTheDocument()
+  })
+
+  it('omits the owner badge when owner is null', () => {
+    const { container } = render(<AccountRow balance={makeBalance({ owner: null })} />)
+    // Only the type badge should render under the name.
+    expect(container.querySelectorAll('[title]').length).toBe(0)
   })
 })

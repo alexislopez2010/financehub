@@ -51,14 +51,29 @@ export function AccountRow({ balance, onEditName, onEdit, onArchive }: AccountRo
         ) : (
           <div className="text-ink font-medium truncate">{balance.name}</div>
         )}
-        {balance.type && (
-          <span className={cn(
-            'inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-medium',
-            TYPE_TONES[balance.type] ?? 'bg-gray-100 text-gray-700'
-          )}>
-            {balance.type}
-          </span>
-        )}
+        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+          {balance.type && (
+            <span className={cn(
+              'inline-block px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-medium',
+              TYPE_TONES[balance.type] ?? 'bg-gray-100 text-gray-700'
+            )}>
+              {balance.type}
+            </span>
+          )}
+          {balance.owner && (
+            <span
+              className={cn(
+                'inline-block px-1.5 py-0.5 rounded text-[10px] tracking-wide font-medium',
+                balance.owner === 'Shared'
+                  ? 'bg-purple-50 text-purple-700'
+                  : 'bg-gray-100 text-gray-700'
+              )}
+              title={balance.owner === 'Shared' ? 'Shared account' : `Owned by ${balance.owner}`}
+            >
+              {balance.owner}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="hidden sm:block text-xs text-muted tabular text-right">

@@ -18,6 +18,7 @@ function account(over: Partial<AccountRow> = {}): AccountRow {
     currency: 'USD',
     display_order: null,
     created_at: null,
+    owner: null,
     ...over
   }
 }

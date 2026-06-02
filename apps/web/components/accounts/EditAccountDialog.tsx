@@ -5,7 +5,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import type { AccountRow } from '@/lib/data/accounts'
 import { useUpdateAccount } from '@/lib/data/accounts'
+import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { cn } from '@/lib/cn'
+
+// Reserved literal for jointly-owned accounts. Lives next to the household
+// member display names in the dropdown so the user can pick it like any
+// other option.
+const SHARED_OWNER = 'Shared'
 
 const TYPES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'checking',   label: 'Checking' },
@@ -23,12 +29,14 @@ export interface EditAccountDialogProps {
 
 export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDialogProps) {
   const updateAccount = useUpdateAccount()
+  const membersQ = useHouseholdMembersList()
 
   const [name, setName] = useState('')
   const [type, setType] = useState<string>('checking')
   const [institution, setInstitution] = useState('')
   const [startingBalance, setStartingBalance] = useState('')
   const [startingBalanceDate, setStartingBalanceDate] = useState('')
+  const [owner, setOwner] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   // Sync form fields whenever a new account opens the dialog. We also reset
@@ -44,6 +52,7 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
           : ''
       )
       setStartingBalanceDate(account.starting_balance_date ?? '')
+      setOwner(account.owner ?? '')
       setSubmitError(null)
     }
   }, [account, open])
@@ -73,7 +82,8 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
           type,
           institution: institution.trim() || null,
           starting_balance: parsedStarting,
-          starting_balance_date: startingBalanceDate || null
+          starting_balance_date: startingBalanceDate || null,
+          owner: owner || null
         }
       })
       onOpenChange(false)
@@ -142,6 +152,29 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
                 className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
               />
             </label>
+
+            <div>
+              <label className="block">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Owner</span>
+                <select
+                  value={owner}
+                  onChange={e => setOwner(e.target.value)}
+                  disabled={membersQ.isLoading}
+                  className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:opacity-60"
+                >
+                  <option value="">(unassigned)</option>
+                  <option value={SHARED_OWNER}>Shared</option>
+                  {(membersQ.data ?? []).map(m => (
+                    <option key={m.user_id} value={m.display_name ?? ''}>
+                      {m.display_name ?? '—'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="block mt-1 text-[11px] text-muted">
+                Who this account belongs to. Pick &ldquo;Shared&rdquo; for joint accounts.
+              </span>
+            </div>
 
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Starting balance</span>

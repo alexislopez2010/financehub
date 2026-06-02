@@ -9,6 +9,11 @@ export interface AccountBalance {
   name: string
   /** Account type. */
   type: string | null
+  /**
+   * Designated owner of the account. Either a household_member display_name,
+   * the literal 'Shared', or null when unassigned.
+   */
+  owner: string | null
   /** Sum: starting_balance + signed activity to today. */
   currentBalance: number
   /** Activity portion of the balance (currentBalance - starting_balance). */
@@ -90,6 +95,7 @@ export function deriveBalances(input: {
       accountId: a.id,
       name: a.name,
       type: a.type,
+      owner: a.owner ?? null,
       currentBalance,
       activity: round2(sum),
       txCount: count

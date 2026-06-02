@@ -10,6 +10,17 @@ vi.mock('@/lib/data/accounts', async () => ({
   useUpdateAccount: () => mockUseUpdate()
 }))
 
+// Owner field uses householdMembers; mock with two test members.
+vi.mock('@/lib/data/householdMembers', () => ({
+  useHouseholdMembersList: () => ({
+    data: [
+      { user_id: 'u1', household_id: '00000000-0000-0000-0000-000000000001', display_name: 'Alexis', role: 'owner', joined_at: null },
+      { user_id: 'u2', household_id: '00000000-0000-0000-0000-000000000001', display_name: 'Marilyn Lopez', role: 'owner', joined_at: null }
+    ],
+    isLoading: false
+  })
+}))
+
 import { EditAccountDialog } from './EditAccountDialog'
 
 const HID = '00000000-0000-0000-0000-000000000001'
@@ -29,6 +40,7 @@ function makeAccount(over: Partial<AccountRow> = {}): AccountRow {
     currency: 'USD',
     display_order: null,
     created_at: null,
+    owner: null,
     ...over
   }
 }
@@ -85,7 +97,8 @@ describe('<EditAccountDialog>', () => {
           type: 'savings',
           institution: 'Chase',
           starting_balance: 5000,
-          starting_balance_date: '2025-03-01'
+          starting_balance_date: '2025-03-01',
+          owner: null
         }
       })
     )
@@ -113,6 +126,46 @@ describe('<EditAccountDialog>', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/starting balance/i))
     expect(mockMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('lists Shared + household members as Owner options and submits the selected name', async () => {
+    const user = userEvent.setup()
+    render(
+      <EditAccountDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        account={makeAccount()}
+      />
+    )
+
+    const ownerSelect = screen.getByLabelText(/owner/i) as HTMLSelectElement
+    // Default options + Shared + 2 mocked members = 4
+    expect(ownerSelect.options.length).toBe(4)
+    expect(Array.from(ownerSelect.options).map(o => o.value)).toEqual([
+      '', 'Shared', 'Alexis', 'Marilyn Lopez'
+    ])
+
+    await user.selectOptions(ownerSelect, 'Alexis')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(mockMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          patch: expect.objectContaining({ owner: 'Alexis' })
+        })
+      )
+    )
+  })
+
+  it('preserves the existing owner on first open', async () => {
+    render(
+      <EditAccountDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        account={makeAccount({ owner: 'Shared' })}
+      />
+    )
+    expect((screen.getByLabelText(/owner/i) as HTMLSelectElement).value).toBe('Shared')
   })
 
   it('discards unsaved edits when the dialog closes and reopens', async () => {
