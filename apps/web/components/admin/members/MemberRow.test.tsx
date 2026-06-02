@@ -12,17 +12,41 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
     role: 'owner',
     mfa_factors: 2,
     joined_at: '2025-01-01T00:00:00Z',
+    is_active: true,
     ...over
   }
 }
 
+function renderRow(overrides: Partial<HouseholdMemberRow> = {}, extra: Partial<{
+  onEdit: () => void
+  onResetMfa: () => void
+  onRemove: () => void
+  onResetPassword: () => void
+  onToggleActive: () => void
+  isSelf: boolean
+  resetPasswordPending: boolean
+  toggleActivePending: boolean
+}> = {}) {
+  return render(
+    <ul>
+      <MemberRow
+        member={makeMember(overrides)}
+        onEdit={extra.onEdit ?? vi.fn()}
+        onResetMfa={extra.onResetMfa ?? vi.fn()}
+        onRemove={extra.onRemove ?? vi.fn()}
+        onResetPassword={extra.onResetPassword ?? vi.fn()}
+        onToggleActive={extra.onToggleActive ?? vi.fn()}
+        isSelf={extra.isSelf ?? false}
+        resetPasswordPending={extra.resetPasswordPending ?? false}
+        toggleActivePending={extra.toggleActivePending ?? false}
+      />
+    </ul>
+  )
+}
+
 describe('<MemberRow>', () => {
   it('renders the display name, email, role pill, and MFA count', () => {
-    render(
-      <ul>
-        <MemberRow member={makeMember()} onEdit={vi.fn()} onResetMfa={vi.fn()} onRemove={vi.fn()} />
-      </ul>
-    )
+    renderRow()
     expect(screen.getByText('Alex Lopez')).toBeInTheDocument()
     expect(screen.getByText('alex@example.com')).toBeInTheDocument()
     expect(screen.getByText('owner')).toBeInTheDocument()
@@ -30,30 +54,12 @@ describe('<MemberRow>', () => {
   })
 
   it('renders "1 factor" when mfa_factors is 1', () => {
-    render(
-      <ul>
-        <MemberRow
-          member={makeMember({ mfa_factors: 1 })}
-          onEdit={vi.fn()}
-          onResetMfa={vi.fn()}
-          onRemove={vi.fn()}
-        />
-      </ul>
-    )
+    renderRow({ mfa_factors: 1 })
     expect(screen.getByText('1 factor')).toBeInTheDocument()
   })
 
   it('falls back to email when display_name is null', () => {
-    render(
-      <ul>
-        <MemberRow
-          member={makeMember({ display_name: null })}
-          onEdit={vi.fn()}
-          onResetMfa={vi.fn()}
-          onRemove={vi.fn()}
-        />
-      </ul>
-    )
+    renderRow({ display_name: null })
     // Email appears twice (in the bold label and the muted line); just assert at least once.
     expect(screen.getAllByText('alex@example.com').length).toBeGreaterThan(0)
   })
@@ -64,21 +70,43 @@ describe('<MemberRow>', () => {
     const onRemove = vi.fn()
     const user = userEvent.setup()
 
-    render(
-      <ul>
-        <MemberRow
-          member={makeMember({ role: 'member' })}
-          onEdit={onEdit}
-          onResetMfa={onResetMfa}
-          onRemove={onRemove}
-        />
-      </ul>
-    )
+    renderRow({ role: 'member' }, { onEdit, onResetMfa, onRemove })
 
     await user.click(screen.getByRole('button', { name: /actions for/i }))
     await user.click(await screen.findByRole('menuitem', { name: /edit/i }))
     expect(onEdit).toHaveBeenCalledTimes(1)
     expect(onResetMfa).not.toHaveBeenCalled()
     expect(onRemove).not.toHaveBeenCalled()
+  })
+
+  it('renders the inactive badge and dims the row when is_active is false', () => {
+    const { container } = renderRow({ is_active: false })
+    expect(screen.getByText(/inactive/i)).toBeInTheDocument()
+    const li = container.querySelector('li')
+    expect(li?.className).toMatch(/opacity-60/)
+  })
+
+  it('hides the toggle-active button when isSelf is true', () => {
+    renderRow({}, { isSelf: true })
+    expect(screen.queryByRole('button', { name: /disable .*account/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /enable .*account/i })).toBeNull()
+  })
+
+  it('shows the disable button label when the member is currently active', () => {
+    renderRow({ is_active: true })
+    expect(screen.getByRole('button', { name: /disable .*account/i })).toBeInTheDocument()
+  })
+
+  it('shows the enable button label when the member is currently inactive', () => {
+    renderRow({ is_active: false })
+    expect(screen.getByRole('button', { name: /enable .*account/i })).toBeInTheDocument()
+  })
+
+  it('fires onResetPassword when the reset-password button is clicked', async () => {
+    const onResetPassword = vi.fn()
+    const user = userEvent.setup()
+    renderRow({}, { onResetPassword })
+    await user.click(screen.getByRole('button', { name: /password-reset/i }))
+    expect(onResetPassword).toHaveBeenCalledTimes(1)
   })
 })

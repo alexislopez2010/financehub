@@ -1,8 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { UserPlus } from 'lucide-react'
-import { useHouseholdMembers, type HouseholdMemberRow } from '@/lib/data/admin'
+import {
+  useHouseholdMembers,
+  useResetHouseholdMemberPassword,
+  useSetHouseholdMemberActive,
+  type HouseholdMemberRow
+} from '@/lib/data/admin'
+import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
+import { createClient } from '@/lib/supabase/browser'
 import { MemberRow } from './MemberRow'
 import { EditMemberDialog } from './EditMemberDialog'
 import { ResetMfaDialog } from './ResetMfaDialog'
@@ -11,20 +18,103 @@ import { AddMemberDialog } from './AddMemberDialog'
 
 type ActiveDialog = 'edit' | 'reset-mfa' | 'remove' | null
 
+interface FlashMessage {
+  readonly tone: 'success' | 'error'
+  readonly text: string
+}
+
 export function MembersSection() {
   const membersQ = useHouseholdMembers()
+  const resetPassword = useResetHouseholdMemberPassword()
+  const setActive = useSetHouseholdMemberActive()
+
   const [target, setTarget] = useState<HouseholdMemberRow | null>(null)
-  const [active, setActive] = useState<ActiveDialog>(null)
+  const [active, setActiveDialog] = useState<ActiveDialog>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [flash, setFlash] = useState<FlashMessage | null>(null)
+  // Track which member id has a mutation in flight so we only spin one button.
+  const [pendingResetId, setPendingResetId] = useState<string | null>(null)
+  const [pendingToggleId, setPendingToggleId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+    void supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return
+      setCurrentUserId(data.user?.id ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function open(dialog: ActiveDialog, member: HouseholdMemberRow) {
     setTarget(member)
-    setActive(dialog)
+    setActiveDialog(dialog)
   }
 
   function close() {
-    setActive(null)
+    setActiveDialog(null)
     setTarget(null)
+  }
+
+  async function handleResetPassword(member: HouseholdMemberRow): Promise<void> {
+    const label = member.display_name?.trim() || member.email
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Send password-reset email to ${label}?`)
+    ) {
+      return
+    }
+    setPendingResetId(member.user_id)
+    setFlash(null)
+    try {
+      const res = await resetPassword.mutateAsync({
+        household_id: LOPEZ_HOUSEHOLD_ID,
+        target_user_id: member.user_id
+      })
+      setFlash({ tone: 'success', text: `Password reset email sent to ${res.email}` })
+    } catch (err: unknown) {
+      setFlash({
+        tone: 'error',
+        text: err instanceof Error ? err.message : 'Failed to send password reset email'
+      })
+    } finally {
+      setPendingResetId(null)
+    }
+  }
+
+  async function handleToggleActive(member: HouseholdMemberRow): Promise<void> {
+    const label = member.display_name?.trim() || member.email
+    const nextActive = !member.is_active
+    const verb = nextActive ? 'Enable' : 'Disable'
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`${verb} ${label}'s account?`)
+    ) {
+      return
+    }
+    setPendingToggleId(member.user_id)
+    setFlash(null)
+    try {
+      await setActive.mutateAsync({
+        household_id: LOPEZ_HOUSEHOLD_ID,
+        target_user_id: member.user_id,
+        active: nextActive
+      })
+      setFlash({
+        tone: 'success',
+        text: `${label}'s account ${nextActive ? 'enabled' : 'disabled'}.`
+      })
+    } catch (err: unknown) {
+      setFlash({
+        tone: 'error',
+        text: err instanceof Error ? err.message : 'Failed to update member status'
+      })
+    } finally {
+      setPendingToggleId(null)
+    }
   }
 
   const members = membersQ.data ?? []
@@ -51,6 +141,19 @@ export function MembersSection() {
           </button>
         </header>
 
+        {flash && (
+          <div
+            role="status"
+            className={
+              flash.tone === 'success'
+                ? 'border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800'
+                : 'border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700'
+            }
+          >
+            {flash.text}
+          </div>
+        )}
+
         {membersQ.isLoading ? (
           <div className="px-4 py-8 text-center text-sm text-muted">Loading…</div>
         ) : membersQ.error ? (
@@ -68,6 +171,11 @@ export function MembersSection() {
                 onEdit={() => open('edit', m)}
                 onResetMfa={() => open('reset-mfa', m)}
                 onRemove={() => open('remove', m)}
+                onResetPassword={() => { void handleResetPassword(m) }}
+                onToggleActive={() => { void handleToggleActive(m) }}
+                isSelf={currentUserId === m.user_id}
+                resetPasswordPending={pendingResetId === m.user_id}
+                toggleActivePending={pendingToggleId === m.user_id}
               />
             ))}
           </ul>

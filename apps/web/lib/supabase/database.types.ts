@@ -342,6 +342,7 @@ export type Database = {
         Row: {
           display_name: string | null
           household_id: string
+          is_active: boolean
           joined_at: string | null
           role: string | null
           user_id: string
@@ -349,6 +350,7 @@ export type Database = {
         Insert: {
           display_name?: string | null
           household_id: string
+          is_active?: boolean
           joined_at?: string | null
           role?: string | null
           user_id: string
@@ -356,6 +358,7 @@ export type Database = {
         Update: {
           display_name?: string | null
           household_id?: string
+          is_active?: boolean
           joined_at?: string | null
           role?: string | null
           user_id?: string

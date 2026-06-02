@@ -8,10 +8,21 @@ import type { HouseholdMemberRow } from './admin'
 // Hoisted Supabase mock — must come before SUT import.
 const mockRpc = vi.fn()
 const mockInvoke = vi.fn()
+// useHouseholdMembers also queries household_members directly for is_active.
+// Each test that exercises useHouseholdMembers should queue a row set here.
+const mockFromHouseholdMembersRows = vi.fn()
 
 vi.mock('@/lib/supabase/browser', () => ({
   createClient: () => ({
     rpc: (fn: string, args: unknown) => mockRpc(fn, args),
+    from: (table: string) => {
+      // Builder mimicking supabase-js's chained select/eq.
+      const builder = {
+        select: (_cols: string) => builder,
+        eq: (_col: string, _val: unknown) => mockFromHouseholdMembersRows(table)
+      }
+      return builder
+    },
     functions: {
       invoke: (name: string, opts: unknown) => mockInvoke(name, opts)
     }
@@ -23,7 +34,9 @@ import {
   useUpdateHouseholdMember,
   useResetMfa,
   useRemoveHouseholdMember,
-  useAddHouseholdMember
+  useAddHouseholdMember,
+  useResetHouseholdMemberPassword,
+  useSetHouseholdMemberActive
 } from './admin'
 
 function makeWrapper(client: QueryClient) {
@@ -53,6 +66,7 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
     role: 'member',
     mfa_factors: 1,
     joined_at: '2025-01-01T00:00:00Z',
+    is_active: true,
     ...over
   }
 }
@@ -60,10 +74,13 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
 beforeEach(() => {
   mockRpc.mockReset()
   mockInvoke.mockReset()
+  mockFromHouseholdMembersRows.mockReset()
+  // Default: no is_active flag rows — useHouseholdMembers will treat all as active.
+  mockFromHouseholdMembersRows.mockResolvedValue({ data: [], error: null })
 })
 
 describe('useHouseholdMembers', () => {
-  it('returns normalized rows when the RPC succeeds', async () => {
+  it('returns normalized rows merged with is_active when the RPC succeeds', async () => {
     const client = makeClient()
     const wrapper = makeWrapper(client)
 
@@ -89,6 +106,13 @@ describe('useHouseholdMembers', () => {
       ],
       error: null
     })
+    mockFromHouseholdMembersRows.mockResolvedValueOnce({
+      data: [
+        { user_id: 'u1', is_active: true },
+        { user_id: 'u2', is_active: false }
+      ],
+      error: null
+    })
 
     const { result } = renderHook(() => useHouseholdMembers(), { wrapper })
 
@@ -104,7 +128,8 @@ describe('useHouseholdMembers', () => {
         display_name: 'Owner',
         role: 'owner',
         mfa_factors: 2,
-        joined_at: '2025-01-01T00:00:00Z'
+        joined_at: '2025-01-01T00:00:00Z',
+        is_active: true
       },
       {
         user_id: 'u2',
@@ -112,9 +137,36 @@ describe('useHouseholdMembers', () => {
         display_name: null,
         role: 'member',
         mfa_factors: 0,
-        joined_at: ''
+        joined_at: '',
+        is_active: false
       }
     ])
+  })
+
+  it('defaults missing is_active flag rows to active=true', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          user_id: 'u1',
+          email: 'owner@example.com',
+          display_name: 'Owner',
+          role: 'owner',
+          mfa_factors: 0,
+          joined_at: '2025-01-01T00:00:00Z'
+        }
+      ],
+      error: null
+    })
+    // No matching flag row.
+    mockFromHouseholdMembersRows.mockResolvedValueOnce({ data: [], error: null })
+
+    const { result } = renderHook(() => useHouseholdMembers(), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data?.[0]?.is_active).toBe(true)
   })
 
   it('surfaces the error message when the RPC errors', async () => {
@@ -364,5 +416,178 @@ describe('useAddHouseholdMember', () => {
     })
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.householdMembers() })
+  })
+})
+
+describe('useResetHouseholdMemberPassword', () => {
+  it('invokes the Edge Function with the right body and returns just the email', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: { ok: true, email: 'b@example.com' },
+      error: null
+    })
+
+    const { result } = renderHook(() => useResetHouseholdMemberPassword(), { wrapper })
+
+    const res = await result.current.mutateAsync({
+      household_id: '00000000-0000-0000-0000-000000000001',
+      target_user_id: 'u2'
+    })
+
+    expect(mockInvoke).toHaveBeenCalledWith('reset-household-member-password', {
+      body: {
+        household_id: '00000000-0000-0000-0000-000000000001',
+        target_user_id: 'u2'
+      }
+    })
+    expect(res).toEqual({ email: 'b@example.com' })
+  })
+
+  it('throws when the Edge Function returns an error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'only owners can reset passwords' }
+    })
+
+    const { result } = renderHook(() => useResetHouseholdMemberPassword(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        household_id: '00000000-0000-0000-0000-000000000001',
+        target_user_id: 'u2'
+      })
+    ).rejects.toMatchObject({ message: 'only owners can reset passwords' })
+  })
+
+  it('throws when the Edge Function returns an unexpected shape', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+
+    // Missing the `ok: true` envelope.
+    mockInvoke.mockResolvedValueOnce({
+      data: { email: 'b@example.com' },
+      error: null
+    })
+
+    const { result } = renderHook(() => useResetHouseholdMemberPassword(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        household_id: '00000000-0000-0000-0000-000000000001',
+        target_user_id: 'u2'
+      })
+    ).rejects.toThrow(/unexpected response/)
+  })
+})
+
+describe('useSetHouseholdMemberActive', () => {
+  it('invokes the Edge Function with the right body and returns the stripped payload', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [makeMember({ user_id: 'u2', is_active: true })])
+
+    mockInvoke.mockResolvedValueOnce({
+      data: { ok: true, user_id: 'u2', active: false },
+      error: null
+    })
+
+    const { result } = renderHook(() => useSetHouseholdMemberActive(), { wrapper })
+
+    const res = await result.current.mutateAsync({
+      household_id: '00000000-0000-0000-0000-000000000001',
+      target_user_id: 'u2',
+      active: false
+    })
+
+    expect(mockInvoke).toHaveBeenCalledWith('set-household-member-active', {
+      body: {
+        household_id: '00000000-0000-0000-0000-000000000001',
+        target_user_id: 'u2',
+        active: false
+      }
+    })
+    expect(res).toEqual({ user_id: 'u2', active: false })
+  })
+
+  it('optimistically flips is_active in the cache before the server replies', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [
+      makeMember({ user_id: 'u1', is_active: true }),
+      makeMember({ user_id: 'u2', email: 'b@example.com', display_name: 'Bob', is_active: true })
+    ])
+
+    let resolveServer: (v: { data: { ok: true; user_id: string; active: boolean }; error: null }) => void = () => {}
+    mockInvoke.mockReturnValueOnce(new Promise(r => { resolveServer = r }))
+
+    const { result } = renderHook(() => useSetHouseholdMemberActive(), { wrapper })
+    void result.current.mutate({
+      household_id: '00000000-0000-0000-0000-000000000001',
+      target_user_id: 'u2',
+      active: false
+    })
+
+    await waitFor(() => {
+      const cache = client.getQueryData<ReadonlyArray<HouseholdMemberRow>>(queryKeys.householdMembers())
+      const u2 = cache?.find(r => r.user_id === 'u2')
+      expect(u2?.is_active).toBe(false)
+    })
+
+    resolveServer({ data: { ok: true, user_id: 'u2', active: false }, error: null })
+  })
+
+  it('rolls back the cache on server error', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    const initial = [makeMember({ user_id: 'u2', is_active: true })]
+    seedCache(client, initial)
+
+    mockInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'owners cannot disable their own account' }
+    })
+
+    const { result } = renderHook(() => useSetHouseholdMemberActive(), { wrapper })
+
+    await new Promise<void>(resolve => {
+      result.current.mutate(
+        {
+          household_id: '00000000-0000-0000-0000-000000000001',
+          target_user_id: 'u2',
+          active: false
+        },
+        { onSettled: () => resolve() }
+      )
+    })
+
+    const cache = client.getQueryData<ReadonlyArray<HouseholdMemberRow>>(queryKeys.householdMembers())
+    expect(cache).toEqual(initial)
+  })
+
+  it('throws when the Edge Function returns an unexpected shape', async () => {
+    const client = makeClient()
+    const wrapper = makeWrapper(client)
+    seedCache(client, [makeMember({ user_id: 'u2', is_active: true })])
+
+    // Missing the `ok: true` envelope.
+    mockInvoke.mockResolvedValueOnce({
+      data: { user_id: 'u2', active: false },
+      error: null
+    })
+
+    const { result } = renderHook(() => useSetHouseholdMemberActive(), { wrapper })
+
+    await expect(
+      result.current.mutateAsync({
+        household_id: '00000000-0000-0000-0000-000000000001',
+        target_user_id: 'u2',
+        active: false
+      })
+    ).rejects.toThrow(/unexpected response/)
   })
 })

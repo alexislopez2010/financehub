@@ -19,6 +19,7 @@ function makeMember(over: Partial<HouseholdMemberRow> = {}): HouseholdMemberRow 
     role: 'member',
     mfa_factors: 0,
     joined_at: '2025-01-01T00:00:00Z',
+    is_active: true,
     ...over
   }
 }

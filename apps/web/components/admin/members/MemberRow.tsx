@@ -1,7 +1,16 @@
 'use client'
 
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { MoreVertical, Pencil, ShieldOff, UserMinus } from 'lucide-react'
+import {
+  KeyRound,
+  Loader2,
+  MoreVertical,
+  Pencil,
+  Power,
+  PowerOff,
+  ShieldOff,
+  UserMinus
+} from 'lucide-react'
 import type { HouseholdMemberRow } from '@/lib/data/admin'
 import { cn } from '@/lib/cn'
 
@@ -10,6 +19,14 @@ export interface MemberRowProps {
   onEdit: () => void
   onResetMfa: () => void
   onRemove: () => void
+  onResetPassword: () => void
+  onToggleActive: () => void
+  /** True when the row is the currently authenticated user — hides the toggle. */
+  isSelf: boolean
+  /** Spinner state for the reset-password mutation. */
+  resetPasswordPending: boolean
+  /** Spinner state for the toggle-active mutation. */
+  toggleActivePending: boolean
 }
 
 function initialsFrom(member: HouseholdMemberRow): string {
@@ -20,10 +37,21 @@ function initialsFrom(member: HouseholdMemberRow): string {
   return (parts[0]![0]! + parts[1]![0]!).toUpperCase()
 }
 
-export function MemberRow({ member, onEdit, onResetMfa, onRemove }: MemberRowProps) {
+export function MemberRow({
+  member,
+  onEdit,
+  onResetMfa,
+  onRemove,
+  onResetPassword,
+  onToggleActive,
+  isSelf,
+  resetPasswordPending,
+  toggleActivePending
+}: MemberRowProps) {
   const isOwner = member.role === 'owner'
+  const displayLabel = member.display_name?.trim() || member.email
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className={cn('flex items-center gap-3 px-4 py-3', !member.is_active && 'opacity-60')}>
       <div
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-bg text-[11px] font-semibold"
         aria-hidden="true"
@@ -32,8 +60,13 @@ export function MemberRow({ member, onEdit, onResetMfa, onRemove }: MemberRowPro
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-ink truncate">
-          {member.display_name?.trim() || member.email}
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium text-ink truncate">{displayLabel}</div>
+          {!member.is_active && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gray-200 text-[10px] font-medium uppercase tracking-wider text-muted">
+              Inactive
+            </span>
+          )}
         </div>
         <div className="text-xs text-muted truncate">{member.email}</div>
       </div>
@@ -50,6 +83,48 @@ export function MemberRow({ member, onEdit, onResetMfa, onRemove }: MemberRowPro
       <span className="hidden sm:inline-block text-[11px] text-muted tabular w-[70px] text-right">
         {member.mfa_factors} {member.mfa_factors === 1 ? 'factor' : 'factors'}
       </span>
+
+      <button
+        type="button"
+        onClick={onResetPassword}
+        disabled={resetPasswordPending}
+        title={`Send password-reset email to ${displayLabel}`}
+        aria-label={`Send password-reset email to ${displayLabel}`}
+        className="p-1 rounded text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+      >
+        {resetPasswordPending ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <KeyRound size={14} />
+        )}
+      </button>
+
+      {!isSelf && (
+        <button
+          type="button"
+          onClick={onToggleActive}
+          disabled={toggleActivePending}
+          title={
+            member.is_active
+              ? `Disable ${displayLabel}'s account`
+              : `Enable ${displayLabel}'s account`
+          }
+          aria-label={
+            member.is_active
+              ? `Disable ${displayLabel}'s account`
+              : `Enable ${displayLabel}'s account`
+          }
+          className="p-1 rounded text-muted hover:text-ink hover:bg-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {toggleActivePending ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : member.is_active ? (
+            <PowerOff size={14} />
+          ) : (
+            <Power size={14} />
+          )}
+        </button>
+      )}
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
