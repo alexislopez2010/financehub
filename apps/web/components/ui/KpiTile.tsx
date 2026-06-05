@@ -59,7 +59,10 @@ export function KpiTile({
           </div>
         )}
       </div>
-      <div className="text-3xl font-bold text-ink tabular tracking-tight">{value}</div>
+      {/* whitespace-nowrap: KPI values are atomic — never let the browser
+          break a number across lines (e.g., "−" hanging on its own row
+          above "$2,013" because the Unicode minus is a break opportunity). */}
+      <div className="text-3xl font-bold text-ink tabular tracking-tight whitespace-nowrap">{value}</div>
       {caption && (
         <div className={cn('text-xs', captionToneClasses[captionTone])}>
           {captionArrow[captionTone] && (

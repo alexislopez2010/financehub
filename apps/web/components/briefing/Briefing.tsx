@@ -325,8 +325,12 @@ export function Briefing() {
         />
         <KpiTile
           label="This Month"
+          // ASCII '-' for negatives (matches Intl.NumberFormat's output that
+          // the other tiles render) so the browser can't wrap the sign onto
+          // its own line. '+' is kept for positives to make the gain
+          // explicit even when the surface is small.
           value={
-            (kpis.thisMonthNet >= 0 ? '+' : '−') +
+            (kpis.thisMonthNet >= 0 ? '+' : '-') +
             formatUSDCompact(Math.abs(kpis.thisMonthNet))
           }
           caption={thisMonthPositive ? 'net positive' : kpis.thisMonthNet < 0 ? 'net negative' : 'flat'}
