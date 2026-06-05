@@ -1,8 +1,11 @@
 import type { Tables } from '@/lib/supabase/database.types'
 import { clampDay } from '@/lib/finance/dueDate'
+import { transactionMatchesRule } from '@/lib/finance/billsMatch'
+import type { BillMatchRule } from '@/lib/finance/types'
 
 export type TransactionRow = Tables<'transactions'>
 export type BillRow = Tables<'bills'>
+export type BillMatchRuleRow = Tables<'bill_match_rules'>
 
 export type CalloutKind = 'duplicate_charge' | 'category_swing' | 'slipped_bill'
 
@@ -16,6 +19,13 @@ export interface Callout {
 export interface NotableInput {
   transactions: ReadonlyArray<TransactionRow>
   bills: ReadonlyArray<BillRow>
+  /**
+   * Optional bill_match_rules — when present, slipped-bill detection uses
+   * the canonical rule matcher (transactionMatchesRule) so the result
+   * agrees with the Bills surface. When empty/omitted, a tokenized
+   * name-keyword fallback is used.
+   */
+  rules?: ReadonlyArray<BillMatchRuleRow>
   today: { year: number; month: number; day: number }
   /** How many top callouts to keep. Default 3. */
   top?: number
@@ -32,7 +42,7 @@ export function notableCallouts(input: NotableInput): ReadonlyArray<Callout> {
   const all: Callout[] = [
     ...findDuplicateCharges(input.transactions, input.today),
     ...findCategorySwings(input.transactions, input.today),
-    ...findSlippedBills(input.transactions, input.bills, input.today)
+    ...findSlippedBills(input.transactions, input.bills, input.today, input.rules ?? [])
   ]
   all.sort((a, b) => b.impact - a.impact)
   return all.slice(0, top)
@@ -146,14 +156,27 @@ export function findCategorySwings(
 
 /**
  * A bill whose due_day was within the last 7 days AND has no matching
- * transaction within ±3 days (by description-contains bill.name).
- * Simple heuristic — Phase 2I bills surface will use bill_match_rules
- * for real matching.
+ * transaction within ±3 days.
+ *
+ * Matching logic, in priority order:
+ *   1. If `rules` are supplied AND the bill has at least one rule
+ *      (by bill_id, with bill_name as a legacy fallback), use the
+ *      canonical {@link transactionMatchesRule} so this agrees with the
+ *      Bills surface match.
+ *   2. Else, fall back to a tokenized name match: a transaction matches
+ *      when its description contains ANY token of length ≥ 3 from the
+ *      bill name (case-insensitive). This catches the
+ *        bill "Mortgage (Freedom Mtg)" ↔ tx "FREEDOM MTG PYMTS …"
+ *      case the previous strict `description.includes(billName)` check
+ *      missed.
+ *   3. Final fallback (degenerate bill names with no ≥3-char tokens like
+ *      "AT&T"): the original full-name substring check.
  */
 export function findSlippedBills(
   transactions: ReadonlyArray<TransactionRow>,
   bills: ReadonlyArray<BillRow>,
-  today: { year: number; month: number; day: number }
+  today: { year: number; month: number; day: number },
+  rules: ReadonlyArray<BillMatchRuleRow> = []
 ): ReadonlyArray<Callout> {
   const out: Callout[] = []
   for (const b of bills) {
@@ -164,12 +187,40 @@ export function findSlippedBills(
     const daysSinceDue = daysBetween(dueDate, todayIso(today))
     if (daysSinceDue < 0 || daysSinceDue > 7) continue  // not yet due, or due more than a week ago
 
+    // Resolve the rules that target THIS bill (by FK or legacy name link).
+    const billRules: BillMatchRule[] = rules
+      .filter(r => r.bill_id === b.id || (r.bill_id == null && r.bill_name === b.name))
+      .map(r => ({
+        id: r.id,
+        household_id: r.household_id,
+        bill_id: r.bill_id,
+        bill_name: r.bill_name,
+        category: r.category,
+        sub_category: r.sub_category,
+        keyword: r.keyword,
+        account_filter: r.account_filter,
+        rule_kind: r.rule_kind as BillMatchRule['rule_kind']
+      }))
+
+    const tokens = tokenizeBillName(b.name)
     const billNameLower = b.name.toLowerCase()
+
     const matched = transactions.some(tx => {
       if (tx.type !== 'Expense') return false
-      const txIso = tx.date
-      const diff = Math.abs(daysBetween(dueDate, txIso))
-      return diff <= 3 && (tx.description ?? '').toLowerCase().includes(billNameLower)
+      const diff = Math.abs(daysBetween(dueDate, tx.date))
+      if (diff > 3) return false
+
+      // Path 1: rule-driven match
+      if (billRules.length > 0) {
+        return billRules.some(rule => transactionMatchesRule(tx, rule))
+      }
+
+      // Paths 2 + 3: tokenized fallback, then full-name include
+      const desc = (tx.description ?? '').toLowerCase()
+      if (tokens.length > 0) {
+        return tokens.some(tok => desc.includes(tok))
+      }
+      return desc.includes(billNameLower)
     })
     if (matched) continue
 
@@ -181,6 +232,23 @@ export function findSlippedBills(
     })
   }
   return out
+}
+
+/**
+ * Tokenize a bill name for fallback matching: split on whitespace and
+ * common separators, lowercase, keep tokens of length ≥ 3. Filters out
+ * stopwords that frequently appear in bill names but carry no signal.
+ *
+ * "Mortgage (Freedom Mtg)" → ["mortgage", "freedom", "mtg"]
+ * "Church Tithe & Offerings" → ["church", "tithe", "offerings"]
+ * "AT&T" → [] (caller falls back to full-name include)
+ */
+function tokenizeBillName(name: string): ReadonlyArray<string> {
+  const STOPWORDS = new Set(['the', 'and', 'for', 'with'])
+  return name
+    .toLowerCase()
+    .split(/[\s\-_/(),.&]+/)
+    .filter(t => t.length >= 3 && !STOPWORDS.has(t))
 }
 
 // — helpers —

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useAccounts } from '@/lib/data/accounts'
 import { useBills } from '@/lib/data/bills'
+import { useBillMatchRules } from '@/lib/data/billMatchRules'
 import { useTransactions } from '@/lib/data/transactions'
 import { useIncomePlan } from '@/lib/data/incomePlan'
 import { useBudgets } from '@/lib/data/budgets'
@@ -97,18 +98,21 @@ export function Briefing() {
   // Pull data
   const accountsQ = useAccounts()
   const billsQ = useBills()
+  const billRulesQ = useBillMatchRules()
   const txsQ = useTransactions()
   const incomeQ = useIncomePlan({ year: period.year })
   const budgetsQ = useBudgets({ year: period.year, month: period.month })
 
   const EMPTY_ACCOUNTS = useMemo(() => [] as const, [])
   const EMPTY_BILLS = useMemo(() => [] as const, [])
+  const EMPTY_RULES = useMemo(() => [] as const, [])
   const EMPTY_TXS = useMemo(() => [] as const, [])
   const EMPTY_INCOME = useMemo(() => [] as const, [])
   const EMPTY_BUDGETS = useMemo(() => [] as const, [])
 
   const accounts = accountsQ.data ?? EMPTY_ACCOUNTS
   const bills = billsQ.data ?? EMPTY_BILLS
+  const billRules = billRulesQ.data ?? EMPTY_RULES
   const txs = txsQ.data ?? EMPTY_TXS
   const incomePlan = incomeQ.data ?? EMPTY_INCOME
   const budgets = budgetsQ.data ?? EMPTY_BUDGETS
@@ -132,8 +136,8 @@ export function Briefing() {
   )
 
   const notable = useMemo(
-    () => notableCallouts({ transactions: txs, bills, today: viewToday, top: 3 }),
-    [txs, bills, viewToday]
+    () => notableCallouts({ transactions: txs, bills, rules: billRules, today: viewToday, top: 3 }),
+    [txs, bills, billRules, viewToday]
   )
 
   const categorySpend = useMemo(

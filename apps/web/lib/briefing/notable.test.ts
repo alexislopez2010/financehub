@@ -425,3 +425,90 @@ describe('notableCallouts', () => {
     expect(result[0]!.impact).toBe(200)
   })
 })
+
+describe('findSlippedBills — tokenized fallback for parenthetical bill names', () => {
+  // Regression: the Briefing flagged "Mortgage (Freedom Mtg)" as unpaid even
+  // though "FREEDOM MTG PYMTS 137896106 : ACH Electronic Debit" was in the
+  // ledger on the due day. The previous matcher required the *full* bill
+  // name to be a substring of the transaction description, so the
+  // parenthetical broke the match.
+  const TODAY = { year: 2026, month: 6, day: 5 }
+
+  it('matches "Mortgage (Freedom Mtg)" against a transaction containing "FREEDOM MTG"', () => {
+    const bills = [
+      mkBill({
+        id: 'b-mort',
+        name: 'Mortgage (Freedom Mtg)',
+        budget_amount: 2469.40,
+        due_day: 1
+      })
+    ]
+    const txs = [
+      mkTx({
+        amount: 2469.40,
+        type: 'Expense',
+        date: '2026-06-01',
+        description: 'FREEDOM MTG PYMTS 137896106 : ACH Electronic Debit'
+      })
+    ]
+    const result = findSlippedBills(txs, bills, TODAY)
+    expect(result).toEqual([])
+  })
+
+  it('still flags when no token from the bill name appears in the description', () => {
+    const bills = [
+      mkBill({
+        id: 'b-mort',
+        name: 'Mortgage (Freedom Mtg)',
+        budget_amount: 2469.40,
+        due_day: 1
+      })
+    ]
+    const txs = [
+      mkTx({
+        amount: 50,
+        type: 'Expense',
+        date: '2026-06-01',
+        description: 'STARBUCKS COFFEE'
+      })
+    ]
+    const result = findSlippedBills(txs, bills, TODAY)
+    expect(result).toHaveLength(1)
+    expect(result[0]!.lead).toBe('Mortgage (Freedom Mtg) appears unpaid.')
+  })
+
+  it('prefers an explicit bill_match_rule when supplied', () => {
+    // Bill named oddly; the rule pins the keyword. Fallback tokenization
+    // wouldn't match the description, but the rule does.
+    const bills = [
+      mkBill({
+        id: 'b-elec',
+        name: 'Electricity',
+        budget_amount: 95.00,
+        due_day: 1
+      })
+    ]
+    const txs = [
+      mkTx({
+        amount: 95.00,
+        type: 'Expense',
+        date: '2026-06-02',
+        description: 'CONEDISON ACH PAYMENT'
+      })
+    ]
+    const rules = [{
+      id: 'r-1',
+      household_id: 'hh1',
+      bill_id: 'b-elec',
+      bill_name: null,
+      category: null,
+      sub_category: null,
+      keyword: 'conedison',
+      account_filter: null,
+      rule_kind: 'name_keyword',
+      created_at: null
+    }]
+    const result = findSlippedBills(txs, bills, TODAY, rules)
+    expect(result).toEqual([])
+  })
+})
