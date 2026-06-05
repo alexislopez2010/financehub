@@ -6,6 +6,7 @@ function mkKpis(thisMonthNet: number, cash: number, debt: number): BriefingKpis 
   return {
     thisMonthNet,
     cash,
+    assets: 0,
     debt,
     savingsRate: 0,
     burnRate30Day: 0,

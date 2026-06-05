@@ -27,7 +27,7 @@ const TODAY = { year: 2025, month: 5, day: 15 }
 describe('deriveKpis', () => {
   it('returns all zeros for empty inputs', () => {
     const result = deriveKpis({ accounts: [], transactions: [], today: TODAY })
-    expect(result).toMatchObject({ cash: 0, debt: 0, thisMonthNet: 0 })
+    expect(result).toMatchObject({ cash: 0, assets: 0, debt: 0, thisMonthNet: 0 })
   })
 
   it('returns all zeros when all accounts are inactive', () => {
@@ -36,7 +36,7 @@ describe('deriveKpis', () => {
       mkAccount('a2', 'credit', null, -500),
     ]
     const result = deriveKpis({ accounts, transactions: [], today: TODAY })
-    expect(result).toMatchObject({ cash: 0, debt: 0, thisMonthNet: 0 })
+    expect(result).toMatchObject({ cash: 0, assets: 0, debt: 0, thisMonthNet: 0 })
   })
 
   it('returns starting_balance for a single active checking account with no transactions', () => {
@@ -321,6 +321,54 @@ describe('deriveKpis', () => {
       const transactions = [mkTx(1500, 'Income', '2025-04-01', 'l1')]
       const result = deriveKpis({ accounts, transactions, today: TODAY })
       expect(result.debt).toBe(198500)
+    })
+  })
+
+  describe('assets — illiquid property/investment accounts', () => {
+    it('sums starting balances of property/asset/investment accounts into assets', () => {
+      const accounts = [
+        mkAccount('a1', 'checking', true, 9_625),       // cash
+        mkAccount('a2', 'property', true, 500_000),     // asset
+        mkAccount('a3', 'investment', true, 75_000),    // asset
+        mkAccount('a4', 'credit', true, 12_353),        // debt
+      ]
+      const result = deriveKpis({ accounts, transactions: [], today: TODAY })
+      expect(result.cash).toBe(9_625)
+      expect(result.assets).toBe(575_000)
+      expect(result.debt).toBe(12_353)
+    })
+
+    it('treats mortgage like other debt types', () => {
+      const accounts = [
+        mkAccount('a1', 'mortgage', true, 375_000),
+        mkAccount('a2', 'credit', true, 12_353),
+      ]
+      const result = deriveKpis({ accounts, transactions: [], today: TODAY })
+      expect(result.debt).toBe(387_353)
+      expect(result.assets).toBe(0)
+    })
+
+    it('mortgage + property at the same time roll up correctly: NetWorth = cash + assets − debt', () => {
+      const accounts = [
+        mkAccount('a1', 'checking', true, 9_625),
+        mkAccount('a2', 'property', true, 500_000),
+        mkAccount('a3', 'credit', true, 12_353),
+        mkAccount('a4', 'mortgage', true, 375_000),
+      ]
+      const r = deriveKpis({ accounts, transactions: [], today: TODAY })
+      const netWorth = r.cash + r.assets - r.debt
+      // 9,625 + 500,000 − (12,353 + 375,000) = 122,272
+      expect(netWorth).toBe(122_272)
+    })
+
+    it('ignores inactive asset accounts', () => {
+      const accounts = [
+        mkAccount('a1', 'property', false, 500_000),
+        mkAccount('a2', 'checking', true, 9_625),
+      ]
+      const result = deriveKpis({ accounts, transactions: [], today: TODAY })
+      expect(result.assets).toBe(0)
+      expect(result.cash).toBe(9_625)
     })
   })
 

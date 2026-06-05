@@ -5,9 +5,15 @@ export type AccountRow = Tables<'accounts'>
 export type TransactionRow = Tables<'transactions'>
 
 export interface BriefingKpis {
-  /** Sum of cash-type (checking + savings) account balances. */
+  /** Sum of cash-type (checking + savings + cash) account balances. */
   cash: number
-  /** Sum of credit/loan account balances expressed as a positive number. */
+  /**
+   * Sum of illiquid asset-type (property/asset/investment) account balances.
+   * Held separately from Cash so the Cash tile keeps its "liquid spending
+   * power" meaning while still letting Net Worth roll everything up.
+   */
+  assets: number
+  /** Sum of credit/loan/mortgage account balances expressed as a positive number. */
   debt: number
   /** Income + Refund - Expense for the current calendar month. */
   thisMonthNet: number
@@ -32,8 +38,16 @@ export interface DeriveKpisInput {
   today: { year: number; month: number; day: number }
 }
 
-const CASH_TYPES = new Set(['checking', 'savings'])
-const DEBT_TYPES = new Set(['credit', 'loan'])
+// Account type buckets:
+//   - CASH: liquid spending power. Drives the Cash KPI and the burn-rate
+//     runway. Does NOT include real estate or investments.
+//   - ASSET: illiquid value (home equity, vehicles, brokerage). Rolls into
+//     Net Worth but stays out of "available cash".
+//   - DEBT: anything owed. Mortgage is treated like loan/credit — payments
+//     reduce debt, charges raise it. starting_balance is the amount owed.
+const CASH_TYPES = new Set(['checking', 'savings', 'cash'])
+const ASSET_TYPES = new Set(['property', 'asset', 'investment'])
+const DEBT_TYPES = new Set(['credit', 'loan', 'mortgage'])
 const RUNWAY_CAP = 99
 
 /**
@@ -77,8 +91,10 @@ export function deriveKpisAndExtras(
   input: DeriveKpisInput
 ): { kpis: BriefingKpis; extras: BriefingKpisExtras } {
   const cashAccountIds = new Set<string>()
+  const assetAccountIds = new Set<string>()
   const debtAccountIds = new Set<string>()
   let cash = 0
+  let assets = 0
   let debt = 0
 
   for (const a of input.accounts) {
@@ -86,6 +102,9 @@ export function deriveKpisAndExtras(
     if (a.type && CASH_TYPES.has(a.type)) {
       cashAccountIds.add(a.id)
       cash += a.starting_balance ?? 0
+    } else if (a.type && ASSET_TYPES.has(a.type)) {
+      assetAccountIds.add(a.id)
+      assets += a.starting_balance ?? 0
     } else if (a.type && DEBT_TYPES.has(a.type)) {
       debtAccountIds.add(a.id)
       debt += a.starting_balance ?? 0
@@ -100,10 +119,13 @@ export function deriveKpisAndExtras(
   const cutoff = subtractDays(input.today, 30)
 
   for (const tx of input.transactions) {
-    // Cash/debt running totals (per-account):
+    // Cash/asset/debt running totals (per-account):
     if (tx.account_id) {
       const signed = signedActivity(tx)
       if (cashAccountIds.has(tx.account_id)) cash += signed
+      // Assets behave like cash for activity math (rare — most asset
+      // accounts have no transactions, just a manually-set value).
+      else if (assetAccountIds.has(tx.account_id)) assets += signed
       // DEBT accounts move INVERSELY to signed activity:
       //   charge (Expense, -$50 signed)  → debt +$50 owed
       //   payment (Income, +$100 signed) → debt -$100 owed
@@ -125,6 +147,7 @@ export function deriveKpisAndExtras(
   }
 
   const cashRounded = round2(cash)
+  const assetsRounded = round2(assets)
   const debtRounded = round2(Math.abs(debt))
   const burnRate30Day = round2(trailing30Expense / 30)
   const savingsRate =
@@ -135,6 +158,7 @@ export function deriveKpisAndExtras(
   return {
     kpis: {
       cash: cashRounded,
+      assets: assetsRounded,
       debt: debtRounded,
       thisMonthNet: round2(monthIncome - monthExpense),
       savingsRate,

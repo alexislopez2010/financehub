@@ -9,7 +9,8 @@ import {
   Coins,
   Calendar,
   PiggyBank,
-  Flame
+  Flame,
+  Home
 } from 'lucide-react'
 import { useAccounts } from '@/lib/data/accounts'
 import { useBills } from '@/lib/data/bills'
@@ -258,7 +259,10 @@ export function Briefing() {
   const forecastEnd = forecast.at(-1)?.balance ?? kpis.cash
   const isEmpty = txs.length === 0 && bills.length === 0 && accounts.length === 0
 
-  const netWorth = kpis.cash - kpis.debt
+  // Net Worth = liquid cash + illiquid assets (property/investments) − debt.
+  // For a household with no asset accounts, kpis.assets is 0 and this
+  // collapses to the original cash − debt formula.
+  const netWorth = kpis.cash + kpis.assets - kpis.debt
   const thisMonthPositive = kpis.thisMonthNet >= 0
 
   const savingsRatePct = Math.round(kpis.savingsRate * 100)
@@ -327,6 +331,20 @@ export function Briefing() {
           icon={CreditCard}
           iconTone="red"
         />
+        {/* Assets tile only renders when the household actually has
+            illiquid asset accounts (property/investment/asset). Keeps the
+            6-tile grid intact for households without one and grows to 7
+            for households that do. */}
+        {kpis.assets > 0 && (
+          <KpiTile
+            label="Assets"
+            value={formatUSDCompact(kpis.assets)}
+            caption="property + investments"
+            captionTone="neutral"
+            icon={Home}
+            iconTone="purple"
+          />
+        )}
         <KpiTile
           label="This Month"
           // ASCII '-' for negatives (matches Intl.NumberFormat's output that
