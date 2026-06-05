@@ -1,5 +1,5 @@
 import type { Tables } from '@/lib/supabase/database.types'
-import { clampDay, daysUntilDue } from '@/lib/finance/dueDate'
+import { nextBillOccurrence } from '@/lib/finance/billCadence'
 
 export type BillRow = Tables<'bills'>
 
@@ -12,10 +12,14 @@ export function parseSortKey(s: string | null): BillSortKey | undefined {
 }
 
 /**
- * Comparator factory. The 'due' variant uses today + daysUntilDue
- * so we don't need to know absolute dates.
+ * Comparator factory. The 'due' variant routes through nextBillOccurrence
+ * so quarterly + annual cadences sort correctly — a Quarterly bill anchored
+ * to September is "due in N days from now" where N counts to Sep 1, not to
+ * the next nominal day-of-month (which would put it weeks ahead of its
+ * actual cadence).
  *
- * Bills with null due_day always sort last under 'due'.
+ * Bills with no scheduled next occurrence (null due_day, or Quarterly/Annual
+ * without an anchor month) sort last under 'due'.
  * Stable secondary sort by name to keep test output deterministic.
  */
 export function billComparator(
@@ -25,8 +29,8 @@ export function billComparator(
   return (a, b) => {
     let primary = 0
     if (key === 'due') {
-      const aDays = a.due_day == null ? Number.POSITIVE_INFINITY : (daysUntilDue({ due_day: a.due_day }, today) ?? Number.POSITIVE_INFINITY)
-      const bDays = b.due_day == null ? Number.POSITIVE_INFINITY : (daysUntilDue({ due_day: b.due_day }, today) ?? Number.POSITIVE_INFINITY)
+      const aDays = nextBillOccurrence(a, today)?.daysUntil ?? Number.POSITIVE_INFINITY
+      const bDays = nextBillOccurrence(b, today)?.daysUntil ?? Number.POSITIVE_INFINITY
       primary = aDays - bDays
     } else if (key === 'amount') {
       // Descending amount (biggest bills first)
@@ -41,19 +45,18 @@ export function billComparator(
   }
 }
 
-/** Convenience: next-due ISO date for display. Null when due_day is null. */
+/**
+ * Convenience: next-due ISO date for display, respecting cadence.
+ * Null when the bill has no scheduled next occurrence (no due_day, or
+ * Quarterly/Annual without due_month_anchor).
+ */
 export function nextDueDate(
   bill: BillRow,
   today: { year: number; month: number; day: number }
 ): string | null {
-  if (bill.due_day == null) return null
-  const thisMonthClamped = clampDay(bill.due_day, today.year, today.month)
-  if (thisMonthClamped >= today.day) {
-    return iso(today.year, today.month, thisMonthClamped)
-  }
-  const nextMonth = today.month === 12 ? 1 : today.month + 1
-  const nextYear = today.month === 12 ? today.year + 1 : today.year
-  return iso(nextYear, nextMonth, clampDay(bill.due_day, nextYear, nextMonth))
+  const occ = nextBillOccurrence(bill, today)
+  if (!occ) return null
+  return iso(occ.date.year, occ.date.month, occ.date.day)
 }
 
 function iso(y: number, m: number, d: number): string {

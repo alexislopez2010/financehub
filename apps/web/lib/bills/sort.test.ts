@@ -117,4 +117,66 @@ describe('nextDueDate', () => {
     // From Dec 30, due_day=15 → Jan 15
     expect(nextDueDate(bill({ due_day: 15 }), { year: 2025, month: 12, day: 30 })).toBe('2026-01-15')
   })
+
+  // The original Interstate Waste Services bug: a Quarterly bill anchored to
+  // September was showing "due July 1" from a June reference date, because
+  // the row label only walked one nominal day-of-month ahead. Cadence-aware
+  // path must skip July/August and land on September 1.
+  it('respects Quarterly cadence with anchor month', () => {
+    const quarterly = bill({
+      due_day: 1,
+      frequency: 'Quarterly',
+      due_month_anchor: 9
+    })
+    expect(nextDueDate(quarterly, { year: 2026, month: 6, day: 5 })).toBe('2026-09-01')
+    // Sitting in September on or before the due day → returns same month.
+    expect(nextDueDate(quarterly, { year: 2026, month: 9, day: 1 })).toBe('2026-09-01')
+    // Past September's hit → next quarterly stop is December.
+    expect(nextDueDate(quarterly, { year: 2026, month: 9, day: 2 })).toBe('2026-12-01')
+    // Past December's hit → wraps into next year's March (anchor + 6).
+    expect(nextDueDate(quarterly, { year: 2026, month: 12, day: 2 })).toBe('2027-03-01')
+  })
+
+  it('respects Annual cadence with anchor month', () => {
+    const annual = bill({
+      due_day: 15,
+      frequency: 'Annual',
+      due_month_anchor: 4
+    })
+    expect(nextDueDate(annual, { year: 2026, month: 6, day: 5 })).toBe('2027-04-15')
+    expect(nextDueDate(annual, { year: 2026, month: 4, day: 14 })).toBe('2026-04-15')
+    expect(nextDueDate(annual, { year: 2026, month: 4, day: 16 })).toBe('2027-04-15')
+  })
+
+  it('returns null for Quarterly with no anchor month (unscheduled)', () => {
+    expect(nextDueDate(
+      bill({ due_day: 1, frequency: 'Quarterly', due_month_anchor: null }),
+      TODAY
+    )).toBeNull()
+  })
+})
+
+describe('billComparator — cadence-aware due sort', () => {
+  const TODAY_JUN5 = { year: 2026, month: 6, day: 5 }
+
+  it('sorts a Quarterly Sep-anchored bill AFTER a Monthly day-1 bill', () => {
+    // Monthly day-1 from June 5 → July 1 (26 days)
+    // Quarterly Sep-anchored from June 5 → Sep 1 (88 days)
+    // So 'monthly' should sort before 'quarterly'.
+    const list = [
+      bill({ id: 'quarterly', name: 'Quarterly bill', due_day: 1, frequency: 'Quarterly', due_month_anchor: 9 }),
+      bill({ id: 'monthly',   name: 'Monthly bill',   due_day: 1, frequency: 'Monthly' })
+    ]
+    list.sort(billComparator('due', TODAY_JUN5))
+    expect(list.map(b => b.id)).toEqual(['monthly', 'quarterly'])
+  })
+
+  it('puts Quarterly without anchor LAST (treated as unscheduled)', () => {
+    const list = [
+      bill({ id: 'no-anchor', name: 'A bill',  due_day: 1, frequency: 'Quarterly', due_month_anchor: null }),
+      bill({ id: 'scheduled', name: 'B bill', due_day: 5, frequency: 'Monthly' })
+    ]
+    list.sort(billComparator('due', TODAY_JUN5))
+    expect(list.map(b => b.id)).toEqual(['scheduled', 'no-anchor'])
+  })
 })

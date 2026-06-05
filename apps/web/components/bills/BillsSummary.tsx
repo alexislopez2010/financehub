@@ -4,7 +4,7 @@ import { Calendar, ListChecks } from 'lucide-react'
 import { useMemo } from 'react'
 import type { Tables } from '@/lib/supabase/database.types'
 import { KpiTile } from '@/components/ui/KpiTile'
-import { daysUntilDue } from '@/lib/finance/dueDate'
+import { nextBillOccurrence } from '@/lib/finance/billCadence'
 
 type Bill = Tables<'bills'>
 
@@ -22,11 +22,12 @@ export function BillsSummary({ bills, today }: BillsSummaryProps) {
     const active = bills.filter(b => b.is_active !== false)
     let dueThisMonth = 0
     for (const b of active) {
-      if (b.due_day == null) continue
-      const d = daysUntilDue({ due_day: b.due_day }, today)
-      if (d == null) continue
-      // "this month" approximation: due within 30 days
-      if (d <= 30) dueThisMonth += b.budget_amount
+      // Cadence-aware: a Quarterly bill anchored 3 months out reports the
+      // right "days until" (e.g., 88) instead of the next nominal day-of-
+      // month, so it stops bleeding into the next-30-days bucket.
+      const occ = nextBillOccurrence(b, today)
+      if (occ == null) continue
+      if (occ.daysUntil <= 30) dueThisMonth += b.budget_amount
     }
     return { count: active.length, dueThisMonth }
   }, [bills, today])

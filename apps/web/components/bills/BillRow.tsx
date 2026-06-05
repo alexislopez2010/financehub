@@ -2,7 +2,7 @@
 
 import { Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { Tables } from '@/lib/supabase/database.types'
-import { daysUntilDue } from '@/lib/finance/dueDate'
+import { nextBillOccurrence } from '@/lib/finance/billCadence'
 import { nextDueDate } from '@/lib/bills/sort'
 import { EditableCell } from '@/components/ledger/EditableCell'
 import { cn } from '@/lib/cn'
@@ -37,7 +37,10 @@ export function BillRow({
   bill, today, expanded, onToggleExpanded,
   onEditName, onEditDueDay, onEditAmount, onDelete
 }: BillRowProps) {
-  const days = bill.due_day == null ? null : daysUntilDue({ due_day: bill.due_day }, today)
+  // Route both the days-until label and the absolute date through the
+  // cadence-aware helper so Quarterly/Annual bills no longer report the
+  // next nominal day-of-month as "next due".
+  const days = nextBillOccurrence(bill, today)?.daysUntil ?? null
   const due = dueLabel(days)
   const nextDate = nextDueDate(bill, today)
   const showDelete = onDelete !== undefined

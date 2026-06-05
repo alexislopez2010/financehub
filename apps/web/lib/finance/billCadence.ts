@@ -178,6 +178,30 @@ export function occurrencesInMonth(
 }
 
 /**
+ * First occurrence of the bill on or after `from`, scanned within a 366-day
+ * window so any cadence the system supports (monthly, biweekly, quarterly,
+ * annual) is covered. Returns null when:
+ *   - due_day is null (bill is unscheduled)
+ *   - Quarterly/Annual bill has no due_month_anchor
+ *   - No occurrence falls within the window (defensive — shouldn't happen
+ *     for the cadences we currently support)
+ *
+ * Centralizes "when does this bill hit next?" so the Bills row label, the
+ * Bills sort comparator, and the Bills summary all agree with Plan and
+ * Forecast on quarterly/annual cadences. Before this helper, the row UI
+ * used a monthly-only walk and reported e.g. "due July 1" for a Quarterly
+ * bill anchored to September.
+ */
+export function nextBillOccurrence(
+  bill: BillCadenceInput,
+  from: { year: number; month: number; day: number }
+): { daysUntil: number; date: { year: number; month: number; day: number } } | null {
+  if (bill.due_day == null) return null
+  const occurrences = billOccurrencesIn(bill, from, 366)
+  return occurrences[0] ?? null
+}
+
+/**
  * All calendar dates inside [start, start + windowDays] (inclusive) on which
  * the bill is due. Returned in ascending chronological order. Same cadence
  * rules as {@link isBillDueOn}.
