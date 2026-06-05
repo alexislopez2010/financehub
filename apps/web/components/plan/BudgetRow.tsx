@@ -25,6 +25,17 @@ export interface BudgetRowProps {
   onToggleActuals?: () => void
   /** True when this row's drawer is currently open — styles the Actual cell active. */
   isActualsOpen?: boolean
+  /**
+   * Toggle the inline drawer that lists the bills contributing to
+   * `billsCommitted` in the selected Plan period. Same lifted-state pattern
+   * as `onToggleActuals` — exactly one drawer (actuals OR bills, across all
+   * rows) should be open at a time, owned by the parent. Explicitly accepts
+   * `undefined` so the parent can suppress the affordance for rows with no
+   * contributing bills under exactOptionalPropertyTypes.
+   */
+  onToggleBills?: (() => void) | undefined
+  /** True when this row's bills drawer is currently open — styles the Bills cell active. */
+  isBillsOpen?: boolean
 }
 
 /**
@@ -51,7 +62,9 @@ export function BudgetRow({
   onDelete,
   onCreateBudget,
   onToggleActuals,
-  isActualsOpen
+  isActualsOpen,
+  onToggleBills,
+  isBillsOpen
 }: BudgetRowProps) {
   // Truly unbudgeted: no budget rows at all for this category in the period
   // (actuals-only row). Aggregated rows have budgetId=null too but budgeted>0.
@@ -83,17 +96,37 @@ export function BudgetRow({
         {isUnbudgeted && (
           <InlineAddBudget categoryName={row.category} onCreate={onCreateBudget} />
         )}
-        {/* Mobile-only bills subline: surfaces the Bills column data when it's hidden. */}
+        {/* Mobile-only bills subline: surfaces the Bills column data when
+            the dedicated column is hidden. Clickable when onToggleBills is
+            wired so the drawer is reachable from small viewports too. */}
         {hasBills && (
-          <div
-            className={cn(
-              'mt-0.5 text-[11px] italic md:hidden',
-              row.billsOverCommitted ? 'text-red-600' : 'text-muted'
-            )}
-          >
-            bills: {formatUSD(row.billsCommitted)}
-            {row.billsOverCommitted ? ' (over)' : ''}
-          </div>
+          onToggleBills ? (
+            <button
+              type="button"
+              onClick={onToggleBills}
+              aria-expanded={isBillsOpen ?? false}
+              aria-label={`Show bills contributing to ${row.category}`}
+              className={cn(
+                'mt-0.5 text-[11px] italic md:hidden rounded -mx-1 px-1 py-0.5',
+                'hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand/40',
+                row.billsOverCommitted ? 'text-red-600' : 'text-muted',
+                isBillsOpen && 'bg-brand/10 text-brand'
+              )}
+            >
+              bills: {formatUSD(row.billsCommitted)}
+              {row.billsOverCommitted ? ' (over)' : ''}
+            </button>
+          ) : (
+            <div
+              className={cn(
+                'mt-0.5 text-[11px] italic md:hidden',
+                row.billsOverCommitted ? 'text-red-600' : 'text-muted'
+              )}
+            >
+              bills: {formatUSD(row.billsCommitted)}
+              {row.billsOverCommitted ? ' (over)' : ''}
+            </div>
+          )
         )}
       </div>
 
@@ -113,7 +146,10 @@ export function BudgetRow({
         )}
       </div>
 
-      {/* Bills column — hidden on small screens, surfaces in mobile subline above. */}
+      {/* Bills column — hidden on small screens, surfaces in mobile subline
+          above. Clickable when the row has contributing bills and the parent
+          wired onToggleBills, so the user can drill into the per-period
+          bill list (mirrors the Actual cell's drill-down). */}
       <div
         className={cn(
           'hidden md:flex items-center justify-end gap-1.5 text-right tabular text-sm',
@@ -122,17 +158,42 @@ export function BudgetRow({
         title={row.billsOverCommitted ? 'Bills exceed this budget' : undefined}
       >
         {hasBills ? (
-          <>
-            <span>{formatUSD(row.billsCommitted)}</span>
-            {row.billsOverCommitted && (
-              <span
-                aria-label="Bills exceed this budget"
-                className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
-              >
-                !
-              </span>
-            )}
-          </>
+          onToggleBills ? (
+            <button
+              type="button"
+              onClick={onToggleBills}
+              aria-expanded={isBillsOpen ?? false}
+              aria-label={`Show bills contributing to ${row.category}`}
+              title="Show contributing bills"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded -mx-1 px-1 py-0.5',
+                'hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-brand/40',
+                isBillsOpen && 'bg-brand/10 text-brand'
+              )}
+            >
+              <span>{formatUSD(row.billsCommitted)}</span>
+              {row.billsOverCommitted && (
+                <span
+                  aria-label="Bills exceed this budget"
+                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
+                >
+                  !
+                </span>
+              )}
+            </button>
+          ) : (
+            <>
+              <span>{formatUSD(row.billsCommitted)}</span>
+              {row.billsOverCommitted && (
+                <span
+                  aria-label="Bills exceed this budget"
+                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-700 text-[10px] font-bold leading-none"
+                >
+                  !
+                </span>
+              )}
+            </>
+          )
         ) : (
           <span className="text-muted">—</span>
         )}

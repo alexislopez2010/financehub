@@ -15,11 +15,23 @@ import {
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import type { BudgetVsActualRow } from '@/lib/plan/budgetVsActual'
 import { transactionsForBudgetRow } from '@/lib/plan/budgetRowTransactions'
+import { billsForCategory } from '@/lib/plan/billsForCategory'
 import type { TransactionRow as FinanceTransactionRow } from '@/lib/finance/types'
 import { BudgetRow, BUDGET_ROW_GRID } from './BudgetRow'
 import { BudgetRowDrawer } from './BudgetRowDrawer'
+import { BudgetRowBillsDrawer } from './BudgetRowBillsDrawer'
 import { AddBudgetForm } from './AddBudgetForm'
 import { cn } from '@/lib/cn'
+
+const MONTH_NAMES: ReadonlyArray<string> = [
+  '', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+]
+
+function periodLabel(period: PlanPeriod): string {
+  const name = period.month >= 1 && period.month <= 12 ? MONTH_NAMES[period.month] : String(period.month)
+  return `${name} ${period.year}`
+}
 
 export interface BudgetSectionProps {
   period: PlanPeriod
@@ -67,6 +79,13 @@ export function BudgetSection({
    * lowercased category name — matches whatever budgetVsActual emits.
    */
   const [expandedActuals, setExpandedActuals] = useState<string | null>(null)
+  /**
+   * Which row's "Bills" drawer is currently expanded. Same lowercased-key
+   * pattern as expandedActuals. Opening the bills drawer auto-closes any
+   * open actuals drawer (and vice versa) so the UI never stacks two
+   * drawers under one row.
+   */
+  const [expandedBills, setExpandedBills] = useState<string | null>(null)
 
   const rows = useMemo(
     () => deriveBudgetVsActual({
@@ -267,7 +286,8 @@ export function BudgetSection({
         <ul className="divide-y divide-gray-100">
           {rows.map(r => {
             const key = r.category.toLowerCase()
-            const isOpen = expandedActuals === key
+            const isActualsOpen = expandedActuals === key
+            const isBillsOpen = expandedBills === key
             return (
               <li key={r.budgetId ?? `unbudgeted:${r.category}`} className="group">
                 <BudgetRow
@@ -275,10 +295,18 @@ export function BudgetSection({
                   onEditBudget={(next) => r.budgetId && handleEditBudget(r.budgetId, next)}
                   onDelete={() => r.budgetId && handleDelete(r.budgetId)}
                   onCreateBudget={(amount) => handleCreateBudgetForRow(r, amount)}
-                  onToggleActuals={() => setExpandedActuals(prev => (prev === key ? null : key))}
-                  isActualsOpen={isOpen}
+                  onToggleActuals={() => {
+                    setExpandedActuals(prev => (prev === key ? null : key))
+                    setExpandedBills(null)
+                  }}
+                  isActualsOpen={isActualsOpen}
+                  onToggleBills={r.billsCommitted > 0 ? () => {
+                    setExpandedBills(prev => (prev === key ? null : key))
+                    setExpandedActuals(null)
+                  } : undefined}
+                  isBillsOpen={isBillsOpen}
                 />
-                {isOpen && (
+                {isActualsOpen && (
                   <BudgetRowDrawer
                     category={r.category}
                     totalActual={r.actual}
@@ -290,6 +318,19 @@ export function BudgetSection({
                     categoryOptions={expenseCategoryOptions}
                     onUpdateCategory={handleRecategorize}
                     onClose={() => setExpandedActuals(null)}
+                  />
+                )}
+                {isBillsOpen && (
+                  <BudgetRowBillsDrawer
+                    category={r.category}
+                    periodLabel={periodLabel(period)}
+                    totalBillsCommitted={r.billsCommitted}
+                    bills={billsForCategory({
+                      bills: billsQ.data ?? [],
+                      categoryId: r.categoryId,
+                      period
+                    })}
+                    onClose={() => setExpandedBills(null)}
                   />
                 )}
               </li>
