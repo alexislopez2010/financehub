@@ -113,12 +113,29 @@ export function BillDetailsEditor({ bill }: BillDetailsEditorProps) {
 
   function handleCategoryChange(next: string): void {
     if (next === '') {
-      updateBill.mutate({ id: bill.id, patch: { category: null } })
-    } else if (next !== '__custom__') {
-      updateBill.mutate({ id: bill.id, patch: { category: next } })
+      // Clear both fields so the bill drops back to "uncategorized" without
+      // leaving a stale FK pointing at a category we no longer claim.
+      updateBill.mutate({ id: bill.id, patch: { category: null, budget_category_id: null } })
+      return
     }
-    // '__custom__' is non-interactive — only appears when the existing value
-    // doesn't match any category row.
+    if (next === '__custom__') {
+      // '__custom__' is non-interactive — only appears when the existing
+      // value doesn't match any category row. Ignore the change.
+      return
+    }
+    // Canonical category picked. Resolve to the row id so the Plan rollup
+    // sees the bill immediately — previously this only wrote the free-text
+    // `category` and left `budget_category_id` NULL.
+    const match = categories.find(
+      c => c.name.trim().toLowerCase() === next.trim().toLowerCase()
+    )
+    updateBill.mutate({
+      id: bill.id,
+      patch: {
+        category: next,
+        budget_category_id: match?.id ?? null
+      }
+    })
   }
 
   const isPending = updateBill.isPending

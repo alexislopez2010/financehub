@@ -205,7 +205,7 @@ describe('<AddBillForm>', () => {
     expect(payload).toMatchObject({ frequency: 'Quarterly', due_month_anchor: 3 })
   })
 
-  it('submits Quarterly with null anchor when the user did not pick a month yet', () => {
+  it('blocks submission when frequency is Quarterly/Annual but no anchor month is picked', () => {
     const onSubmit = vi.fn()
     render(
       <AddBillForm
@@ -218,10 +218,11 @@ describe('<AddBillForm>', () => {
     fireEvent.change(screen.getByLabelText('Bill name'), { target: { value: 'Unscheduled' } })
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '50' } })
     fireEvent.change(screen.getByLabelText('Frequency'), { target: { value: 'Annual' } })
-    // Leave anchor month blank.
+    // Leave anchor month blank — anchor picker should mark itself invalid.
+    const anchor = screen.getByLabelText('Anchor month')
+    expect(anchor.getAttribute('aria-invalid')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: /add bill/i }))
-    const payload = onSubmit.mock.calls[0]?.[0]
-    expect(payload).toMatchObject({ frequency: 'Annual', due_month_anchor: null })
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('hides empty optgroups when a bucket has no options', () => {

@@ -102,6 +102,12 @@ export function AddBillForm({
     const trimmedName = name.trim()
     if (!trimmedName) return
 
+    // Hard guard: Quarterly / Annual bills are unscheduled (invisible to Plan
+    // and Forecast) until they have an anchor month. Block submission so we
+    // never create another orphan like the original Interstate Waste Services
+    // bill.
+    if (frequencyNeedsAnchor(frequency) && !anchorMonth.trim()) return
+
     let due: number | null = null
     if (dueDay.trim()) {
       const d = parseInt(dueDay, 10)
@@ -138,6 +144,7 @@ export function AddBillForm({
 
   const showCustomCategoryInput = categorySelect === OTHER_CATEGORY
   const showAnchorMonth = frequencyNeedsAnchor(frequency)
+  const anchorMissing = showAnchorMonth && !anchorMonth.trim()
 
   return (
     <form onSubmit={handleSubmit} className="px-4 py-3 bg-gray-50 border-t border-rule space-y-2">
@@ -226,7 +233,14 @@ export function AddBillForm({
             value={anchorMonth}
             onChange={e => setAnchorMonth(e.target.value)}
             aria-label="Anchor month"
-            className="text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+            aria-invalid={anchorMissing || undefined}
+            aria-required={true}
+            className={cn(
+              'text-sm rounded-md border px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2',
+              anchorMissing
+                ? 'border-rose-400 focus:ring-rose-200'
+                : 'border-rule focus:ring-brand/20'
+            )}
           >
             <option value="">
               {frequency.toLowerCase().startsWith('quart')
@@ -237,10 +251,12 @@ export function AddBillForm({
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
-          <span className="text-[11px] text-muted">
-            {frequency.toLowerCase().startsWith('quart')
-              ? 'Repeats every 3 months from this month.'
-              : 'Single yearly hit in this month.'}
+          <span className={cn('text-[11px]', anchorMissing ? 'text-rose-600' : 'text-muted')}>
+            {anchorMissing
+              ? 'Required — pick a month so the bill shows up in Plan and Forecast.'
+              : frequency.toLowerCase().startsWith('quart')
+                ? 'Repeats every 3 months from this month.'
+                : 'Single yearly hit in this month.'}
           </span>
         </div>
       )}
@@ -258,8 +274,9 @@ export function AddBillForm({
         </select>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || anchorMissing}
           aria-label="Add bill"
+          title={anchorMissing ? 'Pick an anchor month first.' : undefined}
           className={cn(
             'inline-flex items-center justify-center w-7 h-7 rounded-md text-white',
             'bg-brand hover:bg-brand/90 disabled:opacity-60'

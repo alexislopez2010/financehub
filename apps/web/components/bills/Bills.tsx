@@ -45,6 +45,19 @@ export function Bills() {
     [accountsQ.data]
   )
 
+  // Lowercase-name → category row id. Lets handleCreate set
+  // `budget_category_id` whenever the user picked a canonical category from
+  // the dropdown, instead of leaving the FK NULL and silently dropping the
+  // bill out of Plan rollups.
+  const categoryIdByName = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const c of categoriesQ.data ?? []) {
+      const key = c.name.trim().toLowerCase()
+      if (key) map.set(key, c.id)
+    }
+    return map
+  }, [categoriesQ.data])
+
   const today = useMemo(() => {
     const d = new Date()
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() }
@@ -57,10 +70,18 @@ export function Bills() {
     frequency: string; budget_amount: number; account: string | null;
     due_month_anchor: number | null
   }) {
+    // Resolve the FK from the canonical category name so new bills are
+    // immediately picked up by the Plan rollup. NULL is fine here — it just
+    // means the user typed a custom category that doesn't match any row in
+    // the categories table (free-text path); the bill stays unmapped until
+    // the user fixes it via the per-bill inline budget category picker.
+    const categoryKey = input.category?.trim().toLowerCase() ?? ''
+    const budgetCategoryId = categoryKey ? (categoryIdByName.get(categoryKey) ?? null) : null
     createBill.mutate({
       household_id: LOPEZ_HOUSEHOLD_ID,
       name: input.name,
       category: input.category,
+      budget_category_id: budgetCategoryId,
       due_day: input.due_day,
       frequency: input.frequency,
       budget_amount: input.budget_amount,

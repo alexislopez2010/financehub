@@ -155,10 +155,25 @@ describe('<BillDetailsEditor>', () => {
     expect(mutateMock).toHaveBeenCalledWith({ id: 'b1', patch: { account: null } })
   })
 
-  it('commits a category change on select', () => {
+  it('commits a category change on select with BOTH the free-text and the FK', () => {
+    // Regression: the editor used to write only `category` and leave
+    // `budget_category_id` NULL, silently keeping new mappings out of the
+    // Plan rollup. Both fields now travel together.
     render(<BillDetailsEditor bill={mkBill()} />)
     fireEvent.change(screen.getByLabelText(/Category/i), { target: { value: 'Groceries' } })
-    expect(mutateMock).toHaveBeenCalledWith({ id: 'b1', patch: { category: 'Groceries' } })
+    expect(mutateMock).toHaveBeenCalledWith({
+      id: 'b1',
+      patch: { category: 'Groceries', budget_category_id: 'c2' }
+    })
+  })
+
+  it('clears BOTH category and budget_category_id when "(none)" is selected', () => {
+    render(<BillDetailsEditor bill={mkBill()} />)
+    fireEvent.change(screen.getByLabelText(/Category/i), { target: { value: '' } })
+    expect(mutateMock).toHaveBeenCalledWith({
+      id: 'b1',
+      patch: { category: null, budget_category_id: null }
+    })
   })
 
   it('renders a (custom) entry preserving a legacy free-text category not in the table', () => {
