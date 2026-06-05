@@ -11,6 +11,7 @@ import { detectAdapter } from '@/lib/import/adapters'
 import type { ImportRow, ParsedImportRow, SkippedRow } from '@/lib/import/adapters/types'
 import { categorize, type CategorizeBill, type CategorizeCategory, type CategorizeRule } from '@/lib/import/categorize'
 import { parseCsv } from '@/lib/import/csv'
+import { QFX_FORMAT } from '@/lib/import/formats'
 import { looksLikeOfx, parseOfx } from '@/lib/import/ofx'
 import { dedup } from '@/lib/import/dedup'
 import { computeFingerprintsBatch } from '@/lib/import/fingerprint'
@@ -182,7 +183,23 @@ export function UploadStep({ onParsed }: UploadStepProps) {
       let parsed: ReadonlyArray<ParsedImportRow>
       let skipped: ReadonlyArray<SkippedRow>
       let sourceLabel: string
+      // What the account is *configured* to accept. null/'' means "no
+      // restriction" — preserves the pre-import_format behavior on
+      // accounts that haven't opted in yet.
+      const requiredFormat = selectedAccount?.import_format?.trim() || null
+
       if (looksLikeQfx || looksLikeOfx(text)) {
+        // Strict guard: refuse the upload before parsing if the account
+        // demands a specific CSV adapter. The user has to either change
+        // the account's import_format or drop a matching CSV.
+        if (requiredFormat && requiredFormat !== QFX_FORMAT) {
+          setError({
+            message: `${accountName} only accepts ${requiredFormat} imports.`,
+            detail: `You dropped a QFX/OFX file. Either change the account's import format under Edit account, or upload a ${requiredFormat} CSV.`
+          })
+          setStage({ kind: 'idle' })
+          return
+        }
         const ofx = parseOfx(text)
         parsed = ofx.parsed
         skipped = ofx.skipped
@@ -217,6 +234,19 @@ export function UploadStep({ onParsed }: UploadStepProps) {
           setError({
             message: 'Unrecognized CSV format.',
             detail: `Headers detected: ${parsedCsv.headers.join(', ')}. Use one of: Chase, Capital One, Citibank, Discover, Amex, or a CSV with date/description/amount columns.`
+          })
+          setStage({ kind: 'idle' })
+          return
+        }
+
+        // Strict guard: the account demands a specific format, and the
+        // detected adapter doesn't match it. Catches both "wrong bank"
+        // (Chase CSV → Citibank account) and "wrong modality" (CSV →
+        // QFX-only account).
+        if (requiredFormat && requiredFormat !== adapter.name) {
+          setError({
+            message: `${accountName} only accepts ${requiredFormat} imports.`,
+            detail: `Detected a ${adapter.name} CSV. Either change the account's import format under Edit account, or upload a ${requiredFormat} file.`
           })
           setStage({ kind: 'idle' })
           return

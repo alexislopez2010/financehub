@@ -19,6 +19,7 @@ function account(over: Partial<AccountRow> = {}): AccountRow {
     display_order: null,
     created_at: null,
     owner: null,
+    import_format: null,
     ...over
   }
 }

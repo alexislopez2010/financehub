@@ -6,6 +6,7 @@ import { X } from 'lucide-react'
 import type { AccountRow } from '@/lib/data/accounts'
 import { useUpdateAccount } from '@/lib/data/accounts'
 import { useHouseholdMembersList } from '@/lib/data/householdMembers'
+import { IMPORT_FORMATS } from '@/lib/import/formats'
 import { cn } from '@/lib/cn'
 
 // Reserved literal for jointly-owned accounts. Lives next to the household
@@ -37,6 +38,7 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
   const [startingBalance, setStartingBalance] = useState('')
   const [startingBalanceDate, setStartingBalanceDate] = useState('')
   const [owner, setOwner] = useState<string>('')
+  const [importFormat, setImportFormat] = useState<string>('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   // Sync form fields whenever a new account opens the dialog. We also reset
@@ -53,6 +55,7 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
       )
       setStartingBalanceDate(account.starting_balance_date ?? '')
       setOwner(account.owner ?? '')
+      setImportFormat(account.import_format ?? '')
       setSubmitError(null)
     }
   }, [account, open])
@@ -83,7 +86,8 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
           institution: institution.trim() || null,
           starting_balance: parsedStarting,
           starting_balance_date: startingBalanceDate || null,
-          owner: owner || null
+          owner: owner || null,
+          import_format: importFormat || null
         }
       })
       onOpenChange(false)
@@ -173,6 +177,24 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
               </label>
               <span className="block mt-1 text-[11px] text-muted">
                 Who this account belongs to. Pick &ldquo;Shared&rdquo; for joint accounts.
+              </span>
+            </div>
+
+            <div>
+              <label className="block">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">Import format</span>
+                <select
+                  value={importFormat}
+                  onChange={e => setImportFormat(e.target.value)}
+                  className="w-full px-3 py-1.5 text-sm rounded-lg bg-bg border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                >
+                  <option value="">(no restriction)</option>
+                  {IMPORT_FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </label>
+              <span className="block mt-1 text-[11px] text-muted">
+                When set, the Ledger import flow rejects any file whose detected format doesn&rsquo;t match.
+                Leave at &ldquo;(no restriction)&rdquo; to accept anything.
               </span>
             </div>
 

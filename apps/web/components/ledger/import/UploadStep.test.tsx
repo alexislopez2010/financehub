@@ -54,9 +54,13 @@ function withQueryClient(ui: ReactNode): ReactNode {
   return <QueryClientProvider client={client}>{ui}</QueryClientProvider>
 }
 
-function setReady(): void {
+function setReady(over?: { accountImportFormat?: string | null }): void {
   accountsMock.mockReturnValue({
-    data: [{ id: 'acc-1', name: 'Chase Checking' }],
+    data: [{
+      id: 'acc-1',
+      name: 'Chase Checking',
+      import_format: over?.accountImportFormat ?? null
+    }],
     isLoading: false,
     error: null
   })
@@ -230,6 +234,68 @@ DATA:OFXSGML
     const autopay = payload.parsedRows.find((r: { amount: number }) => r.amount === 200)
     expect(purchase?.type).toBe('Expense')
     expect(autopay?.type).toBe('Income')
+  })
+
+  it('rejects a QFX upload when the account is locked to a CSV format', async () => {
+    setReady({ accountImportFormat: 'Chase' })
+    const user = userEvent.setup()
+    const onParsed = vi.fn()
+    render(withQueryClient(<UploadStep onParsed={onParsed} />))
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+
+    const qfxText = `OFXHEADER:100
+<OFX><CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS>
+<CCACCTFROM><ACCTID>123</CCACCTFROM>
+<BANKTRANLIST>
+<STMTTRN><TRNTYPE>DEBIT<DTUSER>20251107<TRNAMT>-5<FITID>x<NAME>Purchase</STMTTRN>
+</BANKTRANLIST></CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>`
+    const file = new File([qfxText], 'paypal.qfx', { type: 'application/x-qfx' })
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/only accepts chase imports/i)
+    )
+    expect(onParsed).not.toHaveBeenCalled()
+  })
+
+  it('rejects a CSV from a different bank when the account is locked to one adapter', async () => {
+    setReady({ accountImportFormat: 'Citibank' })
+    const user = userEvent.setup()
+    const onParsed = vi.fn()
+    render(withQueryClient(<UploadStep onParsed={onParsed} />))
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+
+    // Valid Chase CSV — would normally succeed, but the account demands Citibank.
+    const csvText = [
+      'Transaction Date,Post Date,Description,Category,Type,Amount,Memo',
+      '04/12/2026,04/13/2026,STARBUCKS,Food & Drink,Sale,-5.75,'
+    ].join('\n')
+    const file = new File([csvText], 'chase.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/only accepts citibank imports/i)
+      expect(alert).toHaveTextContent(/detected a chase csv/i)
+    })
+    expect(onParsed).not.toHaveBeenCalled()
+  })
+
+  it('accepts a CSV when the account is locked to that exact adapter', async () => {
+    setReady({ accountImportFormat: 'Chase' })
+    const user = userEvent.setup()
+    const onParsed = vi.fn()
+    render(withQueryClient(<UploadStep onParsed={onParsed} />))
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+
+    const csvText = [
+      'Transaction Date,Post Date,Description,Category,Type,Amount,Memo',
+      '04/12/2026,04/13/2026,STARBUCKS,Food & Drink,Sale,-5.75,'
+    ].join('\n')
+    const file = new File([csvText], 'chase.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
+
+    await waitFor(() => expect(onParsed).toHaveBeenCalledTimes(1))
   })
 
   it('shows an error for an unrecognized CSV format', async () => {

@@ -64,6 +64,7 @@ export type Database = {
           display_order: number | null
           household_id: string
           id: string
+          import_format: string | null
           institution: string | null
           is_active: boolean | null
           last_four: string | null
@@ -80,6 +81,7 @@ export type Database = {
           display_order?: number | null
           household_id: string
           id?: string
+          import_format?: string | null
           institution?: string | null
           is_active?: boolean | null
           last_four?: string | null
@@ -96,6 +98,7 @@ export type Database = {
           display_order?: number | null
           household_id?: string
           id?: string
+          import_format?: string | null
           institution?: string | null
           is_active?: boolean | null
           last_four?: string | null

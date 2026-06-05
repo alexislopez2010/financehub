@@ -41,6 +41,7 @@ function makeAccount(over: Partial<AccountRow> = {}): AccountRow {
     display_order: null,
     created_at: null,
     owner: null,
+    import_format: null,
     ...over
   }
 }
@@ -98,7 +99,8 @@ describe('<EditAccountDialog>', () => {
           institution: 'Chase',
           starting_balance: 5000,
           starting_balance_date: '2025-03-01',
-          owner: null
+          owner: null,
+          import_format: null
         }
       })
     )
@@ -155,6 +157,47 @@ describe('<EditAccountDialog>', () => {
         })
       )
     )
+  })
+
+  it('submits the import_format value chosen in the select', async () => {
+    const user = userEvent.setup()
+    render(
+      <EditAccountDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        account={makeAccount()}
+      />
+    )
+    await user.selectOptions(screen.getByLabelText(/import format/i), 'QFX/OFX')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() =>
+      expect(mockMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          patch: expect.objectContaining({ import_format: 'QFX/OFX' })
+        })
+      )
+    )
+  })
+
+  it('lists every canonical format under Import format', () => {
+    render(
+      <EditAccountDialog open={true} onOpenChange={vi.fn()} account={makeAccount()} />
+    )
+    const select = screen.getByLabelText(/import format/i) as HTMLSelectElement
+    const values = Array.from(select.options).map(o => o.value)
+    expect(values).toEqual(['', 'Chase', 'Capital One', 'Citibank', 'Discover', 'Amex', 'Generic', 'QFX/OFX'])
+  })
+
+  it('pre-fills import_format when the row already has one', () => {
+    render(
+      <EditAccountDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        account={makeAccount({ import_format: 'Chase' })}
+      />
+    )
+    expect((screen.getByLabelText(/import format/i) as HTMLSelectElement).value).toBe('Chase')
   })
 
   it('preserves the existing owner on first open', async () => {
