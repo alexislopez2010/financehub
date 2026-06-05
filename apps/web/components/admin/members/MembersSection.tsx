@@ -23,8 +23,9 @@ import { ResetMfaDialog } from './ResetMfaDialog'
 import { RemoveMemberDialog } from './RemoveMemberDialog'
 import { AddMemberDialog } from './AddMemberDialog'
 import { PromotePlaceholderDialog } from './PromotePlaceholderDialog'
+import { SetPasswordDialog } from './SetPasswordDialog'
 
-type ActiveDialog = 'edit' | 'reset-mfa' | 'remove' | null
+type ActiveDialog = 'edit' | 'reset-mfa' | 'remove' | 'set-password' | null
 type PlaceholderDialog = 'edit' | 'promote' | null
 
 interface FlashMessage {
@@ -222,6 +223,7 @@ export function MembersSection() {
                 onResetMfa={() => open('reset-mfa', m)}
                 onRemove={() => open('remove', m)}
                 onResetPassword={() => { void handleResetPassword(m) }}
+                onSetPassword={() => open('set-password', m)}
                 onToggleActive={() => { void handleToggleActive(m) }}
                 isSelf={currentUserId === m.user_id}
                 resetPasswordPending={pendingResetId === m.user_id}
@@ -263,6 +265,7 @@ export function MembersSection() {
       <EditMemberDialog member={active === 'edit' ? target : null} onClose={close} />
       <ResetMfaDialog member={active === 'reset-mfa' ? target : null} onClose={close} />
       <RemoveMemberDialog member={active === 'remove' ? target : null} onClose={close} />
+      <SetPasswordDialog member={active === 'set-password' ? target : null} onClose={close} />
       <AddMemberDialog open={showAdd} onClose={() => setShowAdd(false)} />
       <EditPlaceholderDialog
         placeholder={placeholderDialog === 'edit' ? placeholderTarget : null}

@@ -43,6 +43,15 @@ export function ResetPasswordForm() {
         setSubmitError(error.message)
         return
       }
+      // Clear the admin-set "must reset password" flag (no-op for users who
+      // never had it set). A failure here is non-fatal — the password
+      // already changed and the next layout fetch will reflect the cleared
+      // flag if RLS / the RPC eventually catch up. We log and continue.
+      const { error: clearErr } = await supabase.rpc('clear_must_reset_password')
+      if (clearErr) {
+        // eslint-disable-next-line no-console
+        console.warn('reset-password: clear_must_reset_password failed', clearErr.message)
+      }
       router.refresh()
       router.replace('/')
     } catch (e: unknown) {

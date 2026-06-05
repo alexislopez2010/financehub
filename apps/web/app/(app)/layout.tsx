@@ -14,6 +14,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   if (!user) redirect('/login')
 
+  // Force-reset gate: when an admin used set-household-member-password on
+  // this user, every (app) route bounces to /reset-password until the user
+  // picks a fresh password and calls clear_must_reset_password(). We check
+  // here (not in middleware) so the lookup runs only on real navigations,
+  // not on every static asset request. A failure to read the flag is
+  // tolerated — we'd rather let the user in than lock everyone out if RLS
+  // momentarily misbehaves.
+  const { data: forceResetRows } = await supabase
+    .from('household_members')
+    .select('must_reset_password')
+    .eq('user_id', user.id)
+  const mustReset = (forceResetRows ?? []).some(r => r.must_reset_password === true)
+  if (mustReset) {
+    redirect('/reset-password?forced=1')
+  }
+
   return (
     <QueryProvider>
       <SpotlightProvider>

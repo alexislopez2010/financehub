@@ -22,6 +22,7 @@ function renderRow(overrides: Partial<HouseholdMemberRow> = {}, extra: Partial<{
   onResetMfa: () => void
   onRemove: () => void
   onResetPassword: () => void
+  onSetPassword: () => void
   onToggleActive: () => void
   isSelf: boolean
   resetPasswordPending: boolean
@@ -35,6 +36,7 @@ function renderRow(overrides: Partial<HouseholdMemberRow> = {}, extra: Partial<{
         onResetMfa={extra.onResetMfa ?? vi.fn()}
         onRemove={extra.onRemove ?? vi.fn()}
         onResetPassword={extra.onResetPassword ?? vi.fn()}
+        onSetPassword={extra.onSetPassword ?? vi.fn()}
         onToggleActive={extra.onToggleActive ?? vi.fn()}
         isSelf={extra.isSelf ?? false}
         resetPasswordPending={extra.resetPasswordPending ?? false}

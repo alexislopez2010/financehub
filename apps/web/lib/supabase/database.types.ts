@@ -350,6 +350,7 @@ export type Database = {
           household_id: string
           is_active: boolean
           joined_at: string | null
+          must_reset_password: boolean
           role: string | null
           user_id: string
         }
@@ -358,6 +359,7 @@ export type Database = {
           household_id: string
           is_active?: boolean
           joined_at?: string | null
+          must_reset_password?: boolean
           role?: string | null
           user_id: string
         }
@@ -366,6 +368,7 @@ export type Database = {
           household_id?: string
           is_active?: boolean
           joined_at?: string | null
+          must_reset_password?: boolean
           role?: string | null
           user_id?: string
         }
@@ -502,7 +505,12 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      clear_must_reset_password: {
+        Args: Record<string, never>
+        Returns: void
+      }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

@@ -464,6 +464,70 @@ export function useResetHouseholdMemberPassword(): UseMutationResult<
   })
 }
 
+export interface SetMemberPasswordArgs {
+  household_id: string
+  target_user_id: string
+  /** New temporary password; EF rejects <8 chars. */
+  password: string
+}
+
+export interface SetMemberPasswordResult {
+  user_id: string
+}
+
+/** Shape returned by the set-household-member-password Edge Function. */
+interface RawSetPasswordResponse {
+  ok?: unknown
+  user_id?: unknown
+}
+
+function isSetPasswordResponse(v: unknown): v is { ok: true; user_id: string } {
+  if (!v || typeof v !== 'object') return false
+  const r = v as RawSetPasswordResponse
+  return r.ok === true && typeof r.user_id === 'string'
+}
+
+/**
+ * Admin-sets a temporary password for a household member via the
+ * `set-household-member-password` Edge Function. The EF flips
+ * `household_members.must_reset_password = true` so the target user is
+ * forced to /reset-password on their next page navigation until they pick
+ * a fresh password.
+ *
+ * No optimistic update — the cached row's must_reset_password flips to
+ * true on the next refetch and the layout-level gate handles the redirect.
+ */
+export function useSetHouseholdMemberPassword(): UseMutationResult<
+  SetMemberPasswordResult,
+  Error,
+  SetMemberPasswordArgs,
+  never
+> {
+  const queryClient = useQueryClient()
+  return useMutation<SetMemberPasswordResult, Error, SetMemberPasswordArgs, never>({
+    async mutationFn(args) {
+      const supabase = createClient()
+      const { data, error } = await supabase.functions.invoke('set-household-member-password', {
+        body: {
+          household_id: args.household_id,
+          target_user_id: args.target_user_id,
+          password: args.password
+        }
+      })
+      if (error) throw await unwrapFunctionError(error)
+      if (!isSetPasswordResponse(data)) {
+        throw new Error('set-household-member-password returned an unexpected response')
+      }
+      return { user_id: data.user_id }
+    },
+    onSettled() {
+      // The members list doesn't currently show must_reset_password, but
+      // invalidating keeps any future UI signal accurate.
+      queryClient.invalidateQueries({ queryKey: queryKeys.householdMembers() })
+    }
+  })
+}
+
 export interface SetMemberActiveArgs {
   household_id: string
   target_user_id: string

@@ -4,6 +4,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   KeyRound,
   Loader2,
+  Lock,
   MoreVertical,
   Pencil,
   Power,
@@ -20,6 +21,12 @@ export interface MemberRowProps {
   onResetMfa: () => void
   onRemove: () => void
   onResetPassword: () => void
+  /**
+   * Open the admin-set-password dialog for this member. Hidden when the row
+   * is the caller's own user — admins should use the standard reset flow on
+   * themselves.
+   */
+  onSetPassword: () => void
   onToggleActive: () => void
   /** True when the row is the currently authenticated user — hides the toggle. */
   isSelf: boolean
@@ -43,6 +50,7 @@ export function MemberRow({
   onResetMfa,
   onRemove,
   onResetPassword,
+  onSetPassword,
   onToggleActive,
   isSelf,
   resetPasswordPending,
@@ -159,6 +167,15 @@ export function MemberRow({
               <ShieldOff size={14} className="text-amber-600" />
               Reset MFA
             </DropdownMenu.Item>
+            {!isSelf && (
+              <DropdownMenu.Item
+                onSelect={onSetPassword}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded cursor-pointer hover:bg-gray-100 outline-none"
+              >
+                <Lock size={14} className="text-brand" />
+                Set temporary password…
+              </DropdownMenu.Item>
+            )}
             <DropdownMenu.Item
               onSelect={onRemove}
               className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 rounded cursor-pointer hover:bg-red-50 outline-none"

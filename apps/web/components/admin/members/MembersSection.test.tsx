@@ -54,7 +54,8 @@ vi.mock('@/lib/data/admin', async () => {
     useAddHouseholdMember: () => mockUseAdd(),
     useResetHouseholdMemberPassword: () => mockUseResetPassword(),
     useSetHouseholdMemberActive: () => mockUseSetActive(),
-    usePromoteFamilyMember: () => mockUsePromote()
+    usePromoteFamilyMember: () => mockUsePromote(),
+    useSetHouseholdMemberPassword: () => ({ mutateAsync: vi.fn(), isPending: false })
   }
 })
 
