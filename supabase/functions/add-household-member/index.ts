@@ -127,13 +127,24 @@ Deno.serve(async (req) => {
   // 3. Verify caller is an OWNER of this household.
   // The caller-scoped client + RLS means a caller who isn't a member of the
   // household sees zero rows here, which we treat as "not authorized".
+  //
+  // We MUST scope the membership lookup to the caller's own user_id —
+  // RLS lets owners see all other members, so a household with >1 owner
+  // returns multiple rows and .maybeSingle() raises PGRST116.
+  const { data: callerAuth, error: callerAuthErr } = await callerClient.auth.getUser()
+  if (callerAuthErr || !callerAuth.user) {
+    return jsonError(401, `caller auth failed: ${callerAuthErr?.message ?? 'no user'}`)
+  }
+  const callerUserId = callerAuth.user.id
+
   const { data: callerMembership, error: membershipErr } = await callerClient
     .from('household_members')
     .select('role')
     .eq('household_id', body.household_id)
+    .eq('user_id', callerUserId)
     .maybeSingle()
 
-  if (membershipErr) return jsonError(500, membershipErr.message)
+  if (membershipErr) return jsonError(500, `callerCheck: ${membershipErr.message}`)
   if (!callerMembership || callerMembership.role !== 'owner') {
     return jsonError(403, 'only owners can add members')
   }

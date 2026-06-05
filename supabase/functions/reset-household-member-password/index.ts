@@ -86,13 +86,24 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: `Bearer ${callerJwt}` } }
   })
 
+  // Resolve the caller's user id from the JWT so we can scope the caller
+  // membership lookup to a single row. Without this, a household with
+  // multiple owners returns multiple rows from RLS and .maybeSingle() blows
+  // up with PGRST116 ("multiple (or no) rows returned").
+  const { data: callerAuth, error: callerAuthErr } = await callerClient.auth.getUser()
+  if (callerAuthErr || !callerAuth.user) {
+    return jsonError(401, `caller auth failed: ${callerAuthErr?.message ?? 'no user'}`)
+  }
+  const callerUserId = callerAuth.user.id
+
   // Caller must be an owner of the target household.
   const { data: callerMembership, error: callerErr } = await callerClient
     .from('household_members')
     .select('role')
     .eq('household_id', body.household_id)
+    .eq('user_id', callerUserId)
     .maybeSingle()
-  if (callerErr) return jsonError(500, callerErr.message)
+  if (callerErr) return jsonError(500, `callerCheck: ${callerErr.message}`)
   if (!callerMembership || callerMembership.role !== 'owner') {
     return jsonError(403, 'only owners can reset member passwords')
   }

@@ -94,12 +94,16 @@ Deno.serve(async (req) => {
   const { data: { user: caller }, error: callerAuthErr } = await callerClient.auth.getUser()
   if (callerAuthErr || !caller) return jsonError(401, 'invalid session')
 
+  // Scope to the caller's own row — without .eq('user_id', caller.id) this
+  // returns multiple rows in any household with >1 owner and .maybeSingle()
+  // raises PGRST116 ("multiple (or no) rows returned").
   const { data: callerMembership, error: callerErr } = await callerClient
     .from('household_members')
     .select('role')
     .eq('household_id', body.household_id)
+    .eq('user_id', caller.id)
     .maybeSingle()
-  if (callerErr) return jsonError(500, callerErr.message)
+  if (callerErr) return jsonError(500, `callerCheck: ${callerErr.message}`)
   if (!callerMembership || callerMembership.role !== 'owner') {
     return jsonError(403, 'only owners can change member active state')
   }

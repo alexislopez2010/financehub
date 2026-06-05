@@ -98,13 +98,23 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: `Bearer ${callerJwt}` } }
   })
 
+  // Resolve the caller from the JWT so the membership lookup can scope to
+  // their own row. Without .eq('user_id', caller.id), households with
+  // multiple owners return multiple rows and .maybeSingle() raises PGRST116.
+  const { data: callerAuth, error: callerAuthErr } = await callerClient.auth.getUser()
+  if (callerAuthErr || !callerAuth.user) {
+    return jsonError(401, `caller auth failed: ${callerAuthErr?.message ?? 'no user'}`)
+  }
+  const callerUserId = callerAuth.user.id
+
   // Caller must be an owner of this household.
   const { data: callerMembership, error: callerErr } = await callerClient
     .from('household_members')
     .select('role')
     .eq('household_id', body.household_id)
+    .eq('user_id', callerUserId)
     .maybeSingle()
-  if (callerErr) return jsonError(500, callerErr.message)
+  if (callerErr) return jsonError(500, `callerCheck: ${callerErr.message}`)
   if (!callerMembership || callerMembership.role !== 'owner') {
     return jsonError(403, 'only owners can promote family members')
   }
