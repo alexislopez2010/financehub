@@ -11,6 +11,7 @@ function bill(over: Partial<BillRow> = {}): BillRow {
     category: 'Housing',
     account: null,
     due_day: 15,
+    due_month_anchor: null,
     frequency: 'Monthly',
     budget_amount: 100,
     budget_category_id: null,

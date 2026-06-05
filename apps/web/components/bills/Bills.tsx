@@ -54,7 +54,8 @@ export function Bills() {
 
   function handleCreate(input: {
     name: string; category: string | null; due_day: number | null;
-    frequency: string; budget_amount: number; account: string | null
+    frequency: string; budget_amount: number; account: string | null;
+    due_month_anchor: number | null
   }) {
     createBill.mutate({
       household_id: LOPEZ_HOUSEHOLD_ID,
@@ -64,6 +65,7 @@ export function Bills() {
       frequency: input.frequency,
       budget_amount: input.budget_amount,
       account: input.account,
+      due_month_anchor: input.due_month_anchor,
       is_active: true
     })
     setShowAddForm(false)

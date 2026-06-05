@@ -8,20 +8,32 @@ import { clampDay, daysInMonth } from './dueDate'
  * can't confidently identify as "every two weeks" / "twice a month" falls
  * back to monthly so the user sees the old behavior for unfamiliar values.
  */
-function normalizeBillCadence(freq: string | null | undefined): 'monthly' | 'biweekly' {
+type NormalizedCadence = 'monthly' | 'biweekly' | 'quarterly' | 'annual'
+
+function normalizeBillCadence(freq: string | null | undefined): NormalizedCadence {
   if (!freq) return 'monthly'
   const n = freq.toLowerCase().replace(/[-_\s]/g, '')
   if (n === 'biweekly' || n === 'semimonthly') return 'biweekly'
+  if (n === 'quarterly' || n === 'quarter' || n === 'every3months' || n === 'every3month') return 'quarterly'
+  if (n === 'annual' || n === 'annually' || n === 'yearly' || n === 'everyyear' || n === 'every12months') return 'annual'
   return 'monthly'
 }
 
 /**
  * Bill input shape for cadence-aware due-date checks. Only the fields we
  * actually read — keeps callers from having to construct a full BillRow.
+ *
+ * `due_month_anchor` is meaningful only for Quarterly and Annual cadences:
+ *   - Quarterly: bill is due in month `due_month_anchor` plus every 3rd
+ *     month thereafter (e.g., anchor=3 → Mar/Jun/Sep/Dec)
+ *   - Annual: bill is due only in month `due_month_anchor`
+ * NULL anchor on Quarterly/Annual means "not scheduled" — the bill won't
+ * appear in any plan/forecast/coming-due output until the user sets it.
  */
 export interface BillCadenceInput {
   readonly due_day: number | null
   readonly frequency: string | null
+  readonly due_month_anchor?: number | null
 }
 
 /**
@@ -53,6 +65,24 @@ export function isBillDueOn(
   if (bill.due_day == null) return false
 
   const cadence = normalizeBillCadence(bill.frequency)
+
+  // Quarterly + Annual: gated by the anchor month. Without an anchor the
+  // bill has no schedule and we return false (the caller surfaces this as
+  // "not scheduled — set an anchor month").
+  if (cadence === 'quarterly' || cadence === 'annual') {
+    const anchor = bill.due_month_anchor
+    if (anchor == null || anchor < 1 || anchor > 12) return false
+    if (cadence === 'annual' && date.month !== anchor) return false
+    if (cadence === 'quarterly') {
+      // (month - anchor) ≡ 0 (mod 3), normalized to a positive remainder
+      // so Dec-anchor / Mar-test still works (e.g., anchor=12, month=3 →
+      // 3 - 12 = -9 → mod 3 == 0 ✓)
+      const diff = ((date.month - anchor) % 3 + 3) % 3
+      if (diff !== 0) return false
+    }
+    return clampDay(bill.due_day, date.year, date.month) === date.day
+  }
+
   const firstThisMonth = clampDay(bill.due_day, date.year, date.month)
 
   // First occurrence: identical across all cadences.
@@ -98,9 +128,53 @@ export function monthlyOccurrenceCount(bill: BillCadenceInput): number {
   // due_day separately.
   switch (normalizeBillCadence(bill.frequency)) {
     case 'biweekly': return 2
+    case 'quarterly':
+    case 'annual':
+      // Non-monthly cadences need the specific calendar month to answer
+      // correctly. monthlyOccurrenceCount is the *average* — caller should
+      // use occurrencesInMonth(bill, year, month) instead.
+      return 1
     case 'monthly':
     default:         return 1
   }
+}
+
+/**
+ * Number of times the bill is due in a specific calendar month.
+ * Period-aware version of {@link monthlyOccurrenceCount} — the right
+ * thing to call when summing per-period commitments (e.g., the Plan
+ * surface's "Bills committed" column for a specific month).
+ *
+ * Returns 0 when the bill is not scheduled for that month (quarterly
+ * skips, annual outside its anchor month, NULL anchor on quarterly/
+ * annual, etc.).
+ */
+export function occurrencesInMonth(
+  bill: BillCadenceInput,
+  year: number,
+  month: number
+): number {
+  if (month < 1 || month > 12) return 0
+  const cadence = normalizeBillCadence(bill.frequency)
+
+  if (cadence === 'monthly') return 1
+  if (cadence === 'biweekly') return 2
+
+  if (cadence === 'annual') {
+    const anchor = bill.due_month_anchor
+    if (anchor == null) return 0
+    return month === anchor ? 1 : 0
+  }
+  if (cadence === 'quarterly') {
+    const anchor = bill.due_month_anchor
+    if (anchor == null) return 0
+    if (anchor < 1 || anchor > 12) return 0
+    const diff = ((month - anchor) % 3 + 3) % 3
+    return diff === 0 ? 1 : 0
+  }
+  // Defensive: unknown cadence → treat as monthly.
+  void year
+  return 1
 }
 
 /**

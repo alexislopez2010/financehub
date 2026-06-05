@@ -1,6 +1,6 @@
 import type { Tables } from '@/lib/supabase/database.types'
 import type { PlanPeriod } from './period'
-import { monthlyOccurrenceCount } from '@/lib/finance/billCadence'
+import { occurrencesInMonth } from '@/lib/finance/billCadence'
 
 export type BudgetRow = Tables<'budgets'>
 export type TransactionRow = Tables<'transactions'>
@@ -8,13 +8,16 @@ export type BillRow = Tables<'bills'>
 
 /**
  * Minimal bill shape used to compute bills committed per category.
- * Kept structural so callers can pass narrower projections. `frequency` and
- * `due_day` feed monthlyOccurrenceCount so a biweekly bill contributes 2×
- * its per-occurrence amount to the monthly commitment, not 1×.
+ * Kept structural so callers can pass narrower projections.
+ *
+ * `frequency`, `due_day`, and `due_month_anchor` feed occurrencesInMonth
+ * so a biweekly bill contributes 2× its per-occurrence amount in every
+ * month and a quarterly bill contributes 1× only in the months it
+ * actually hits (controlled by `due_month_anchor`).
  */
 export type BillForCommitment = Pick<
   BillRow,
-  'budget_amount' | 'budget_category_id' | 'is_active' | 'frequency' | 'due_day'
+  'budget_amount' | 'budget_category_id' | 'is_active' | 'frequency' | 'due_day' | 'due_month_anchor'
 >
 
 export interface BudgetVsActualRow {
@@ -92,22 +95,26 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
   const monthStr = String(period.month).padStart(2, '0')
   const periodPrefix = `${yearStr}-${monthStr}`
 
-  // Sum budget_amount for active bills with a mapped budget_category_id.
-  // Bills with null budget_category_id are excluded (user hasn't mapped yet).
-  // is_active is nullable in the schema; treat null as inactive so we only
-  // count bills the user has explicitly turned on.
-  //
-  // Each bill is multiplied by its monthlyOccurrenceCount so biweekly bills
-  // contribute 2× their per-occurrence amount. Monthly stays ×1 (no change).
+  // Sum budget_amount for active bills with a mapped budget_category_id,
+  // multiplied by how many times the bill recurs IN THIS specific period.
+  // - Monthly:   ×1 every month
+  // - Biweekly:  ×2 every month
+  // - Quarterly: ×1 in months matching the anchor, ×0 otherwise
+  // - Annual:    ×1 in the anchor month, ×0 otherwise
+  // Bills with null budget_category_id are excluded (user hasn't mapped
+  // yet). is_active is nullable in the schema; treat null as inactive.
   const billsByCategoryId = new Map<string, number>()
   for (const b of bills) {
     if (b.is_active !== true) continue
     const cid = b.budget_category_id
     if (!cid) continue
-    const monthly = b.budget_amount * monthlyOccurrenceCount({
-      due_day: b.due_day,
-      frequency: b.frequency
-    })
+    const count = occurrencesInMonth(
+      { due_day: b.due_day, frequency: b.frequency, due_month_anchor: b.due_month_anchor },
+      period.year,
+      period.month
+    )
+    if (count === 0) continue
+    const monthly = b.budget_amount * count
     billsByCategoryId.set(cid, (billsByCategoryId.get(cid) ?? 0) + monthly)
   }
 

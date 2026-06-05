@@ -164,6 +164,66 @@ describe('<AddBillForm>', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it('omits the anchor month picker for Monthly cadence and sends due_month_anchor=null', () => {
+    const onSubmit = vi.fn()
+    render(
+      <AddBillForm
+        categoryOptions={CATEGORIES}
+        accountOptions={ACCOUNTS}
+        isSubmitting={false}
+        onSubmit={onSubmit}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Bill name'), { target: { value: 'Monthly bill' } })
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '12' } })
+    // Anchor picker should not be rendered when frequency is Monthly.
+    expect(screen.queryByLabelText('Anchor month')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /add bill/i }))
+    const payload = onSubmit.mock.calls[0]?.[0]
+    expect(payload).toMatchObject({ frequency: 'Monthly', due_month_anchor: null })
+  })
+
+  it('reveals the anchor month picker for Quarterly and submits the chosen month', () => {
+    const onSubmit = vi.fn()
+    render(
+      <AddBillForm
+        categoryOptions={CATEGORIES}
+        accountOptions={ACCOUNTS}
+        isSubmitting={false}
+        onSubmit={onSubmit}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Bill name'), { target: { value: 'Quarterly bill' } })
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '105' } })
+    fireEvent.change(screen.getByLabelText('Frequency'), { target: { value: 'Quarterly' } })
+    // Picker is revealed.
+    const anchor = screen.getByLabelText('Anchor month') as HTMLSelectElement
+    expect(anchor).toBeTruthy()
+    fireEvent.change(anchor, { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: /add bill/i }))
+    const payload = onSubmit.mock.calls[0]?.[0]
+    expect(payload).toMatchObject({ frequency: 'Quarterly', due_month_anchor: 3 })
+  })
+
+  it('submits Quarterly with null anchor when the user did not pick a month yet', () => {
+    const onSubmit = vi.fn()
+    render(
+      <AddBillForm
+        categoryOptions={CATEGORIES}
+        accountOptions={ACCOUNTS}
+        isSubmitting={false}
+        onSubmit={onSubmit}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Bill name'), { target: { value: 'Unscheduled' } })
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '50' } })
+    fireEvent.change(screen.getByLabelText('Frequency'), { target: { value: 'Annual' } })
+    // Leave anchor month blank.
+    fireEvent.click(screen.getByRole('button', { name: /add bill/i }))
+    const payload = onSubmit.mock.calls[0]?.[0]
+    expect(payload).toMatchObject({ frequency: 'Annual', due_month_anchor: null })
+  })
+
   it('hides empty optgroups when a bucket has no options', () => {
     render(
       <AddBillForm

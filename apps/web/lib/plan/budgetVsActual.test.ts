@@ -15,6 +15,7 @@ function bill(over: Partial<BillForCommitment> = {}): BillForCommitment {
     is_active: true,
     frequency: null,
     due_day: null,
+    due_month_anchor: null,
     ...over
   }
 }
@@ -472,6 +473,86 @@ describe('deriveBudgetVsActual', () => {
         ]
       })
       expect(result[0]!.billsCommitted).toBe(2500)
+    })
+
+    it('contributes a quarterly bill in months that match the anchor', () => {
+      // Anchor March → bill hits Mar/Jun/Sep/Dec. June (month=6) should include $105.
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 6 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing', month: 6 })],
+        bills: [
+          bill({
+            budget_amount: 105,
+            budget_category_id: 'cat-h',
+            frequency: 'Quarterly',
+            due_day: 1,
+            due_month_anchor: 3
+          })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(105)
+    })
+
+    it('does NOT contribute a quarterly bill in off-months', () => {
+      // Anchor March → in May (month=5) the bill should not contribute.
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 5 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing' })],
+        bills: [
+          bill({
+            budget_amount: 105,
+            budget_category_id: 'cat-h',
+            frequency: 'Quarterly',
+            due_day: 1,
+            due_month_anchor: 3
+          })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(0)
+    })
+
+    it('does NOT contribute a quarterly bill when due_month_anchor is null (unscheduled)', () => {
+      const result = deriveBudgetVsActual({
+        period: { year: 2026, month: 6 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing', month: 6 })],
+        bills: [
+          bill({
+            budget_amount: 105,
+            budget_category_id: 'cat-h',
+            frequency: 'Quarterly',
+            due_day: 1,
+            due_month_anchor: null
+          })
+        ]
+      })
+      expect(result[0]!.billsCommitted).toBe(0)
+    })
+
+    it('contributes an annual bill only in its anchor month', () => {
+      const annual = bill({
+        budget_amount: 1200,
+        budget_category_id: 'cat-h',
+        frequency: 'Annual',
+        due_day: 15,
+        due_month_anchor: 4
+      })
+      const april = deriveBudgetVsActual({
+        period: { year: 2026, month: 4 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing', month: 4 })],
+        bills: [annual]
+      })
+      const may = deriveBudgetVsActual({
+        period: { year: 2026, month: 5 },
+        transactions: [],
+        budgets: [budget({ category_id: 'cat-h', amount: 3000, category: 'Housing', month: 5 })],
+        bills: [annual]
+      })
+      expect(april[0]!.billsCommitted).toBe(1200)
+      expect(may[0]!.billsCommitted).toBe(0)
     })
   })
 })

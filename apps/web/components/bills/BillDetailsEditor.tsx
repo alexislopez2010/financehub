@@ -23,6 +23,36 @@ const FREQUENCIES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'Annual',    label: 'Annual' }
 ]
 
+// Month labels for the anchor-month picker shown on Quarterly + Annual
+// cadences. Values are 1..12 (matching `due_month_anchor` in the DB).
+const MONTHS: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 1,  label: 'January' },
+  { value: 2,  label: 'February' },
+  { value: 3,  label: 'March' },
+  { value: 4,  label: 'April' },
+  { value: 5,  label: 'May' },
+  { value: 6,  label: 'June' },
+  { value: 7,  label: 'July' },
+  { value: 8,  label: 'August' },
+  { value: 9,  label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' }
+]
+
+/**
+ * Cadences that require a due_month_anchor (1..12). Monthly/Biweekly/Weekly
+ * ignore the anchor entirely. Keep aligned with billCadence.ts.
+ */
+function needsAnchor(freq: string | null | undefined): boolean {
+  if (!freq) return false
+  const n = freq.toLowerCase().replace(/[-_\s]/g, '')
+  return (
+    n === 'quarterly' || n === 'quarter' ||
+    n === 'annual'    || n === 'annually' || n === 'yearly'
+  )
+}
+
 /**
  * Inline editor for every editable column on a bill. Mounts inside
  * BillExpanded so the row's chevron toggles both "details" and "matched
@@ -167,6 +197,40 @@ export function BillDetailsEditor({ bill }: BillDetailsEditorProps) {
           />
         </Field>
       </div>
+
+      {/* Row 2b: Anchor month — only meaningful for Quarterly / Annual */}
+      {needsAnchor(bill.frequency) && (
+        <Field
+          label={bill.frequency?.toLowerCase().startsWith('quart')
+            ? 'Anchor month (first occurrence)'
+            : 'Month'}
+        >
+          <select
+            aria-label="Anchor month"
+            value={bill.due_month_anchor ?? ''}
+            onChange={e => {
+              const raw = e.target.value
+              const next = raw === '' ? null : parseInt(raw, 10)
+              patch('due_month_anchor', next)
+            }}
+            disabled={isPending}
+            className={inputClass}
+          >
+            <option value="">— pick a month —</option>
+            {MONTHS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <div className="text-[11px] text-muted mt-1">
+            {bill.frequency?.toLowerCase().startsWith('quart')
+              ? 'Bill repeats every 3 months from this anchor.'
+              : 'Bill hits once a year in this month.'}
+            {bill.due_month_anchor == null && (
+              <span className="text-rose-600"> — not scheduled until set.</span>
+            )}
+          </div>
+        </Field>
+      )}
 
       {/* Row 3: Account · Category */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

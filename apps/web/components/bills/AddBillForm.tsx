@@ -26,6 +26,13 @@ export interface AddBillFormProps {
     frequency: string
     budget_amount: number
     account: string | null
+    /**
+     * Anchor month (1..12) for Quarterly / Annual cadences. Null otherwise,
+     * including when the user picked Quarterly/Annual but hasn't chosen a
+     * month yet — the bill is then created in "unscheduled" state and the
+     * UI nudges them to set it in the bill row editor.
+     */
+    due_month_anchor: number | null
   }) => void
   onCancel?: () => void
 }
@@ -37,6 +44,31 @@ const FREQUENCIES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'Quarterly', label: 'Quarterly' },
   { value: 'Annual',    label: 'Annual' }
 ]
+
+const MONTHS: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 1,  label: 'January' },
+  { value: 2,  label: 'February' },
+  { value: 3,  label: 'March' },
+  { value: 4,  label: 'April' },
+  { value: 5,  label: 'May' },
+  { value: 6,  label: 'June' },
+  { value: 7,  label: 'July' },
+  { value: 8,  label: 'August' },
+  { value: 9,  label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' }
+]
+
+/**
+ * Frequency values that require a due_month_anchor. Keep aligned with the
+ * normalization in lib/finance/billCadence.ts — anything we'd recognize as
+ * Quarterly/Annual there needs an anchor here.
+ */
+function frequencyNeedsAnchor(freq: string): boolean {
+  const n = freq.toLowerCase().replace(/[-_\s]/g, '')
+  return n === 'quarterly' || n === 'annual' || n === 'annually' || n === 'yearly'
+}
 
 // Sentinel value for the "Other…" option that reveals a free-text input.
 // Bills.category is a free-text column, so we keep an escape hatch for
@@ -57,6 +89,9 @@ export function AddBillForm({
   const [frequency, setFrequency] = useState('Monthly')
   const [amount, setAmount] = useState('')
   const [account, setAccount] = useState('')  // '' = unselected (writes null)
+  // Anchor month for Quarterly/Annual cadences. '' = unselected (writes
+  // null — bill is created unscheduled and the user is nudged to set it).
+  const [anchorMonth, setAnchorMonth] = useState('')
 
   const grouped = useMemo(() => groupCategoriesByType(categoryOptions), [categoryOptions])
 
@@ -78,13 +113,18 @@ export function AddBillForm({
         ? (categoryCustom.trim() || null)
         : (categorySelect.trim() || null)
 
+    const anchor = frequencyNeedsAnchor(frequency) && anchorMonth.trim()
+      ? Math.min(Math.max(parseInt(anchorMonth, 10) || 0, 1), 12) || null
+      : null
+
     onSubmit({
       name: trimmedName,
       category: resolvedCategory,
       due_day: due,
       frequency,
       budget_amount: amt,
-      account: account.trim() || null
+      account: account.trim() || null,
+      due_month_anchor: anchor
     })
     setName('')
     setCategorySelect('')
@@ -93,9 +133,11 @@ export function AddBillForm({
     setFrequency('Monthly')
     setAmount('')
     setAccount('')
+    setAnchorMonth('')
   }
 
   const showCustomCategoryInput = categorySelect === OTHER_CATEGORY
+  const showAnchorMonth = frequencyNeedsAnchor(frequency)
 
   return (
     <form onSubmit={handleSubmit} className="px-4 py-3 bg-gray-50 border-t border-rule space-y-2">
@@ -177,6 +219,30 @@ export function AddBillForm({
           aria-label="Custom category name"
           className="w-full text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
+      )}
+      {showAnchorMonth && (
+        <div className="flex items-center gap-2">
+          <select
+            value={anchorMonth}
+            onChange={e => setAnchorMonth(e.target.value)}
+            aria-label="Anchor month"
+            className="text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+          >
+            <option value="">
+              {frequency.toLowerCase().startsWith('quart')
+                ? 'Anchor month (first hit)…'
+                : 'Month it hits…'}
+            </option>
+            {MONTHS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <span className="text-[11px] text-muted">
+            {frequency.toLowerCase().startsWith('quart')
+              ? 'Repeats every 3 months from this month.'
+              : 'Single yearly hit in this month.'}
+          </span>
+        </div>
       )}
       <div className="grid grid-cols-[1fr_28px_28px] gap-2 items-center">
         <select

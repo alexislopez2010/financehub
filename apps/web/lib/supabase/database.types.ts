@@ -157,6 +157,7 @@ export type Database = {
           category: string | null
           created_at: string | null
           due_day: number | null
+          due_month_anchor: number | null
           frequency: string | null
           household_id: string
           id: string
@@ -172,6 +173,7 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           due_day?: number | null
+          due_month_anchor?: number | null
           frequency?: string | null
           household_id: string
           id?: string
@@ -187,6 +189,7 @@ export type Database = {
           category?: string | null
           created_at?: string | null
           due_day?: number | null
+          due_month_anchor?: number | null
           frequency?: string | null
           household_id?: string
           id?: string

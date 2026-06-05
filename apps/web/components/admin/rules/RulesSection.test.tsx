@@ -41,6 +41,7 @@ function makeBill(over: Partial<BillRow> = {}): BillRow {
     category: null,
     created_at: null,
     due_day: 1,
+    due_month_anchor: null,
     frequency: 'monthly',
     is_active: true,
     linked_debt_id: null,
