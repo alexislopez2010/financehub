@@ -105,7 +105,7 @@ describe('<UploadStep>', () => {
     expect(dropzone).toHaveTextContent(/pick an account to enable upload/i)
     await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
     expect(dropzone).not.toBeDisabled()
-    expect(dropzone).toHaveTextContent(/drag a csv here/i)
+    expect(dropzone).toHaveTextContent(/drag a csv or qfx here/i)
   })
 
   it('processes a valid Chase CSV and calls onParsed with a payload', async () => {
@@ -122,7 +122,7 @@ describe('<UploadStep>', () => {
     ].join('\n')
     const file = new File([csvText], 'chase.csv', { type: 'text/csv' })
 
-    const fileInput = screen.getByLabelText('CSV file') as HTMLInputElement
+    const fileInput = screen.getByLabelText('CSV or QFX file') as HTMLInputElement
     await user.upload(fileInput, file)
 
     await waitFor(() => expect(onParsed).toHaveBeenCalledTimes(1))
@@ -161,7 +161,7 @@ describe('<UploadStep>', () => {
     ].join('\n')
     const file = new File([csvText], 'chase.csv', { type: 'text/csv' })
 
-    await user.upload(screen.getByLabelText('CSV file'), file)
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
 
     await waitFor(() => expect(onParsed).toHaveBeenCalledTimes(1))
     expect(onParsed.mock.calls[0]?.[0]?.member).toBe('Marilyn Lopez')
@@ -177,6 +177,61 @@ describe('<UploadStep>', () => {
     expect(dropzone).not.toBeDisabled()
   })
 
+  it('processes a PayPal QFX file via the OFX path and calls onParsed', async () => {
+    const user = userEvent.setup()
+    const onParsed = vi.fn()
+    render(withQueryClient(<UploadStep onParsed={onParsed} />))
+
+    await user.selectOptions(screen.getByLabelText('Account'), 'acc-1')
+
+    // Minimal QFX with one DEBIT and one CREDIT-looking-like-a-payment.
+    const qfxText = `OFXHEADER:100
+DATA:OFXSGML
+<OFX>
+<SIGNONMSGSRSV1><SONRS><FI><ORG>SYNCB</FI></SONRS></SIGNONMSGSRSV1>
+<CREDITCARDMSGSRSV1><CCSTMTTRNRS><CCSTMTRS>
+<CCACCTFROM><ACCTID>6044191028569715</CCACCTFROM>
+<BANKTRANLIST>
+<DTSTART>20251205
+<DTEND>20260105
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTUSER>20251107
+<TRNAMT>-96.0
+<FITID>11072025253009600313502065223209
+<NAME>Purchase
+<MEMO>P9283009TEHM6DLN7
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTUSER>20251128
+<TRNAMT>200.0
+<FITID>11282025271020000000000000000000
+<NAME>Auto pay
+<MEMO>F928300AC00CHGDDA
+</STMTTRN>
+</BANKTRANLIST>
+<LEDGERBAL><BALAMT>-192.05<DTASOF>20260605</LEDGERBAL>
+</CCSTMTRS></CCSTMTTRNRS></CREDITCARDMSGSRSV1></OFX>
+`
+    const file = new File([qfxText], 'Transaction.qfx', { type: 'application/x-qfx' })
+
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
+
+    await waitFor(() => expect(onParsed).toHaveBeenCalledTimes(1))
+    const payload = onParsed.mock.calls[0]?.[0]
+    expect(payload).toMatchObject({
+      accountId: 'acc-1',
+      adapterName: expect.stringMatching(/SYNCB QFX/)
+    })
+    expect(payload.parsedRows.length).toBe(2)
+    // QFX preserves the sign convention exactly.
+    const purchase = payload.parsedRows.find((r: { amount: number }) => r.amount === -96)
+    const autopay = payload.parsedRows.find((r: { amount: number }) => r.amount === 200)
+    expect(purchase?.type).toBe('Expense')
+    expect(autopay?.type).toBe('Income')
+  })
+
   it('shows an error for an unrecognized CSV format', async () => {
     const user = userEvent.setup()
     const onParsed = vi.fn()
@@ -186,7 +241,7 @@ describe('<UploadStep>', () => {
 
     const csvText = 'Foo,Bar\n1,2\n'
     const file = new File([csvText], 'unknown.csv', { type: 'text/csv' })
-    await user.upload(screen.getByLabelText('CSV file'), file)
+    await user.upload(screen.getByLabelText('CSV or QFX file'), file)
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/unrecognized csv format/i)

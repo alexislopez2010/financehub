@@ -8,9 +8,10 @@ import { useBills } from '@/lib/data/bills'
 import { useCategories } from '@/lib/data/categories'
 import { useHouseholdMembersList } from '@/lib/data/householdMembers'
 import { detectAdapter } from '@/lib/import/adapters'
-import type { ImportRow } from '@/lib/import/adapters/types'
+import type { ImportRow, ParsedImportRow, SkippedRow } from '@/lib/import/adapters/types'
 import { categorize, type CategorizeBill, type CategorizeCategory, type CategorizeRule } from '@/lib/import/categorize'
 import { parseCsv } from '@/lib/import/csv'
+import { looksLikeOfx, parseOfx } from '@/lib/import/ofx'
 import { dedup } from '@/lib/import/dedup'
 import { computeFingerprintsBatch } from '@/lib/import/fingerprint'
 import { buildMemberOptions } from '@/lib/ledger/memberOptions'
@@ -162,8 +163,9 @@ export function UploadStep({ onParsed }: UploadStepProps) {
     }
 
     const looksLikeCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv'
-    if (!looksLikeCsv) {
-      setWarning(`"${file.name}" doesn't look like a CSV — attempting to parse anyway.`)
+    const looksLikeQfx = /\.(qfx|ofx)$/i.test(file.name)
+    if (!looksLikeCsv && !looksLikeQfx) {
+      setWarning(`"${file.name}" doesn't look like a CSV or QFX — attempting to parse anyway.`)
     }
 
     try {
@@ -171,36 +173,71 @@ export function UploadStep({ onParsed }: UploadStepProps) {
       const text = await readFileText(file)
 
       setStage({ kind: 'parsing' })
-      const parsedCsv = parseCsv(text)
-      if (parsedCsv.headers.length === 0 || parsedCsv.rows.length === 0) {
-        setError({ message: 'CSV looks empty.', detail: 'No data rows were found.' })
-        setStage({ kind: 'idle' })
-        return
-      }
 
-      const adapter = detectAdapter(parsedCsv.headers)
-      if (!adapter) {
-        setError({
-          message: 'Unrecognized CSV format.',
-          detail: `Headers detected: ${parsedCsv.headers.join(', ')}. Use one of: Chase, Capital One, Citibank, Discover, Amex, or a CSV with date/description/amount columns.`
-        })
-        setStage({ kind: 'idle' })
-        return
-      }
+      // Two parse paths share the same downstream pipeline (fingerprint →
+      // dedup → categorize). OFX/QFX is structured very differently from
+      // CSV — leaf tags without close tags, no header row — so we detect
+      // it up front and use the dedicated parser instead of trying to
+      // shoehorn it into the adapter pattern.
+      let parsed: ReadonlyArray<ParsedImportRow>
+      let skipped: ReadonlyArray<SkippedRow>
+      let sourceLabel: string
+      if (looksLikeQfx || looksLikeOfx(text)) {
+        const ofx = parseOfx(text)
+        parsed = ofx.parsed
+        skipped = ofx.skipped
+        sourceLabel = ofx.statement.fi
+          ? `${ofx.statement.fi} QFX${ofx.statement.accountLastFour ? ` ··${ofx.statement.accountLastFour}` : ''}`
+          : 'QFX'
+        if (parsed.length === 0) {
+          const firstSkip = skipped[0]?.reason
+          setError(firstSkip
+            ? { message: 'QFX parsed, but no transactions could be read.', detail: firstSkip }
+            : { message: 'QFX parsed, but no transactions were found.' }
+          )
+          setStage({ kind: 'idle' })
+          return
+        }
+        if (ofx.statement.endingBalance !== null) {
+          setWarning(
+            `Statement ending balance: ${ofx.statement.endingBalance.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}. ` +
+            `Verify it matches the account in the platform after import.`
+          )
+        }
+      } else {
+        const parsedCsv = parseCsv(text)
+        if (parsedCsv.headers.length === 0 || parsedCsv.rows.length === 0) {
+          setError({ message: 'CSV looks empty.', detail: 'No data rows were found.' })
+          setStage({ kind: 'idle' })
+          return
+        }
 
-      const { parsed, skipped } = adapter.parse(parsedCsv.headers, parsedCsv.rows)
-      if (parsed.length === 0) {
-        const firstSkip = skipped[0]?.reason
-        setError(firstSkip
-          ? { message: `Detected ${adapter.name}, but no rows could be parsed.`, detail: firstSkip }
-          : { message: `Detected ${adapter.name}, but no rows could be parsed.` }
-        )
-        setStage({ kind: 'idle' })
-        return
-      }
+        const adapter = detectAdapter(parsedCsv.headers)
+        if (!adapter) {
+          setError({
+            message: 'Unrecognized CSV format.',
+            detail: `Headers detected: ${parsedCsv.headers.join(', ')}. Use one of: Chase, Capital One, Citibank, Discover, Amex, or a CSV with date/description/amount columns.`
+          })
+          setStage({ kind: 'idle' })
+          return
+        }
 
-      if (parsedCsv.hasMalformedRows) {
-        setWarning('Some rows had malformed column counts — they may have been skipped.')
+        const adapterResult = adapter.parse(parsedCsv.headers, parsedCsv.rows)
+        parsed = adapterResult.parsed
+        skipped = adapterResult.skipped
+        sourceLabel = adapter.name
+        if (parsed.length === 0) {
+          const firstSkip = skipped[0]?.reason
+          setError(firstSkip
+            ? { message: `Detected ${adapter.name}, but no rows could be parsed.`, detail: firstSkip }
+            : { message: `Detected ${adapter.name}, but no rows could be parsed.` }
+          )
+          setStage({ kind: 'idle' })
+          return
+        }
+        if (parsedCsv.hasMalformedRows) {
+          setWarning('Some rows had malformed column counts — they may have been skipped.')
+        }
       }
 
       setStage({ kind: 'parsing', detail: `${parsed.length} rows` })
@@ -259,7 +296,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
       const payload: ImportPayload = {
         accountId: selectedAccountId,
         accountName,
-        adapterName: adapter.name,
+        adapterName: sourceLabel,
         parsedRows: enrichedNew,
         duplicateRows,
         skipped: skipped.map(s => ({ rowIndex: s.rowIndex, reason: s.reason }) satisfies SkippedReport),
@@ -346,9 +383,9 @@ export function UploadStep({ onParsed }: UploadStepProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,text/csv,.qfx,.ofx,application/x-ofx,application/x-qfx"
           onChange={handleFileChange}
-          aria-label="CSV file"
+          aria-label="CSV or QFX file"
           className="sr-only"
         />
         <button
@@ -378,7 +415,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
               <UploadCloud size={32} aria-hidden="true" />
               <span>
                 {accountSelected
-                  ? 'Drag a CSV here, or click to choose a file'
+                  ? 'Drag a CSV or QFX here, or click to choose a file'
                   : 'Pick an account to enable upload (member is optional)'}
               </span>
             </>
