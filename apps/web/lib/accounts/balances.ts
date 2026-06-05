@@ -37,9 +37,13 @@ export interface AccountSummary {
   netWorth: number
 }
 
-const CASH_TYPES = new Set(['checking', 'savings'])
-const DEBT_TYPES = new Set(['credit', 'loan'])
-const INVESTMENT_TYPES = new Set(['investment'])
+// Keep aligned with briefing/kpis.ts. `property` joins the investment
+// bucket so totalInvestments is really "totalAssets" (illiquid value:
+// real estate + brokerage). Mortgage joins the debt bucket so totalDebt
+// captures the full liability picture.
+const CASH_TYPES = new Set(['checking', 'savings', 'cash'])
+const DEBT_TYPES = new Set(['credit', 'loan', 'mortgage'])
+const INVESTMENT_TYPES = new Set(['investment', 'property', 'asset'])
 
 /**
  * Pure derivation of per-account current balance + household summary.

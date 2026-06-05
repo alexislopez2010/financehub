@@ -75,6 +75,22 @@ export function AccountsSection() {
     updateAccount.mutate({ id, patch: { is_active: false, archived_at: new Date().toISOString() } })
   }
 
+  /**
+   * Quick balance update: set starting_balance to the user-entered value
+   * and bump starting_balance_date to today. The view + balance math
+   * exclude transactions before the new date, so the displayed balance
+   * snaps to the entered value immediately. Ideal for property +
+   * mortgage where the user updates the statement value manually each
+   * month rather than importing.
+   */
+  function handleUpdateBalance(id: string, next: number) {
+    const todayIso = new Date().toISOString().slice(0, 10)
+    updateAccount.mutate({
+      id,
+      patch: { starting_balance: next, starting_balance_date: todayIso }
+    })
+  }
+
   const isLoading = accountsQ.isLoading || txsQ.isLoading
   const error = accountsQ.error || txsQ.error
 
@@ -136,6 +152,7 @@ export function AccountsSection() {
                       onEditName={(next) => handleEditName(b.accountId, next)}
                       onEdit={() => setEditTargetId(b.accountId)}
                       onArchive={() => handleArchive(b.accountId, b.name)}
+                      onUpdateBalance={(next) => handleUpdateBalance(b.accountId, next)}
                     />
                   </li>
                 ))}

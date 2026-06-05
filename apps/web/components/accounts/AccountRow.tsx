@@ -10,23 +10,35 @@ const TYPE_TONES: Record<string, string> = {
   savings:    'bg-emerald-50 text-emerald-700',
   credit:     'bg-red-50 text-red-700',
   loan:       'bg-amber-50 text-amber-700',
-  investment: 'bg-purple-50 text-purple-700'
+  mortgage:   'bg-amber-50 text-amber-700',
+  investment: 'bg-purple-50 text-purple-700',
+  property:   'bg-indigo-50 text-indigo-700'
 }
 
-const DEBT_TYPES = new Set(['credit', 'loan'])
+// Kept in sync with briefing/kpis.ts DEBT_TYPES so per-row tone (positive
+// balance = bad / negative = good) matches the KPI rollup.
+const DEBT_TYPES = new Set(['credit', 'loan', 'mortgage'])
 
 export interface AccountRowProps {
   balance: AccountBalance
   onEditName?: (next: string) => void
   onEdit?: () => void
   onArchive?: () => void
+  /**
+   * Click-to-edit the displayed balance. Commits via the parent, which
+   * resets starting_balance + starting_balance_date so the row's
+   * "current balance" matches the user-entered value as of today. Most
+   * useful for property / mortgage rows where the user updates the
+   * statement value periodically rather than importing transactions.
+   */
+  onUpdateBalance?: (next: number) => void
 }
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-export function AccountRow({ balance, onEditName, onEdit, onArchive }: AccountRowProps) {
+export function AccountRow({ balance, onEditName, onEdit, onArchive, onUpdateBalance }: AccountRowProps) {
   const isDebt = balance.type ? DEBT_TYPES.has(balance.type) : false
   const tone = isDebt
     ? balance.currentBalance > 0 ? 'text-red-600' : 'text-emerald-600'
@@ -81,7 +93,17 @@ export function AccountRow({ balance, onEditName, onEdit, onArchive }: AccountRo
       </div>
 
       <div className={cn('text-right tabular text-sm font-semibold', tone)}>
-        {formatUSD(balance.currentBalance)}
+        {onUpdateBalance ? (
+          <EditableCell
+            variant="number"
+            value={balance.currentBalance}
+            onCommit={onUpdateBalance}
+            display={<span title="Click to update balance — sets starting balance to this value as of today">{formatUSD(balance.currentBalance)}</span>}
+            inputClassName="text-right"
+          />
+        ) : (
+          formatUSD(balance.currentBalance)
+        )}
       </div>
 
       <div className="text-right flex items-center justify-end gap-0.5">

@@ -19,7 +19,9 @@ const TYPES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'savings',    label: 'Savings' },
   { value: 'credit',     label: 'Credit card' },
   { value: 'loan',       label: 'Loan' },
-  { value: 'investment', label: 'Investment' }
+  { value: 'mortgage',   label: 'Mortgage' },
+  { value: 'investment', label: 'Investment' },
+  { value: 'property',   label: 'Property' }
 ]
 
 export interface EditAccountDialogProps {
