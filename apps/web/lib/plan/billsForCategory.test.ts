@@ -14,6 +14,7 @@ function bill(over: Partial<BillForCategory> = {}): BillForCategory {
     due_day: 1,
     due_month_anchor: null,
     account: null,
+    created_at: null,
     ...over
   }
 }

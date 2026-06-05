@@ -16,6 +16,7 @@ function bill(over: Partial<BillForCommitment> = {}): BillForCommitment {
     frequency: null,
     due_day: null,
     due_month_anchor: null,
+    created_at: null,
     ...over
   }
 }

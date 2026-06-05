@@ -271,6 +271,78 @@ describe('occurrencesInMonth', () => {
   })
 })
 
+describe('occurrencesInMonth — created_at gates the first occurrence', () => {
+  // Regression: a Quarterly bill anchored to September, created on June 5,
+  // was showing up in the June Plan because June IS in the every-3-months
+  // cycle (Jun/Sep/Dec/Mar). The UI label says "Anchor month (first
+  // occurrence)" — so the cycle should START at Sep, not include June.
+  it('does NOT count June when a Sep-anchored quarterly bill was created in June', () => {
+    const bill = {
+      due_day: 1,
+      frequency: 'Quarterly',
+      due_month_anchor: 9,
+      created_at: '2026-06-05T19:28:40Z'
+    }
+    expect(occurrencesInMonth(bill, 2026, 6)).toBe(0)
+    expect(occurrencesInMonth(bill, 2026, 9)).toBe(1)
+    expect(occurrencesInMonth(bill, 2026, 12)).toBe(1)
+    expect(occurrencesInMonth(bill, 2027, 3)).toBe(1)
+    expect(occurrencesInMonth(bill, 2027, 6)).toBe(1)
+  })
+
+  it('counts every cycle month once the bill has been around a full cycle', () => {
+    const bill = {
+      due_day: 1,
+      frequency: 'Quarterly',
+      due_month_anchor: 9,
+      created_at: '2025-01-15T00:00:00Z'  // created before Sep 2025
+    }
+    // First occurrence is Sep 2025; from there every quarterly month counts.
+    expect(occurrencesInMonth(bill, 2025, 9)).toBe(1)
+    expect(occurrencesInMonth(bill, 2025, 12)).toBe(1)
+    expect(occurrencesInMonth(bill, 2026, 3)).toBe(1)
+    expect(occurrencesInMonth(bill, 2026, 6)).toBe(1)
+    expect(occurrencesInMonth(bill, 2026, 9)).toBe(1)
+  })
+
+  it('bumps to the next year when created_at month is AFTER the anchor', () => {
+    const bill = {
+      due_day: 1,
+      frequency: 'Quarterly',
+      due_month_anchor: 9,
+      created_at: '2026-11-05T00:00:00Z'  // created Nov, after Sep
+    }
+    expect(occurrencesInMonth(bill, 2026, 12)).toBe(0)  // before first occurrence
+    expect(occurrencesInMonth(bill, 2027, 3)).toBe(0)   // before first occurrence
+    expect(occurrencesInMonth(bill, 2027, 6)).toBe(0)   // before first occurrence
+    expect(occurrencesInMonth(bill, 2027, 9)).toBe(1)   // first occurrence — Sep 2027
+    expect(occurrencesInMonth(bill, 2027, 12)).toBe(1)
+  })
+
+  it('annual bill gates the same way — only counts in the anchor month at/after creation', () => {
+    const bill = {
+      due_day: 15,
+      frequency: 'Annual',
+      due_month_anchor: 4,
+      created_at: '2026-06-05T00:00:00Z'  // created Jun, after Apr
+    }
+    expect(occurrencesInMonth(bill, 2026, 4)).toBe(0)  // already past before created
+    expect(occurrencesInMonth(bill, 2027, 4)).toBe(1)  // next April
+    expect(occurrencesInMonth(bill, 2028, 4)).toBe(1)
+  })
+
+  it('falls back to pure cycle behavior when created_at is null (legacy callers)', () => {
+    const bill = {
+      due_day: 1,
+      frequency: 'Quarterly',
+      due_month_anchor: 9,
+      created_at: null
+    }
+    expect(occurrencesInMonth(bill, 2026, 6)).toBe(1)  // cycle-only — counts
+    expect(occurrencesInMonth(bill, 2026, 9)).toBe(1)
+  })
+})
+
 describe('monthlyOccurrenceCount (legacy average)', () => {
   it('still reports 2 for biweekly and 1 for monthly', () => {
     expect(monthlyOccurrenceCount({ due_day: 1, frequency: 'Biweekly' })).toBe(2)

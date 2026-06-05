@@ -17,7 +17,7 @@ export type BillRow = Tables<'bills'>
  */
 export type BillForCommitment = Pick<
   BillRow,
-  'budget_amount' | 'budget_category_id' | 'is_active' | 'frequency' | 'due_day' | 'due_month_anchor'
+  'budget_amount' | 'budget_category_id' | 'is_active' | 'frequency' | 'due_day' | 'due_month_anchor' | 'created_at'
 >
 
 export interface BudgetVsActualRow {
@@ -109,7 +109,12 @@ export function deriveBudgetVsActual(input: DeriveInput): ReadonlyArray<BudgetVs
     const cid = b.budget_category_id
     if (!cid) continue
     const count = occurrencesInMonth(
-      { due_day: b.due_day, frequency: b.frequency, due_month_anchor: b.due_month_anchor },
+      {
+        due_day: b.due_day,
+        frequency: b.frequency,
+        due_month_anchor: b.due_month_anchor,
+        created_at: b.created_at
+      },
       period.year,
       period.month
     )

@@ -34,6 +34,15 @@ export interface BillCadenceInput {
   readonly due_day: number | null
   readonly frequency: string | null
   readonly due_month_anchor?: number | null
+  /**
+   * ISO timestamp of when the bill was created. Optional — when present,
+   * Quarterly/Annual cadences use it to anchor the FIRST occurrence
+   * (matches the UI label "Anchor month (first occurrence)"). Without it,
+   * the cadence falls back to treating the anchor as a cycle position
+   * (legacy behavior — kept so we don't break test fixtures that don't
+   * supply a created_at).
+   */
+  readonly created_at?: string | null
 }
 
 /**
@@ -160,21 +169,50 @@ export function occurrencesInMonth(
   if (cadence === 'monthly') return 1
   if (cadence === 'biweekly') return 2
 
-  if (cadence === 'annual') {
-    const anchor = bill.due_month_anchor
-    if (anchor == null) return 0
-    return month === anchor ? 1 : 0
-  }
-  if (cadence === 'quarterly') {
+  if (cadence === 'annual' || cadence === 'quarterly') {
     const anchor = bill.due_month_anchor
     if (anchor == null) return 0
     if (anchor < 1 || anchor > 12) return 0
-    const diff = ((month - anchor) % 3 + 3) % 3
-    return diff === 0 ? 1 : 0
+    if (cadence === 'annual') {
+      if (month !== anchor) return 0
+    } else {
+      // (month - anchor) ≡ 0 (mod 3), normalized to a positive remainder
+      // so Dec-anchor / Mar-test wraps correctly.
+      const diff = ((month - anchor) % 3 + 3) % 3
+      if (diff !== 0) return 0
+    }
+
+    // "Anchor month (first occurrence)" UI semantics: the bill starts
+    // hitting on the first cycle-month at or after the bill's created_at.
+    // Without this, a Quarterly anchored to Sep created in June would
+    // retroactively count June (which is "in cycle" but BEFORE the user's
+    // expected first hit). Only gates when created_at is supplied; legacy
+    // call sites without it keep the pure-cycle behavior.
+    if (bill.created_at) {
+      const created = parseYearMonth(bill.created_at)
+      if (created) {
+        const firstOccurrenceYear = created.month <= anchor
+          ? created.year
+          : created.year + 1
+        if (year < firstOccurrenceYear) return 0
+        if (year === firstOccurrenceYear && month < anchor) return 0
+      }
+    }
+
+    return 1
   }
   // Defensive: unknown cadence → treat as monthly.
   void year
   return 1
+}
+
+function parseYearMonth(iso: string): { year: number; month: number } | null {
+  const m = /^(\d{4})-(\d{2})/.exec(iso)
+  if (!m) return null
+  const year = parseInt(m[1]!, 10)
+  const month = parseInt(m[2]!, 10)
+  if (!Number.isFinite(year) || month < 1 || month > 12) return null
+  return { year, month }
 }
 
 /**

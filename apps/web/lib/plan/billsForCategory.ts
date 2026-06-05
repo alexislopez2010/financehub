@@ -22,6 +22,7 @@ export type BillForCategory = Pick<
   | 'due_day'
   | 'due_month_anchor'
   | 'account'
+  | 'created_at'
 >
 
 /**
@@ -87,7 +88,12 @@ export function billsForCategory(input: BillsForCategoryInput): ReadonlyArray<Bi
     if (b.is_active !== true) continue
     if (b.budget_category_id !== categoryId) continue
     const count = occurrencesInMonth(
-      { due_day: b.due_day, frequency: b.frequency, due_month_anchor: b.due_month_anchor },
+      {
+        due_day: b.due_day,
+        frequency: b.frequency,
+        due_month_anchor: b.due_month_anchor,
+        created_at: b.created_at
+      },
       period.year,
       period.month
     )
