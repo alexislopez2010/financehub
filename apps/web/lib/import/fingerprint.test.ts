@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { computeFingerprint, computeFingerprintsBatch } from './fingerprint'
+import {
+  computeFingerprint,
+  computeFingerprintsBatch,
+  normalizeDescriptionForFingerprint
+} from './fingerprint'
 
 describe('computeFingerprint', () => {
   it('matches the Python importer output for a known fixture (NETFLIX/Chase Sapphire)', async () => {
@@ -168,5 +172,69 @@ describe('computeFingerprintsBatch', () => {
     // Assert
     expect(fps[0]).toBe(fps[1])
     expect(fps[1]).toBe(fps[2])
+  })
+})
+
+describe('normalizeDescriptionForFingerprint', () => {
+  it('collapses internal whitespace runs', () => {
+    expect(normalizeDescriptionForFingerprint('UNITED AIRLINES     HOUSTON             TX'))
+      .toBe('UNITED AIRLINES HOUSTON TX')
+  })
+
+  it('strips a single trailing parenthetical (Amex extra-detail suffix)', () => {
+    const long = 'UNITED AIRLINES HOUSTON TX (ALEXIS LOPEZ-41007-13386046    WWW.UNITED.COM UNITED AIRLINES HOUSTON TX)'
+    expect(normalizeDescriptionForFingerprint(long)).toBe('UNITED AIRLINES HOUSTON TX')
+  })
+
+  it('keeps a parenthetical that is NOT at the end', () => {
+    expect(normalizeDescriptionForFingerprint('PAYPAL (ID 123) THANK YOU'))
+      .toBe('PAYPAL (ID 123) THANK YOU')
+  })
+
+  it('trims surrounding whitespace', () => {
+    expect(normalizeDescriptionForFingerprint('   STARBUCKS   ')).toBe('STARBUCKS')
+  })
+
+  it('is a no-op for already-clean descriptions', () => {
+    expect(normalizeDescriptionForFingerprint('NETFLIX')).toBe('NETFLIX')
+    expect(normalizeDescriptionForFingerprint('CHASE PAYMENT')).toBe('CHASE PAYMENT')
+  })
+})
+
+describe('computeFingerprint — Amex re-export collapse', () => {
+  it('collapses Amex short-form + long-form duplicates into the same fingerprint', async () => {
+    // Regression: the Amex Platinum CSV re-exported the same charge with
+    // extra detail in a trailing parenthetical, producing a different
+    // fingerprint and a "ghost duplicate" in the DB. After normalization
+    // both shapes must collapse to the same hash so dedup catches it.
+    const short = {
+      date: '2026-05-12',
+      description: 'UNITED AIRLINES     HOUSTON             TX',
+      amount: -24,
+      account: 'American Express Platinum'
+    }
+    const long = {
+      date: '2026-05-12',
+      description: 'UNITED AIRLINES HOUSTON TX (ALEXIS LOPEZ-41007-13386046    WWW.UNITED.COM UNITED AIRLINES HOUSTON TX)',
+      amount: -24,
+      account: 'American Express Platinum'
+    }
+    expect(await computeFingerprint(short)).toBe(await computeFingerprint(long))
+  })
+
+  it('does NOT collapse genuinely different descriptions on the same day/amount', async () => {
+    const a = {
+      date: '2026-05-12',
+      description: 'STARBUCKS',
+      amount: -24,
+      account: 'Amex'
+    }
+    const b = {
+      date: '2026-05-12',
+      description: 'UNITED AIRLINES',
+      amount: -24,
+      account: 'Amex'
+    }
+    expect(await computeFingerprint(a)).not.toBe(await computeFingerprint(b))
   })
 })

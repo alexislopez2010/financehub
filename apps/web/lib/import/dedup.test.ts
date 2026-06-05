@@ -69,6 +69,28 @@ describe('dedup', () => {
     expect(result.duplicateRows.map(r => r.fingerprint)).toEqual(['bbbb', 'bbbb'])
   })
 
+  it('dedupes IN-BATCH duplicates even when the fingerprint is not in the existing set', () => {
+    // Regression: an Amex Platinum CSV exported the same charge 2–4 times
+    // in one file. Pre-fix, only the first row was checked against the DB
+    // and the rest sailed through unchecked because they shared the SAME
+    // fingerprint, producing 29 in-batch ghost copies. The fix keeps the
+    // first occurrence and routes subsequent identical fingerprints to
+    // duplicateRows.
+    const rows = [
+      row({ fingerprint: 'aaaaaaaaaaaaaaaa', description: 'United wifi' }),
+      row({ fingerprint: 'aaaaaaaaaaaaaaaa', description: 'United wifi' }),
+      row({ fingerprint: 'aaaaaaaaaaaaaaaa', description: 'United wifi' }),
+      row({ fingerprint: 'bbbbbbbbbbbbbbbb', description: 'Anthropic' }),
+      row({ fingerprint: 'bbbbbbbbbbbbbbbb', description: 'Anthropic' })
+    ]
+    const result = dedup(rows, new Set())
+    expect(result.newRows.map(r => r.fingerprint)).toEqual([
+      'aaaaaaaaaaaaaaaa',
+      'bbbbbbbbbbbbbbbb'
+    ])
+    expect(result.duplicateRows).toHaveLength(3)
+  })
+
   it('preserves input order within each bucket', () => {
     // Arrange
     const rows = [

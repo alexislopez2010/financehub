@@ -10,6 +10,17 @@ export interface DedupResult {
 /**
  * Splits incoming rows into new vs duplicate based on the supplied fingerprint set.
  * Pure — no DB calls. Caller fetches existing fingerprints separately.
+ *
+ * Dedup is applied in two passes against the same fingerprint set:
+ *   1. Against the DB's existing fingerprints (`existingFingerprints`).
+ *   2. Against the in-batch set built up as we iterate. A CSV exported
+ *      with the same charge repeated (American Express occasionally does
+ *      this) would otherwise survive step 1 — all rows in the batch are
+ *      "new" relative to the DB — but each subsequent occurrence of the
+ *      same fingerprint inside this batch is a duplicate.
+ *
+ * This eliminates the 17 in-batch identical-fingerprint duplicates we
+ * cleaned up on the Amex Platinum account in commit XX (see history).
  */
 export function dedup(
   incoming: ReadonlyArray<ImportRow>,
@@ -17,11 +28,13 @@ export function dedup(
 ): DedupResult {
   const newRows: ImportRow[] = []
   const duplicateRows: ImportRow[] = []
+  const seenInBatch = new Set<string>()
 
   for (const row of incoming) {
-    if (existingFingerprints.has(row.fingerprint)) {
+    if (existingFingerprints.has(row.fingerprint) || seenInBatch.has(row.fingerprint)) {
       duplicateRows.push(row)
     } else {
+      seenInBatch.add(row.fingerprint)
       newRows.push(row)
     }
   }
