@@ -13,6 +13,14 @@ export type TransactionRow = Tables<'transactions'>
  * Default order: date descending, then created_at descending (stable when
  * multiple txs share a date).
  */
+/**
+ * Page size used for batched fetches. PostgREST caps a single response at
+ * ~1000 rows by default, so we paginate to guarantee we never silently
+ * truncate. Bumping the in-DB cap is a separate exercise — this fixes the
+ * client correctness independently.
+ */
+const TRANSACTIONS_PAGE_SIZE = 1000
+
 export function useTransactions(
   filters?: TransactionFilters
 ): UseQueryResult<ReadonlyArray<TransactionRow>, Error> {
@@ -20,36 +28,51 @@ export function useTransactions(
     queryKey: queryKeys.transactions(filters),
     async queryFn() {
       const supabase = createClient()
-      let q = supabase
-        .from('transactions')
-        .select('*')
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
 
-      if (filters?.startDate) q = q.gte('date', filters.startDate)
-      if (filters?.endDate) q = q.lte('date', filters.endDate)
-      if (filters?.categoryId !== undefined) {
-        q = filters.categoryId === null
-          ? q.is('category_id', null)
-          : q.eq('category_id', filters.categoryId)
-      }
-      if (filters?.account) q = q.eq('account', filters.account)
-      if (filters?.member === null) {
-        q = q.is('member', null)
-      } else if (filters?.member) {
-        q = q.eq('member', filters.member)
-      }
-      if (filters?.type) q = q.eq('type', filters.type)
-      if (filters?.minAmount !== undefined && Number.isFinite(filters.minAmount)) {
-        q = q.gte('amount', filters.minAmount)
-      }
-      if (filters?.maxAmount !== undefined && Number.isFinite(filters.maxAmount)) {
-        q = q.lte('amount', filters.maxAmount)
+      /** Returns a fresh builder with all filters applied — used for each page. */
+      const buildQuery = () => {
+        let q = supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
+
+        if (filters?.startDate) q = q.gte('date', filters.startDate)
+        if (filters?.endDate) q = q.lte('date', filters.endDate)
+        if (filters?.categoryId !== undefined) {
+          q = filters.categoryId === null
+            ? q.is('category_id', null)
+            : q.eq('category_id', filters.categoryId)
+        }
+        if (filters?.account) q = q.eq('account', filters.account)
+        if (filters?.member === null) {
+          q = q.is('member', null)
+        } else if (filters?.member) {
+          q = q.eq('member', filters.member)
+        }
+        if (filters?.type) q = q.eq('type', filters.type)
+        if (filters?.minAmount !== undefined && Number.isFinite(filters.minAmount)) {
+          q = q.gte('amount', filters.minAmount)
+        }
+        if (filters?.maxAmount !== undefined && Number.isFinite(filters.maxAmount)) {
+          q = q.lte('amount', filters.maxAmount)
+        }
+        return q
       }
 
-      const { data, error } = await q
-      if (error) throw error
-      return data ?? []
+      // Paginate until we get a short page back. Safety cap at 50 iterations
+      // (= 50k rows) to guarantee progress and bound worst-case fetch time.
+      const all: TransactionRow[] = []
+      for (let page = 0; page < 50; page++) {
+        const from = page * TRANSACTIONS_PAGE_SIZE
+        const to = from + TRANSACTIONS_PAGE_SIZE - 1
+        const { data, error } = await buildQuery().range(from, to)
+        if (error) throw error
+        if (!data || data.length === 0) break
+        all.push(...data)
+        if (data.length < TRANSACTIONS_PAGE_SIZE) break
+      }
+      return all
     }
   })
 }
