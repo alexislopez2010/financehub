@@ -19,6 +19,7 @@ import { useTransactions } from '@/lib/data/transactions'
 import { useIncomePlan } from '@/lib/data/incomePlan'
 import { useBudgets } from '@/lib/data/budgets'
 import { KpiTile } from '@/components/ui/KpiTile'
+import { BriefingKpiDrawer, type KpiKind } from './BriefingKpiDrawer'
 import { RulerList, type RulerListItem } from '@/components/ui/RulerList'
 import { ForecastChart, type ForecastChartPoint } from '@/components/charts/ForecastChart'
 import { deriveKpisAndExtras } from '@/lib/briefing/kpis'
@@ -59,6 +60,14 @@ export function Briefing() {
   // Budget Snapshot, Top Merchants, Income vs Expense). Defaults to the
   // current calendar month and updates via PeriodSelector.
   const [period, setPeriod] = useState<PlanPeriod>(() => currentPeriod())
+  /**
+   * Which KPI tile's breakdown drawer is open. null = none. Clicking the
+   * same tile twice closes the drawer; clicking a different tile switches.
+   */
+  const [expandedKpi, setExpandedKpi] = useState<KpiKind | null>(null)
+  function toggleKpi(kind: KpiKind) {
+    setExpandedKpi(prev => (prev === kind ? null : kind))
+  }
 
   const isCurrentPeriod =
     period.year === realToday.year && period.month === realToday.month
@@ -324,12 +333,16 @@ export function Briefing() {
           value={formatUSDCompact(kpis.cash)}
           icon={Wallet}
           iconTone="emerald"
+          onClick={() => toggleKpi('cash')}
+          active={expandedKpi === 'cash'}
         />
         <KpiTile
           label="Debt"
           value={formatUSDCompact(kpis.debt)}
           icon={CreditCard}
           iconTone="red"
+          onClick={() => toggleKpi('debt')}
+          active={expandedKpi === 'debt'}
         />
         {/* Assets tile only renders when the household actually has
             illiquid asset accounts (property/investment/asset). Keeps the
@@ -343,6 +356,8 @@ export function Briefing() {
             captionTone="neutral"
             icon={Home}
             iconTone="purple"
+            onClick={() => toggleKpi('assets')}
+            active={expandedKpi === 'assets'}
           />
         )}
         <KpiTile
@@ -359,6 +374,8 @@ export function Briefing() {
           captionTone={thisMonthPositive ? 'positive' : kpis.thisMonthNet < 0 ? 'negative' : 'neutral'}
           icon={thisMonthPositive ? TrendingUp : TrendingDown}
           iconTone={thisMonthPositive ? 'emerald' : 'red'}
+          onClick={() => toggleKpi('this-month')}
+          active={expandedKpi === 'this-month'}
         />
         <KpiTile
           label="Net Worth"
@@ -367,6 +384,8 @@ export function Briefing() {
           captionTone={netWorth >= 0 ? 'positive' : 'negative'}
           icon={Coins}
           iconTone="purple"
+          onClick={() => toggleKpi('net-worth')}
+          active={expandedKpi === 'net-worth'}
         />
         <KpiTile
           label="Savings Rate"
@@ -375,6 +394,8 @@ export function Briefing() {
           captionTone={savingsRateTone}
           icon={PiggyBank}
           iconTone="emerald"
+          onClick={() => toggleKpi('savings-rate')}
+          active={expandedKpi === 'savings-rate'}
         />
         <KpiTile
           label="Burn Rate"
@@ -383,8 +404,43 @@ export function Briefing() {
           captionTone={runwayTone}
           icon={Flame}
           iconTone="red"
+          onClick={() => toggleKpi('burn-rate')}
+          active={expandedKpi === 'burn-rate'}
         />
       </div>
+
+      {/* KPI breakdown drawer — shows the accounts / formula inputs that
+          make up whichever tile the user just clicked. Pattern mirrors the
+          Plan surface's BudgetRowDrawer: rendered below the row of tiles
+          so the user keeps context. */}
+      {expandedKpi && (
+        <BriefingKpiDrawer
+          kind={expandedKpi}
+          onClose={() => setExpandedKpi(null)}
+          accounts={accounts}
+          transactions={txs}
+          kpis={kpis}
+          extras={extras}
+          headerLabel={({
+            'cash': 'Cash',
+            'assets': 'Assets',
+            'debt': 'Debt',
+            'net-worth': 'Net Worth',
+            'this-month': 'This Month',
+            'savings-rate': 'Savings Rate',
+            'burn-rate': 'Burn Rate'
+          } as const)[expandedKpi]}
+          headerValue={({
+            'cash': formatUSDCompact(kpis.cash),
+            'assets': formatUSDCompact(kpis.assets),
+            'debt': formatUSDCompact(kpis.debt),
+            'net-worth': formatUSDCompact(netWorth),
+            'this-month': (kpis.thisMonthNet >= 0 ? '+' : '-') + formatUSDCompact(Math.abs(kpis.thisMonthNet)),
+            'savings-rate': `${savingsRatePct}%`,
+            'burn-rate': `$${burnRateRounded}/d`
+          } as const)[expandedKpi]}
+        />
+      )}
 
       {/* Row 1: where money went */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

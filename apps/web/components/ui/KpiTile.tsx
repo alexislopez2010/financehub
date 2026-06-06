@@ -12,6 +12,19 @@ export interface KpiTileProps {
   icon?: LucideIcon
   iconTone?: IconTone
   className?: string
+  /**
+   * When supplied, the tile becomes a button that calls onClick. Used by
+   * the Briefing to open a per-KPI breakdown drawer so the user can see
+   * which accounts / transactions / inputs roll up to the displayed
+   * number.
+   */
+  onClick?: () => void
+  /**
+   * Active state — applied when the tile's drawer is open. Lights up the
+   * border + background so the user sees which drawer belongs to which
+   * tile after scrolling down.
+   */
+  active?: boolean
 }
 
 const iconToneClasses: Record<IconTone, string> = {
@@ -37,12 +50,18 @@ const captionArrow: Record<CaptionTone, string> = {
 
 export function KpiTile({
   label, value, caption, captionTone = 'neutral',
-  icon: Icon, iconTone = 'gray', className
+  icon: Icon, iconTone = 'gray', className, onClick, active
 }: KpiTileProps) {
+  const Wrapper = onClick ? 'button' : 'div'
   return (
-    <div
+    <Wrapper
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      aria-pressed={onClick ? active === true : undefined}
       className={cn(
-        'bg-surface border border-rule rounded-xl p-5 shadow-sm flex flex-col gap-3',
+        'bg-surface border rounded-xl p-5 shadow-sm flex flex-col gap-3 text-left',
+        onClick && 'cursor-pointer hover:border-ink/30 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-brand/40',
+        active ? 'border-brand ring-2 ring-brand/20' : 'border-rule',
         className
       )}
     >
@@ -71,6 +90,6 @@ export function KpiTile({
           {caption}
         </div>
       )}
-    </div>
+    </Wrapper>
   )
 }
