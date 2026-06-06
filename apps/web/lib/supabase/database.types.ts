@@ -455,6 +455,51 @@ export type Database = {
         }
         Relationships: []
       }
+      transaction_splits: {
+        Row: {
+          id: string
+          household_id: string
+          transaction_id: string
+          amount: number
+          member: string | null
+          category: string | null
+          category_id: string | null
+          sub_category: string | null
+          notes: string | null
+          exclude_from_runway: boolean | null
+          display_order: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          transaction_id: string
+          amount: number
+          member?: string | null
+          category?: string | null
+          category_id?: string | null
+          sub_category?: string | null
+          notes?: string | null
+          exclude_from_runway?: boolean | null
+          display_order?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          household_id?: string
+          transaction_id?: string
+          amount?: number
+          member?: string | null
+          category?: string | null
+          category_id?: string | null
+          sub_category?: string | null
+          notes?: string | null
+          exclude_from_runway?: boolean | null
+          display_order?: number
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           account: string | null

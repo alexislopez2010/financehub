@@ -43,6 +43,7 @@ export const queryKeys = {
 
   bills: () => ['bills'] as const,
   billMatchRules: () => ['billMatchRules'] as const,
+  transactionSplits: () => ['transactionSplits'] as const,
   budgets: (period: BudgetPeriod) => ['budgets', period] as const,
   accounts: () => ['accounts'] as const,
   categories: () => ['categories'] as const,
