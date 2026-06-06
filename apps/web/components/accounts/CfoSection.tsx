@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { TrendingUp, TrendingDown, PiggyBank, Scale, Coins, Receipt, Calendar, Wallet } from 'lucide-react'
 import { useAccounts } from '@/lib/data/accounts'
 import { useTransactions } from '@/lib/data/transactions'
@@ -8,6 +8,7 @@ import { useDebts } from '@/lib/data/debts'
 import { deriveBalances } from '@/lib/accounts/balances'
 import { deriveCfoKpis } from '@/lib/accounts/cfo'
 import { KpiTile } from '@/components/ui/KpiTile'
+import { CfoKpiDrawer, type CfoKpiKind } from './CfoKpiDrawer'
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -35,6 +36,12 @@ export function CfoSection() {
     const d = new Date()
     return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() }
   }, [])
+
+  /** Which tile is currently drilled. Same pattern as the Briefing. */
+  const [expandedKpi, setExpandedKpi] = useState<CfoKpiKind | null>(null)
+  function toggleKpi(kind: CfoKpiKind) {
+    setExpandedKpi(prev => (prev === kind ? null : kind))
+  }
 
   const summary = useMemo(() => deriveBalances({
     accounts: accountsQ.data ?? [],
@@ -69,6 +76,29 @@ export function CfoSection() {
   const savingsTone = kpis.savingsRate >= 0.2 ? 'positive' : kpis.savingsRate >= 0 ? 'neutral' : 'negative'
   const dtiTone = kpis.debtToIncomeRatio < 0.36 ? 'positive' : kpis.debtToIncomeRatio < 0.5 ? 'neutral' : 'negative'
 
+  // Compact labels + values used in the drawer header so the user can see
+  // which tile they're looking at after scrolling.
+  const drawerHeaderLabel: Record<CfoKpiKind, string> = {
+    'net-worth':    'Net Worth',
+    'ytd-income':   'YTD Income',
+    'ytd-expense':  'YTD Expense',
+    'ytd-net':      'YTD Net',
+    'total-debt':   'Total Debt',
+    'cash-runway':  'Cash Runway',
+    'cash-on-hand': 'Cash on Hand',
+    'investments':  'Investments'
+  }
+  const drawerHeaderValue: Record<CfoKpiKind, string> = {
+    'net-worth':    formatUSD(kpis.netWorth),
+    'ytd-income':   formatUSD(kpis.ytdIncome),
+    'ytd-expense':  formatUSD(kpis.ytdExpense),
+    'ytd-net':      formatUSD(kpis.ytdNet),
+    'total-debt':   formatUSD(kpis.totalDebt),
+    'cash-runway':  formatMonths(kpis.cashRunwayMonths),
+    'cash-on-hand': formatUSD(summary.totalCash),
+    'investments':  formatUSD(summary.totalInvestments)
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -79,6 +109,8 @@ export function CfoSection() {
           captionTone={netWorthTone}
           icon={Scale}
           iconTone={kpis.netWorth >= 0 ? 'emerald' : 'red'}
+          onClick={() => toggleKpi('net-worth')}
+          active={expandedKpi === 'net-worth'}
         />
         <KpiTile
           label="YTD Income"
@@ -87,6 +119,8 @@ export function CfoSection() {
           captionTone="neutral"
           icon={TrendingUp}
           iconTone="emerald"
+          onClick={() => toggleKpi('ytd-income')}
+          active={expandedKpi === 'ytd-income'}
         />
         <KpiTile
           label="YTD Expenses"
@@ -95,6 +129,8 @@ export function CfoSection() {
           captionTone="neutral"
           icon={TrendingDown}
           iconTone="red"
+          onClick={() => toggleKpi('ytd-expense')}
+          active={expandedKpi === 'ytd-expense'}
         />
         <KpiTile
           label="YTD Net"
@@ -103,6 +139,8 @@ export function CfoSection() {
           captionTone={savingsTone}
           icon={kpis.ytdNet >= 0 ? PiggyBank : Coins}
           iconTone={kpis.ytdNet >= 0 ? 'purple' : 'red'}
+          onClick={() => toggleKpi('ytd-net')}
+          active={expandedKpi === 'ytd-net'}
         />
       </div>
 
@@ -114,6 +152,8 @@ export function CfoSection() {
           captionTone={dtiTone}
           icon={Receipt}
           iconTone={kpis.totalDebt > 0 ? 'red' : 'gray'}
+          onClick={() => toggleKpi('total-debt')}
+          active={expandedKpi === 'total-debt'}
         />
         <KpiTile
           label="Cash Runway"
@@ -122,6 +162,8 @@ export function CfoSection() {
           captionTone={kpis.cashRunwayMonths >= 6 ? 'positive' : kpis.cashRunwayMonths >= 3 ? 'neutral' : 'negative'}
           icon={Calendar}
           iconTone="blue"
+          onClick={() => toggleKpi('cash-runway')}
+          active={expandedKpi === 'cash-runway'}
         />
         <KpiTile
           label="Cash on Hand"
@@ -130,6 +172,8 @@ export function CfoSection() {
           captionTone="neutral"
           icon={Wallet}
           iconTone="blue"
+          onClick={() => toggleKpi('cash-on-hand')}
+          active={expandedKpi === 'cash-on-hand'}
         />
         <KpiTile
           label="Investments"
@@ -138,8 +182,25 @@ export function CfoSection() {
           captionTone="neutral"
           icon={TrendingUp}
           iconTone="purple"
+          onClick={() => toggleKpi('investments')}
+          active={expandedKpi === 'investments'}
         />
       </div>
+
+      {expandedKpi && (
+        <CfoKpiDrawer
+          kind={expandedKpi}
+          onClose={() => setExpandedKpi(null)}
+          summary={summary}
+          kpis={kpis}
+          transactions={txsQ.data ?? []}
+          debts={debtsQ.data ?? []}
+          year={today.year}
+          monthsElapsed={today.month}
+          headerLabel={drawerHeaderLabel[expandedKpi]}
+          headerValue={drawerHeaderValue[expandedKpi]}
+        />
+      )}
     </div>
   )
 }
