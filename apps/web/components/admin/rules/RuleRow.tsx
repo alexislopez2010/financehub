@@ -116,7 +116,7 @@ export function RuleRow({ rule, categories, linkedBill }: RuleRowProps) {
 
   return (
     <li className="group flex flex-col gap-1 px-4 py-2.5 text-sm">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] items-center gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_1fr_auto] items-center gap-3">
         <div className="min-w-0 flex items-center gap-2">
           <EditableCell
             variant="text"
@@ -159,6 +159,38 @@ export function RuleRow({ rule, categories, linkedBill }: RuleRowProps) {
         */}
         <div className="text-[10px] uppercase tracking-wider text-muted whitespace-nowrap" title="Match type: substring (description contains the matcher).">
           contains
+        </div>
+
+        {/*
+          Category mover. Always present so a rule sitting under the wrong
+          category (or "(no category)" entirely) can be reassigned without
+          delete+recreate. The display is empty/muted when the rule already
+          has a direct category — visually low-noise in normal sections —
+          but loud + colored when the rule is orphan so the user is nudged
+          to set one.
+        */}
+        <div className="min-w-0">
+          <EditableCell
+            variant="select"
+            value={rule.category ?? UNSET_VALUE}
+            options={categoryOptions}
+            onCommit={handleCategoryCommit}
+            display={
+              <span
+                className={cn(
+                  'truncate text-[12px]',
+                  categoryDisplay
+                    ? 'text-muted'    /* informational — group header already shows it */
+                    : 'text-red-600 italic font-medium'  /* nudge to fix */
+                )}
+                title={categoryDisplay
+                  ? `Click to move this rule to a different category.`
+                  : 'This rule has no category — click to assign one and it will jump out of this section.'}
+              >
+                {categoryDisplay || '(set category)'}
+              </span>
+            }
+          />
         </div>
 
         <div className="min-w-0">
