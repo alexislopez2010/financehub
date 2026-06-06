@@ -186,9 +186,12 @@ describe('normalizeDescriptionForFingerprint', () => {
     expect(normalizeDescriptionForFingerprint(long)).toBe('UNITED AIRLINES HOUSTON TX')
   })
 
-  it('keeps a parenthetical that is NOT at the end', () => {
+  it('strips parens that are NOT at the end (they are punctuation too)', () => {
+    // Original policy preserved mid-string parens. New policy strips ALL
+    // punctuation so the dedup catches "PAYPAL (ID 123) THANK YOU" and
+    // "PAYPAL ID 123 THANK YOU" as the same charge.
     expect(normalizeDescriptionForFingerprint('PAYPAL (ID 123) THANK YOU'))
-      .toBe('PAYPAL (ID 123) THANK YOU')
+      .toBe('PAYPAL ID 123 THANK YOU')
   })
 
   it('trims surrounding whitespace', () => {
@@ -198,6 +201,25 @@ describe('normalizeDescriptionForFingerprint', () => {
   it('is a no-op for already-clean descriptions', () => {
     expect(normalizeDescriptionForFingerprint('NETFLIX')).toBe('NETFLIX')
     expect(normalizeDescriptionForFingerprint('CHASE PAYMENT')).toBe('CHASE PAYMENT')
+  })
+
+  it('deletes punctuation so "LOB.COM" collapses to "LOBCOM"', () => {
+    // Regression: Amex re-exported the same charge two ways across two
+    // imports, one with the dot ("LOB.COM") and one without ("LOBCOM").
+    // Both must produce the same fingerprint.
+    expect(normalizeDescriptionForFingerprint('LOB.COM             SAN FRANCISCO       CA'))
+      .toBe('LOBCOM SAN FRANCISCO CA')
+    expect(normalizeDescriptionForFingerprint('LOBCOM SAN FRANCISCO CA'))
+      .toBe('LOBCOM SAN FRANCISCO CA')
+  })
+
+  it('strips other punctuation that appears in merchant feeds', () => {
+    // Apostrophes, ampersands, hyphens, asterisks — all stripped without
+    // splitting tokens further. "JOE'S DINER" → "JOES DINER" still
+    // matches "JOES DINER".
+    expect(normalizeDescriptionForFingerprint("JOE'S DINER")).toBe('JOES DINER')
+    expect(normalizeDescriptionForFingerprint('AT&T MOBILITY')).toBe('ATT MOBILITY')
+    expect(normalizeDescriptionForFingerprint('GOOGLE *TV')).toBe('GOOGLE TV')
   })
 })
 

@@ -53,6 +53,12 @@ function pythonFloatStr(n: number): string {
  *     trailing parenthetical is removed and only if it has no nested
  *     parens — keeps merchants whose actual name contains parens (rare)
  *     safe.
+ *   - Delete remaining punctuation. AmEx occasionally exports the same
+ *     merchant two different ways across feeds — one with the dot in
+ *     "LOB.COM" and one as "LOBCOM" — and we want those to collapse to
+ *     the same fingerprint. Punctuation is *deleted*, not replaced with
+ *     space, so "LOB.COM" → "LOBCOM" matches the dot-less variant
+ *     exactly. Letters/digits/whitespace are preserved.
  *   - Trim outer whitespace.
  *
  * Exported so the SQL backfill and the test suite can use the same rule.
@@ -60,6 +66,10 @@ function pythonFloatStr(n: number): string {
 export function normalizeDescriptionForFingerprint(d: string): string {
   let s = d.replace(/\s+/g, ' ').trim()
   s = s.replace(/\s*\([^()]*\)\s*$/, '').trim()
+  // Delete non-alphanumeric / non-whitespace chars (punctuation). Then
+  // re-collapse whitespace in case adjacent punctuation produced runs.
+  s = s.replace(/[^\p{L}\p{N}\s]/gu, '')
+  s = s.replace(/\s+/g, ' ').trim()
   return s
 }
 
