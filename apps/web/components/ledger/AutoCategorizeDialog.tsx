@@ -83,8 +83,12 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
   const txs: ReadonlyArray<TransactionRow> = txQ.data ?? []
   const categories: ReadonlyArray<CategoryRow> = categoriesQ.data ?? []
 
+  // Transfers don't carry a spending category — they're money moving
+  // between accounts, not spend — so exclude them from the
+  // "needs categorization" pool. Otherwise auto-categorize would suggest
+  // spending categories for paydowns, savings transfers, etc.
   const uncategorized = useMemo(
-    () => txs.filter(t => !t.category_id && !t.category),
+    () => txs.filter(t => !t.category_id && !t.category && t.type !== 'Transfer'),
     [txs]
   )
   const categorized = useMemo(

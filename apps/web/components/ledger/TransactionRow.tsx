@@ -187,29 +187,43 @@ export function TransactionRow({
       </div>
 
       <div className="hidden sm:flex sm:items-center sm:min-w-0">
-        {onEditCategory && categoryOptions ? (
-          <EditableCell
-            variant="select"
-            value={tx.category_id ?? ''}
-            options={[{ value: '', label: '(uncategorized)' }, ...categoryOptions]}
-            onCommit={onEditCategory}
-            display={
-              <span className={cn(
-                'inline-flex items-center px-2 py-0.5 rounded-md text-xs',
-                'bg-gray-100 text-gray-700'
-              )}>
-                {tx.category ?? 'Uncategorized'}
-              </span>
-            }
-          />
-        ) : (
-          tx.category && (
+        {(() => {
+          // Transfers don't have a meaningful spending category — they're
+          // money moving between accounts, not spend. When the user hasn't
+          // explicitly set a category, render nothing instead of the noisy
+          // "Uncategorized" badge that sits next to the Transfer pill.
+          // The dropdown still mounts so the user CAN categorize one if
+          // they want (e.g., to tag mortgage principal payments).
+          const isTransferWithNoCategory = tx.type === 'Transfer' && !tx.category
+          if (onEditCategory && categoryOptions) {
+            return (
+              <EditableCell
+                variant="select"
+                value={tx.category_id ?? ''}
+                options={[{ value: '', label: '(uncategorized)' }, ...categoryOptions]}
+                onCommit={onEditCategory}
+                display={
+                  isTransferWithNoCategory ? (
+                    <span className="text-muted text-xs">—</span>
+                  ) : (
+                    <span className={cn(
+                      'inline-flex items-center px-2 py-0.5 rounded-md text-xs',
+                      'bg-gray-100 text-gray-700'
+                    )}>
+                      {tx.category ?? 'Uncategorized'}
+                    </span>
+                  )
+                }
+              />
+            )
+          }
+          return tx.category && (
             <span className={cn(
               'inline-flex items-center px-2 py-0.5 rounded-md text-xs',
               'bg-gray-100 text-gray-700'
             )}>{tx.category}</span>
           )
-        )}
+        })()}
         {tx.type === 'Income' || tx.type === 'Refund' || tx.type === 'Transfer' ? (
           <TypePill type={tx.type} />
         ) : null}
