@@ -309,7 +309,9 @@ export function UploadStep({ onParsed }: UploadStepProps) {
         keyword: r.keyword,
         sub_category: r.sub_category,
         category: r.category,
-        account_filter: r.account_filter
+        account_filter: r.account_filter,
+        tx_type_override: r.tx_type_override,
+        pair_account_filter: r.pair_account_filter
       }))
       const bills: ReadonlyArray<CategorizeBill> = (billsQ.data ?? []).map(b => ({
         id: b.id,

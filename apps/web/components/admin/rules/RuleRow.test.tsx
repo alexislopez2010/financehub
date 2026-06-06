@@ -29,6 +29,8 @@ function makeRule(over: Partial<BillMatchRuleRow> = {}): BillMatchRuleRow {
     keyword: 'mortgage',
     account_filter: null,
     rule_kind: 'name_keyword',
+    tx_type_override: null,
+    pair_account_filter: null,
     created_at: null,
     ...over
   }

@@ -120,8 +120,10 @@ export type Database = {
           household_id: string
           id: string
           keyword: string | null
+          pair_account_filter: string | null
           rule_kind: string
           sub_category: string | null
+          tx_type_override: string | null
         }
         Insert: {
           account_filter?: string | null
@@ -132,8 +134,10 @@ export type Database = {
           household_id: string
           id?: string
           keyword?: string | null
+          pair_account_filter?: string | null
           rule_kind: string
           sub_category?: string | null
+          tx_type_override?: string | null
         }
         Update: {
           account_filter?: string | null
@@ -144,8 +148,10 @@ export type Database = {
           household_id?: string
           id?: string
           keyword?: string | null
+          pair_account_filter?: string | null
           rule_kind?: string
           sub_category?: string | null
+          tx_type_override?: string | null
         }
         Relationships: []
       }

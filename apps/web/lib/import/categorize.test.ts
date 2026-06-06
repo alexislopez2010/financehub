@@ -26,6 +26,8 @@ function rule(over: Partial<CategorizeRule> = {}): CategorizeRule {
     sub_category: null,
     category: null,
     account_filter: null,
+    tx_type_override: null,
+    pair_account_filter: null,
     ...over
   }
 }
@@ -230,5 +232,94 @@ describe('categorize', () => {
 
     // Assert
     expect(out[0]?.categoryId).toBe('c1')
+  })
+})
+
+describe('transfer_recognizer rules', () => {
+  it('matches like name_keyword on the description', () => {
+    // Arrange — a transfer_recognizer rule with a known AmEx payment keyword.
+    const r = rule({
+      rule_kind: 'transfer_recognizer',
+      keyword: 'mobile payment - thank you',
+      tx_type_override: 'Transfer'
+    })
+
+    // Act / Assert
+    expect(ruleMatchesRow(r, row({ description: 'MOBILE PAYMENT - THANK YOU' }))).toBe(true)
+    expect(ruleMatchesRow(r, row({ description: 'something else'           }))).toBe(false)
+  })
+
+  it('overrides row.type when tx_type_override is set', () => {
+    // Arrange — incoming AmEx row would normally be Income (positive amount);
+    // the transfer_recognizer rule promotes it to Transfer.
+    const rows = [row({
+      description: 'MOBILE PAYMENT - THANK YOU',
+      amount: 6000,
+      type: 'Income'
+    })]
+    const rules = [rule({
+      bill_id: null,
+      rule_kind: 'transfer_recognizer',
+      keyword: 'mobile payment - thank you',
+      category: 'Bank Fees',
+      tx_type_override: 'Transfer',
+      pair_account_filter: 'Citibank'
+    })]
+    const bills: CategorizeBill[] = []
+    const categories = [category({ name: 'Bank Fees' })]
+
+    // Act
+    const out = categorize({ rows, rules, bills, categories })
+
+    // Assert
+    expect(out[0]?.type).toBe('Transfer')
+    expect(out[0]?.categoryId).toBe('c1')
+    expect(out[0]?.pairAccountFilter).toBe('Citibank')
+  })
+
+  it('does NOT set pairAccountFilter when the rule has none', () => {
+    // Arrange
+    const rows = [row({ description: 'MOBILE PAYMENT - THANK YOU' })]
+    const rules = [rule({
+      bill_id: null,
+      rule_kind: 'transfer_recognizer',
+      keyword: 'mobile payment - thank you',
+      category: 'Bank Fees',
+      tx_type_override: 'Transfer',
+      pair_account_filter: null
+    })]
+
+    // Act
+    const out = categorize({ rows, rules, bills: [], categories: [category({ name: 'Bank Fees' })] })
+
+    // Assert
+    expect(out[0]?.type).toBe('Transfer')
+    expect(out[0]?.pairAccountFilter).toBeUndefined()
+  })
+
+  it('ignores an invalid tx_type_override value defensively', () => {
+    // Arrange — even if a bad row slipped past the DB CHECK, we don't want
+    // to write a row with type='Tranfser' into transactions.
+    const rows = [row({ description: 'MOBILE PAYMENT - THANK YOU', type: 'Expense' })]
+    const rules = [rule({
+      bill_id: null,
+      rule_kind: 'transfer_recognizer',
+      keyword: 'mobile payment - thank you',
+      tx_type_override: 'Tranfser' as unknown as string  // typo on purpose
+    })]
+
+    // Act
+    const out = categorize({ rows, rules, bills: [], categories: [] })
+
+    // Assert
+    expect(out[0]?.type).toBe('Expense')  // original type preserved
+  })
+
+  it('does NOT match when keyword is null even for transfer_recognizer', () => {
+    // Arrange
+    const r = rule({ rule_kind: 'transfer_recognizer', keyword: null, tx_type_override: 'Transfer' })
+
+    // Act / Assert
+    expect(ruleMatchesRow(r, row({ description: 'anything' }))).toBe(false)
   })
 })

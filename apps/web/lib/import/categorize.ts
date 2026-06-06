@@ -10,27 +10,42 @@
  *       since incoming rows from CSV don't yet have category, this kind
  *       degrades to a keyword filter when rule.keyword/sub_category is set,
  *       otherwise it cannot match an incoming uncategorized row.
+ *   - rule_kind = 'transfer_recognizer': matches like name_keyword AND
+ *       overrides row.type with rule.tx_type_override (must be set). Also
+ *       surfaces pair_account_filter on the output row so the post-insert
+ *       auto-pair step can find the counterparty on the linked account.
  *
  * On a match:
  *   - billId = matched bill's id (if a bill is linked to the rule)
  *   - categoryId = resolved by matching the bill's category text against
  *     the categories list (case-insensitive). Falls back to rule.category
  *     mapping if the bill has no category. Null if nothing resolves.
+ *   - type = rule.tx_type_override (when set) — only `transfer_recognizer`
+ *     rules use this in practice.
+ *   - pairAccountFilter = rule.pair_account_filter (when set).
  *
  * First-match-wins semantics: rules are evaluated in input order.
  */
 
-import type { ImportRow } from './adapters/types'
+import type { ImportRow, TransactionType } from './adapters/types'
+
+const VALID_TX_TYPES: ReadonlySet<TransactionType> = new Set<TransactionType>([
+  'Income', 'Expense', 'Transfer', 'Refund'
+])
 
 export interface CategorizeRule {
   id: string
   bill_id: string | null
   bill_name: string | null
-  rule_kind: string  // 'category_map' | 'name_keyword'
+  rule_kind: string  // 'category_map' | 'name_keyword' | 'transfer_recognizer'
   keyword: string | null
   sub_category: string | null
   category: string | null
   account_filter: string | null
+  /** When set, a matching row gets this `type` instead of the adapter's. */
+  tx_type_override: string | null
+  /** Where the post-insert auto-pairer should look for a counterparty. */
+  pair_account_filter: string | null
 }
 
 export interface CategorizeBill {
@@ -60,7 +75,7 @@ export function ruleMatchesRow(rule: CategorizeRule, row: ImportRow): boolean {
     return false
   }
 
-  if (rule.rule_kind === 'name_keyword') {
+  if (rule.rule_kind === 'name_keyword' || rule.rule_kind === 'transfer_recognizer') {
     if (!rule.keyword) return false
     return desc.includes(rule.keyword.toLowerCase())
   }
@@ -120,10 +135,21 @@ export function categorize(input: CategorizeInput): ReadonlyArray<ImportRow> {
       }
 
       const categoryId = resolveCategoryId(rule, bill, categories)
+
+      // Honor tx_type_override (used by transfer_recognizer rules). Guard
+      // against invalid values that could slip past the DB CHECK due to
+      // legacy rows or hand-inserts.
+      const overrideType =
+        rule.tx_type_override && VALID_TX_TYPES.has(rule.tx_type_override as TransactionType)
+          ? (rule.tx_type_override as TransactionType)
+          : null
+
       return {
         ...row,
         billId: bill?.id ?? null,
-        categoryId
+        categoryId,
+        ...(overrideType ? { type: overrideType } : {}),
+        ...(rule.pair_account_filter ? { pairAccountFilter: rule.pair_account_filter } : {})
       }
     }
 

@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react'
 import { useCategories } from '@/lib/data/categories'
 import type { ImportRow } from '@/lib/import/adapters/types'
 import { insertImportedTransactions, type InsertResult } from '@/lib/import/insert'
+import { runImportAutoPair } from '@/lib/import/autoPairTransfers'
 import { LOPEZ_HOUSEHOLD_ID } from '@/lib/household'
 import { createClient } from '@/lib/supabase/browser'
 import { cn } from '@/lib/cn'
@@ -90,6 +91,31 @@ export function PreviewStep({ payload, onBack, onComplete }: PreviewStepProps) {
         categoryById,
         onProgress: (done, total) => setInserting({ done, total })
       })
+
+      // Auto-pair transfer-recognized rows with counterparties on the
+      // partner account named by the rule's pair_account_filter. Failures
+      // here don't abort the import — the rows are already saved and the
+      // user can still pair them manually via ConvertToTransferDialog.
+      const pairable = newRows
+        .filter(r => r.pairAccountFilter)
+        .map(r => ({
+          fingerprint: r.fingerprint,
+          date: r.date,
+          amount: r.amount,
+          pairAccountFilter: r.pairAccountFilter as string
+        }))
+      if (pairable.length > 0) {
+        await runImportAutoPair({
+          supabase,
+          householdId: LOPEZ_HOUSEHOLD_ID,
+          sourceAccountId: payload.accountId,
+          rows: pairable
+        }).catch(() => {
+          // Surface no UI error — auto-pair is opportunistic. User can
+          // always pair manually if it misses a counterparty.
+        })
+      }
+
       onComplete(result)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to import transactions'

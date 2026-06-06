@@ -506,6 +506,8 @@ describe('findSlippedBills — tokenized fallback for parenthetical bill names',
       keyword: 'conedison',
       account_filter: null,
       rule_kind: 'name_keyword',
+      tx_type_override: null,
+      pair_account_filter: null,
       created_at: null
     }]
     const result = findSlippedBills(txs, bills, TODAY, rules)

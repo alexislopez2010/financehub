@@ -22,6 +22,13 @@ export interface ImportRow {
   fingerprint: string
   /** Adapter name that produced this row (for error reporting). */
   source: string
+  /**
+   * When set by a matching `transfer_recognizer` rule, the post-insert auto-pair
+   * step should look on the named account for an unpaired counterparty (same
+   * date, opposite-signed magnitude) and link them via `pair_transfer_rows`.
+   * Null/undefined when no transfer rule matched.
+   */
+  pairAccountFilter?: string | null
 }
 
 /** What an adapter returns before fingerprint + categorize passes run. */
