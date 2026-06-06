@@ -22,7 +22,7 @@ function tx(over: Partial<TransactionRow> = {}): TransactionRow {
     category: null, category_id: null, account: null, account_id: null,
     created_at: null, fingerprint: null, imported_at: null, member: null,
     notes: null, payment_method: null, sub_category: null,
-    transfer_group_id: null, transfer_pair_id: null, ...over
+    transfer_group_id: null, transfer_pair_id: null, exclude_from_runway: false, ...over
   }
 }
 
@@ -46,7 +46,57 @@ describe('deriveCfoKpis', () => {
     expect(k).toEqual({
       netWorth: 0, ytdIncome: 0, ytdExpense: 0, ytdNet: 0,
       savingsRate: 0, totalDebt: 0, debtToIncomeRatio: 0,
-      avgMonthlyExpense: 0, cashRunwayMonths: 0
+      avgMonthlyExpense: 0,
+      excludedYtdExpense: 0, recurringYtdExpense: 0, recurringMonthlyExpense: 0,
+      cashRunwayMonths: 0
+    })
+  })
+
+  describe('exclude_from_runway flag', () => {
+    it('subtracts excluded expense from recurring rate but leaves ytdExpense untouched', () => {
+      const k = deriveCfoKpis({
+        summary: summary({ totalCash: 30000 }),
+        transactions: [
+          tx({ id: 't1', amount: 1000, type: 'Expense', exclude_from_runway: false }),
+          tx({ id: 't2', amount: 5000, type: 'Expense', exclude_from_runway: true })
+        ],
+        debts: [], today: TODAY
+      })
+      expect(k.ytdExpense).toBe(6000)             // total grossed-up
+      expect(k.excludedYtdExpense).toBe(5000)     // the vacation
+      expect(k.recurringYtdExpense).toBe(1000)    // what burn rate uses
+      // monthsElapsed = 6 (June), so recurringMonthly = 1000/6 = 166.67
+      expect(k.recurringMonthlyExpense).toBeCloseTo(166.67, 2)
+      // avgMonthlyExpense (kept for non-runway surfaces) = 6000/6 = 1000
+      expect(k.avgMonthlyExpense).toBe(1000)
+      // runway = 30000 / 166.67 = 180 months (vs 30 if we used avg)
+      expect(k.cashRunwayMonths).toBeCloseTo(180, 0)
+    })
+
+    it('zero-excluded behavior matches the prior all-in calc', () => {
+      const k = deriveCfoKpis({
+        summary: summary({ totalCash: 30000 }),
+        transactions: [
+          tx({ id: 't1', amount: 6000, type: 'Expense', exclude_from_runway: false })
+        ],
+        debts: [], today: TODAY
+      })
+      expect(k.excludedYtdExpense).toBe(0)
+      expect(k.recurringYtdExpense).toBe(k.ytdExpense)
+      expect(k.recurringMonthlyExpense).toBe(k.avgMonthlyExpense)
+    })
+
+    it('runway is 0 when ALL expense is excluded (avoids divide-by-zero)', () => {
+      const k = deriveCfoKpis({
+        summary: summary({ totalCash: 30000 }),
+        transactions: [
+          tx({ id: 't1', amount: 5000, type: 'Expense', exclude_from_runway: true })
+        ],
+        debts: [], today: TODAY
+      })
+      expect(k.recurringYtdExpense).toBe(0)
+      expect(k.recurringMonthlyExpense).toBe(0)
+      expect(k.cashRunwayMonths).toBe(0)
     })
   })
 

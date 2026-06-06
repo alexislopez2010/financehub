@@ -21,7 +21,13 @@ export interface CfoKpis {
   debtToIncomeRatio: number
   /** Average monthly expense over the YTD period (ytdExpense / N months elapsed). */
   avgMonthlyExpense: number
-  /** Months of cash runway based on totalCash / avgMonthlyExpense. 0 if no expense. */
+  /** Sum of |amount| on Expense transactions YTD that the user flagged as one-off. */
+  excludedYtdExpense: number
+  /** ytdExpense - excludedYtdExpense. */
+  recurringYtdExpense: number
+  /** recurringYtdExpense / N months elapsed. Used for cashRunwayMonths. */
+  recurringMonthlyExpense: number
+  /** Months of cash runway based on totalCash / recurringMonthlyExpense. 0 if no recurring expense. */
   cashRunwayMonths: number
 }
 
@@ -44,11 +50,20 @@ export function deriveCfoKpis(input: DeriveCfoInput): CfoKpis {
 
   let ytdIncome = 0
   let ytdExpense = 0
+  let excludedYtdExpense = 0
 
   for (const tx of transactions) {
     if (!tx.date.startsWith(yearPrefix)) continue
-    if (tx.type === 'Income' || tx.type === 'Refund') ytdIncome += Math.abs(tx.amount)
-    else if (tx.type === 'Expense') ytdExpense += Math.abs(tx.amount)
+    if (tx.type === 'Income' || tx.type === 'Refund') {
+      ytdIncome += Math.abs(tx.amount)
+    } else if (tx.type === 'Expense') {
+      const v = Math.abs(tx.amount)
+      ytdExpense += v
+      // Cash Runway treats user-flagged one-off spend as not part of burn rate.
+      // YTD Expense, YTD Net, and savingsRate stay grossed-up (one-offs are
+      // real money spent — they just shouldn't roll forward into runway).
+      if (tx.exclude_from_runway) excludedYtdExpense += v
+    }
   }
 
   const ytdNet = ytdIncome - ytdExpense
@@ -64,8 +79,12 @@ export function deriveCfoKpis(input: DeriveCfoInput): CfoKpis {
   const debtToIncomeRatio = ytdIncome > 0 ? totalDebt / ytdIncome : 0
 
   const monthsElapsed = today.month  // 1..12
-  const avgMonthlyExpense = monthsElapsed > 0 ? ytdExpense / monthsElapsed : 0
-  const cashRunwayMonths = avgMonthlyExpense > 0 ? summary.totalCash / avgMonthlyExpense : 0
+  const avgMonthlyExpense       = monthsElapsed > 0 ? ytdExpense / monthsElapsed : 0
+  const recurringYtdExpense     = ytdExpense - excludedYtdExpense
+  const recurringMonthlyExpense = monthsElapsed > 0 ? recurringYtdExpense / monthsElapsed : 0
+  const cashRunwayMonths        = recurringMonthlyExpense > 0
+    ? summary.totalCash / recurringMonthlyExpense
+    : 0
 
   return {
     netWorth: round2(summary.netWorth),
@@ -76,6 +95,9 @@ export function deriveCfoKpis(input: DeriveCfoInput): CfoKpis {
     totalDebt: round2(totalDebt),
     debtToIncomeRatio: round4(debtToIncomeRatio),
     avgMonthlyExpense: round2(avgMonthlyExpense),
+    excludedYtdExpense: round2(excludedYtdExpense),
+    recurringYtdExpense: round2(recurringYtdExpense),
+    recurringMonthlyExpense: round2(recurringMonthlyExpense),
     cashRunwayMonths: round2(cashRunwayMonths)
   }
 }

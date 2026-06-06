@@ -166,7 +166,10 @@ export function CfoKpiDrawer({
         {kind === 'cash-runway' && (
           <CashRunwayBreakdown
             cashOnHand={summary.totalCash}
-            avgMonthlyExpense={kpis.avgMonthlyExpense}
+            recurringMonthlyExpense={kpis.recurringMonthlyExpense}
+            recurringYtdExpense={kpis.recurringYtdExpense}
+            excludedYtdExpense={kpis.excludedYtdExpense}
+            ytdExpense={kpis.ytdExpense}
             runwayMonths={kpis.cashRunwayMonths}
             transactions={transactions}
             year={year}
@@ -360,7 +363,10 @@ interface FormulaBlockProps {
  */
 interface CashRunwayBreakdownProps {
   cashOnHand: number
-  avgMonthlyExpense: number
+  recurringMonthlyExpense: number
+  recurringYtdExpense: number
+  excludedYtdExpense: number
+  ytdExpense: number
   runwayMonths: number
   transactions: ReadonlyArray<TransactionRow>
   year: number
@@ -368,12 +374,19 @@ interface CashRunwayBreakdownProps {
 }
 
 function CashRunwayBreakdown({
-  cashOnHand, avgMonthlyExpense, runwayMonths, transactions, year, monthsElapsed
+  cashOnHand, recurringMonthlyExpense, recurringYtdExpense, excludedYtdExpense,
+  ytdExpense, runwayMonths, transactions, year, monthsElapsed
 }: CashRunwayBreakdownProps) {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
 
+  // Per-category rollup uses only recurring transactions (one-offs are listed
+  // separately so the user can see what they excluded).
   const rows = useMemo(
-    () => deriveCfoExpenseByCategory({ transactions, year, monthsElapsed }),
+    () => deriveCfoExpenseByCategory({
+      transactions: transactions.filter(t => !t.exclude_from_runway),
+      year,
+      monthsElapsed
+    }),
     [transactions, year, monthsElapsed]
   )
 
@@ -390,7 +403,7 @@ function CashRunwayBreakdown({
 
   return (
     <>
-      {/* Top: the runway formula itself. */}
+      {/* Top: runway formula (recurring rate only). */}
       <ul className="divide-y divide-gray-100 -mx-4">
         <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2">
           <div className="text-sm text-ink">Cash on hand</div>
@@ -399,9 +412,9 @@ function CashRunwayBreakdown({
           </div>
         </li>
         <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2">
-          <div className="text-sm text-ink">Avg monthly expense</div>
+          <div className="text-sm text-ink">Avg monthly recurring expense</div>
           <div className="tabular text-sm font-medium text-red-600">
-            {formatUSDSigned(-avgMonthlyExpense)}
+            {formatUSDSigned(-recurringMonthlyExpense)}
           </div>
         </li>
         <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2 bg-bg/40 font-semibold">
@@ -409,6 +422,24 @@ function CashRunwayBreakdown({
           <div className="tabular text-sm">{formatMonths(runwayMonths)}</div>
         </li>
       </ul>
+
+      {/* Recurring vs one-off vs total — transparency strip. */}
+      <div className="mt-3 -mx-4 px-4 py-2 bg-bg/30 border-y border-rule grid grid-cols-3 gap-3 text-[11px]">
+        <div>
+          <div className="text-muted uppercase tracking-[0.10em]">Recurring YTD</div>
+          <div className="tabular text-sm text-ink mt-0.5">{formatUSDCompact(recurringYtdExpense)}</div>
+        </div>
+        <div>
+          <div className="text-muted uppercase tracking-[0.10em]">One-off excluded YTD</div>
+          <div className="tabular text-sm text-ink mt-0.5">
+            {excludedYtdExpense > 0 ? formatUSDCompact(excludedYtdExpense) : '—'}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted uppercase tracking-[0.10em]">Total YTD expense</div>
+          <div className="tabular text-sm text-ink mt-0.5">{formatUSDCompact(ytdExpense)}</div>
+        </div>
+      </div>
 
       {/* Section header for the category breakdown. */}
       <div className="mt-4 mb-1 pb-1 border-b border-rule">
@@ -466,18 +497,21 @@ function CashRunwayBreakdown({
           })}
           <li className="grid grid-cols-[12px_1fr_auto_auto] gap-3 items-center px-4 py-2 bg-bg/40 font-semibold">
             <div />
-            <div className="text-sm">Total avg monthly</div>
+            <div className="text-sm">Total avg monthly recurring</div>
             <div className="tabular text-[11px] text-muted">100%</div>
             <div className="tabular text-sm whitespace-nowrap">
-              {formatUSDCompact(avgMonthlyExpense)}/mo
+              {formatUSDCompact(recurringMonthlyExpense)}/mo
             </div>
           </li>
         </ul>
       )}
 
       <p className="text-[11px] text-muted mt-3">
-        Runway = Cash ÷ avg monthly expense (YTD). Click a category to see the contributing
-        transactions for {year} YTD. Avg monthly per category = (YTD spend in that category) ÷ {monthsElapsed} {monthsElapsed === 1 ? 'month' : 'months'} elapsed.
+        Runway = Cash ÷ recurring monthly expense. Transactions you flag as one-off (vacation,
+        wedding, big home repair) drop out of the runway calc so a single big planned spend
+        doesn&rsquo;t make your projected burn rate look worse than it actually is. Click a
+        category to see the contributing transactions for {year} YTD. Excluded YTD = {' '}
+        {excludedYtdExpense > 0 ? formatUSDCompact(excludedYtdExpense) : '0'}.
       </p>
     </>
   )

@@ -57,7 +57,8 @@ function tx(over: Partial<TransactionRow> = {}): TransactionRow {
     sub_category: null,
     transfer_group_id: null,
     transfer_pair_id: null,
-    ...over
+
+    exclude_from_runway: false,    ...over
   }
 }
 

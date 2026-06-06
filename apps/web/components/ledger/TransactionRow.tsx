@@ -45,6 +45,13 @@ export interface TransactionRowProps {
   onDemoteTransfer?: (next: DemoteTransferTarget) => void
   /** Disables the unpair item + shows "Unpairing…" inline. */
   unpairing?: boolean
+  /**
+   * Toggles the row's `exclude_from_runway` flag — used to mark a one-off
+   * intentional spend (vacation, wedding, etc.) so it stops inflating the
+   * Cash Runway avg-monthly-expense denominator. The callback receives the
+   * new value (negation of the row's current state).
+   */
+  onToggleExcludeFromRunway?: (next: boolean) => void
 }
 
 function formatUSD(n: number): string {
@@ -102,7 +109,8 @@ export function TransactionRow({
   onPairTransfer,
   onUnpairTransfer,
   onDemoteTransfer,
-  unpairing
+  unpairing,
+  onToggleExcludeFromRunway
 }: TransactionRowProps) {
   // Tone is by SIGNED activity (resolves legacy positive-magnitude Expenses
   // into the proper -value) so the row color always reflects true direction.
@@ -284,6 +292,12 @@ export function TransactionRow({
                 }
               : {})}
             {...(unpairing !== undefined ? { unpairing } : {})}
+            {...(onToggleExcludeFromRunway
+              ? {
+                  onToggleExcludeFromRunway,
+                  excludeFromRunway: tx.exclude_from_runway
+                }
+              : {})}
           />
         </div>
       )}

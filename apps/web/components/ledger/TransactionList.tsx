@@ -127,6 +127,8 @@ export interface TransactionListProps {
   onUnpairTransfer?: (id: string) => void
   /** Demote an orphan Transfer to Expense / Income / Refund. */
   onDemoteTransfer?: (id: string, next: DemoteTransferTarget) => void
+  /** Toggles the row's exclude_from_runway flag (one-off discretionary). */
+  onToggleExcludeFromRunway?: (id: string, next: boolean) => void
   /** Id of the row currently mid-unpair RPC (disables menu item + shows "Unpairing…"). */
   unpairingId?: string | null
   /**
@@ -164,6 +166,7 @@ export function TransactionList({
   onPairTransfer,
   onUnpairTransfer,
   onDemoteTransfer,
+  onToggleExcludeFromRunway,
   unpairingId,
   sort,
   onSortChange
@@ -194,6 +197,7 @@ export function TransactionList({
         {...(onPairTransfer ? { onPairTransfer: () => onPairTransfer(tx) } : {})}
         {...(onUnpairTransfer ? { onUnpairTransfer: () => onUnpairTransfer(tx.id) } : {})}
         {...(onDemoteTransfer ? { onDemoteTransfer: (next: DemoteTransferTarget) => onDemoteTransfer(tx.id, next) } : {})}
+        {...(onToggleExcludeFromRunway ? { onToggleExcludeFromRunway: (next: boolean) => onToggleExcludeFromRunway(tx.id, next) } : {})}
         {...(unpairingId === tx.id ? { unpairing: true } : {})}
       />
     )

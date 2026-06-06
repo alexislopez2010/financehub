@@ -31,7 +31,8 @@ function tx(over: Partial<TxRow> = {}): TxRow {
     sub_category: null,
     transfer_group_id: null,
     transfer_pair_id: null,
-    ...over
+
+    exclude_from_runway: false,    ...over
   }
 }
 

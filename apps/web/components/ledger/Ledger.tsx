@@ -184,6 +184,10 @@ export function Ledger() {
     updateTx.mutate({ id, patch: { type: next } })
   }
 
+  function handleToggleExcludeFromRunway(id: string, next: boolean) {
+    updateTx.mutate({ id, patch: { exclude_from_runway: next } })
+  }
+
   return (
     <div className="space-y-4 pb-4">
       <header className="flex items-start justify-between gap-3">
@@ -247,6 +251,7 @@ export function Ledger() {
           onPairTransfer={tx => setConvertingTx(tx)}
           onUnpairTransfer={handleUnpair}
           onDemoteTransfer={handleDemoteTransfer}
+          onToggleExcludeFromRunway={handleToggleExcludeFromRunway}
           unpairingId={unpairingId}
         />
       )}

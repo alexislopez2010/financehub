@@ -12,7 +12,7 @@ function tx(over: Partial<TxRow> = {}): TxRow {
     category: null, category_id: null, account: null, account_id: null,
     created_at: null, fingerprint: null, imported_at: null, member: null,
     notes: null, payment_method: null, sub_category: null,
-    transfer_group_id: null, transfer_pair_id: null, ...over
+    transfer_group_id: null, transfer_pair_id: null, exclude_from_runway: false, ...over
   }
 }
 

@@ -9,7 +9,9 @@ import {
   Unlink,
   TrendingDown,
   TrendingUp,
-  Undo2
+  Undo2,
+  CircleSlash,
+  CircleDot
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
@@ -41,6 +43,14 @@ export interface RowActionsMenuProps {
   currentType?: 'Income' | 'Expense' | 'Transfer' | 'Refund'
   /** When true, shows "Unpairing…" inline on the unpair item and disables it. */
   unpairing?: boolean
+  /**
+   * When set, shows an item that toggles the row's `exclude_from_runway` flag.
+   * Currently-excluded rows show "Include in runway"; currently-included rows
+   * show "Exclude from runway (one-off)". Receives the NEW value.
+   */
+  onToggleExcludeFromRunway?: (next: boolean) => void
+  /** Current row excluded state — drives the menu label + icon. */
+  excludeFromRunway?: boolean
 }
 
 const itemBase =
@@ -54,7 +64,9 @@ export function RowActionsMenu({
   onUnpairTransfer,
   onDemoteToType,
   currentType,
-  unpairing
+  unpairing,
+  onToggleExcludeFromRunway,
+  excludeFromRunway
 }: RowActionsMenuProps) {
   return (
     <DropdownMenu.Root>
@@ -147,6 +159,17 @@ export function RowActionsMenu({
                 </DropdownMenu.Item>
               )}
             </>
+          )}
+
+          {onToggleExcludeFromRunway && (
+            <DropdownMenu.Item
+              onSelect={() => onToggleExcludeFromRunway(!excludeFromRunway)}
+              className={itemBase}
+            >
+              {excludeFromRunway
+                ? <><CircleDot size={14} className="text-emerald-600" />Include in runway</>
+                : <><CircleSlash size={14} className="text-muted" />Exclude from runway (one-off)</>}
+            </DropdownMenu.Item>
           )}
 
           <DropdownMenu.Item

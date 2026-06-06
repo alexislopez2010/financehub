@@ -465,6 +465,7 @@ export type Database = {
           created_at: string | null
           date: string
           description: string
+          exclude_from_runway: boolean
           fingerprint: string | null
           household_id: string
           id: string
@@ -486,6 +487,7 @@ export type Database = {
           created_at?: string | null
           date: string
           description: string
+          exclude_from_runway?: boolean
           fingerprint?: string | null
           household_id: string
           id?: string
@@ -507,6 +509,7 @@ export type Database = {
           created_at?: string | null
           date?: string
           description?: string
+          exclude_from_runway?: boolean
           fingerprint?: string | null
           household_id?: string
           id?: string
