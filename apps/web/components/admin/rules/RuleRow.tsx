@@ -95,6 +95,18 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
   const categoryDisplay = rule.category ?? ''
   const accountDisplay = rule.account_filter ?? ''
 
+  // What the rule ACTUALLY matches on. Keyword is the primary matcher; when
+  // it's null we surface sub_category so the UI doesn't pretend there's no
+  // matcher (the categorize logic still uses sub_category as a substring
+  // match). When BOTH are null the rule is dead — that's the only case
+  // where "(no matcher)" is honest.
+  const matcherFromKeyword    = Boolean(rule.keyword)
+  const matcherFromSubCategory = !rule.keyword && Boolean(rule.sub_category)
+  const matcherText  = rule.keyword ?? rule.sub_category ?? ''
+  const matcherLabel = matcherFromKeyword    ? matcherText
+                     : matcherFromSubCategory ? `sub-category: ${matcherText}`
+                     : '(no matcher — rule never fires)'
+
   return (
     <li className="group flex flex-col gap-1 px-4 py-2.5 text-sm">
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] items-center gap-3">
@@ -105,8 +117,20 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
             onCommit={handleKeywordCommit}
             placeholder="keyword"
             display={
-              <span className={cn('truncate', keywordDisplay ? 'text-ink' : 'text-muted italic')}>
-                {keywordDisplay || '(no keyword)'}
+              <span
+                className={cn(
+                  'truncate',
+                  matcherFromKeyword     ? 'text-ink' :
+                  matcherFromSubCategory ? 'text-muted'    /* informational, not editable here */
+                                          : 'text-red-600 italic'
+                )}
+                title={matcherFromSubCategory
+                  ? `This rule matches when a transaction description contains "${matcherText}". Editing this cell sets a keyword override.`
+                  : !matcherFromKeyword
+                    ? 'This rule has no keyword OR sub_category — it can never fire.'
+                    : undefined}
+              >
+                {matcherLabel}
               </span>
             }
           />
