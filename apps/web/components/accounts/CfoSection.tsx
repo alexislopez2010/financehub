@@ -10,6 +10,7 @@ import { deriveCfoKpis } from '@/lib/accounts/cfo'
 import { mergeDebtsWithAccounts } from '@/lib/finance/debtAccountMerge'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { CfoKpiDrawer, type CfoKpiKind } from './CfoKpiDrawer'
+import { FiftyThirtyTwentySection } from './FiftyThirtyTwentySection'
 
 function formatUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -213,6 +214,8 @@ export function CfoSection() {
           headerValue={drawerHeaderValue[expandedKpi]}
         />
       )}
+
+      <FiftyThirtyTwentySection />
     </div>
   )
 }
