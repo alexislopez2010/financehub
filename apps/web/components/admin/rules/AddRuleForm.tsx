@@ -11,13 +11,20 @@ import { cn } from '@/lib/cn'
 export interface AddRuleFormProps {
   /** Owning bill for this rule, or null for the General rules group. */
   bill: BillRow | null
+  /**
+   * Pre-selects (and locks) the category dropdown. Passed by RulesSection
+   * when this form is rendered inside a category-grouped section so a click
+   * on "+ Add rule" doesn't ask the user to re-pick a category they're
+   * already inside of.
+   */
+  defaultCategory?: string
 }
 
-export function AddRuleForm({ bill }: AddRuleFormProps) {
+export function AddRuleForm({ bill, defaultCategory }: AddRuleFormProps) {
   const createRule = useCreateBillMatchRule()
   const categoriesQ = useCategories()
   const [keyword, setKeyword] = useState('')
-  const [category, setCategory] = useState('')
+  const [category, setCategory] = useState(defaultCategory ?? '')
   const [accountFilter, setAccountFilter] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -69,7 +76,12 @@ export function AddRuleForm({ bill }: AddRuleFormProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+      <div className={cn(
+        'grid grid-cols-1 gap-2 items-center',
+        defaultCategory
+          ? 'sm:grid-cols-[1fr_1fr_auto]'
+          : 'sm:grid-cols-[1fr_1fr_1fr_auto]'
+      )}>
         <input
           type="text"
           aria-label="Rule keyword"
@@ -79,17 +91,19 @@ export function AddRuleForm({ bill }: AddRuleFormProps) {
           className="text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
         />
 
-        <select
-          aria-label="Rule category"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
-        >
-          <option value="">Category…</option>
-          {sortedCategories.map(c => (
-            <option key={c.id} value={c.name}>{c.name}</option>
-          ))}
-        </select>
+        {!defaultCategory && (
+          <select
+            aria-label="Rule category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="text-sm rounded-md border border-rule px-2 py-1.5 bg-white text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+          >
+            <option value="">Category…</option>
+            {sortedCategories.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+        )}
 
         <input
           type="text"

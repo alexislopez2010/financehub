@@ -10,16 +10,23 @@ import {
   type BillMatchRuleRow
 } from '@/lib/data/billMatchRules'
 import type { CategoryRow } from '@/lib/data/categories'
+import type { BillRow } from '@/lib/data/bills'
 import { cn } from '@/lib/cn'
 
 export interface RuleRowProps {
   rule: BillMatchRuleRow
   categories: ReadonlyArray<CategoryRow>
+  /**
+   * If the rule links to a bill (via bill_id or bill_name resolution), the
+   * parent passes it in so we can surface a chip. Informational only — the
+   * rule still fires via its keyword/sub_category matcher.
+   */
+  linkedBill?: BillRow | null
 }
 
 const UNSET_VALUE = '__unset__'
 
-export function RuleRow({ rule, categories }: RuleRowProps) {
+export function RuleRow({ rule, categories, linkedBill }: RuleRowProps) {
   const updateRule = useUpdateBillMatchRule()
   const deleteRule = useDeleteBillMatchRule()
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -109,8 +116,8 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
 
   return (
     <li className="group flex flex-col gap-1 px-4 py-2.5 text-sm">
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] items-center gap-3">
-        <div className="min-w-0">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] items-center gap-3">
+        <div className="min-w-0 flex items-center gap-2">
           <EditableCell
             variant="text"
             value={keywordDisplay}
@@ -121,7 +128,7 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
                 className={cn(
                   'truncate',
                   matcherFromKeyword     ? 'text-ink' :
-                  matcherFromSubCategory ? 'text-muted'    /* informational, not editable here */
+                  matcherFromSubCategory ? 'text-muted'
                                           : 'text-red-600 italic'
                 )}
                 title={matcherFromSubCategory
@@ -134,20 +141,24 @@ export function RuleRow({ rule, categories }: RuleRowProps) {
               </span>
             }
           />
+          {linkedBill && (
+            <span
+              className="shrink-0 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-blue-100"
+              title={`Rule links to the "${linkedBill.name}" bill`}
+            >
+              → {linkedBill.name}
+            </span>
+          )}
         </div>
 
-        <div className="min-w-0">
-          <EditableCell
-            variant="select"
-            value={rule.category ?? UNSET_VALUE}
-            options={categoryOptions}
-            onCommit={handleCategoryCommit}
-            display={
-              <span className={cn('truncate', categoryDisplay ? 'text-ink' : 'text-muted italic')}>
-                {categoryDisplay || '(no category)'}
-              </span>
-            }
-          />
+        {/*
+          Match type: today every rule is substring-match ('contains'). The
+          slot is here so we can expose 'exact' / 'starts_with' in a future
+          pass without re-laying-out the row. Shown small + muted so it
+          doesn't fight for attention now.
+        */}
+        <div className="text-[10px] uppercase tracking-wider text-muted whitespace-nowrap" title="Match type: substring (description contains the matcher).">
+          contains
         </div>
 
         <div className="min-w-0">
