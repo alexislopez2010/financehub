@@ -28,7 +28,10 @@ let queryResult: { data: unknown; error: unknown } = { data: [], error: null }
 
 function makeQueryBuilder(): unknown {
   const builder: Record<string, unknown> = {}
-  const chainable = ['select', 'order', 'gte', 'lte', 'eq', 'is']
+  // `range` was added when useTransactions started paginating to defeat the
+  // PostgREST 1000-row cap. The builder needs to return itself from .range()
+  // so the await at the end of the chain resolves correctly.
+  const chainable = ['select', 'order', 'gte', 'lte', 'eq', 'is', 'range']
   for (const m of chainable) {
     builder[m] = (...args: unknown[]) => {
       queryCalls.push({ method: m, args })
