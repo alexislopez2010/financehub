@@ -34,6 +34,15 @@ export interface InsertArgs {
    * literal string used for shared expenses.
    */
   member: string | null
+  /**
+   * Map of category id → name. When supplied, the importer also writes
+   * `category` (text) alongside `category_id` for any row with a categoryId.
+   * Without this, downstream surfaces that bucket on the text field —
+   * spendByCategory, deriveBudgetVsActual, autoCategorize's "uncategorized"
+   * detection — would treat the row as uncategorized even though the FK is set.
+   * Default to an empty Map when omitted; existing callers stay safe.
+   */
+  categoryById?: ReadonlyMap<string, string>
   /** Optional progress callback fired after each batch resolves. */
   onProgress?: (inserted: number, total: number) => void
 }
@@ -47,6 +56,7 @@ interface TransactionInsertRow {
   account: string
   account_id: string
   category_id: string | null
+  category: string | null
   fingerprint: string
   member: string | null
 }
@@ -56,8 +66,14 @@ function toInsertRow(
   householdId: string,
   accountId: string,
   accountName: string,
-  member: string | null
+  member: string | null,
+  categoryById: ReadonlyMap<string, string>
 ): TransactionInsertRow {
+  // Resolve the category name from the FK so any future read of `category`
+  // (text) agrees with `category_id`. Bucketing surfaces (spendByCategory,
+  // deriveBudgetVsActual, etc.) read the text field — they shouldn't have
+  // to also look up the name from a categories list.
+  const categoryName = r.categoryId ? (categoryById.get(r.categoryId) ?? null) : null
   return {
     household_id: householdId,
     date: r.date,
@@ -67,6 +83,7 @@ function toInsertRow(
     account: accountName,
     account_id: accountId,
     category_id: r.categoryId,
+    category: categoryName,
     fingerprint: r.fingerprint,
     member
   }
@@ -92,6 +109,7 @@ function toInsertRow(
  */
 export async function insertImportedTransactions(args: InsertArgs): Promise<InsertResult> {
   const { supabase, rows, householdId, accountId, accountName, member, onProgress } = args
+  const categoryById = args.categoryById ?? new Map<string, string>()
 
   if (rows.length === 0) {
     return { inserted: 0, failed: [] }
@@ -102,7 +120,7 @@ export async function insertImportedTransactions(args: InsertArgs): Promise<Inse
 
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const batch = rows.slice(i, i + CHUNK_SIZE)
-    const payload = batch.map(r => toInsertRow(r, householdId, accountId, accountName, member))
+    const payload = batch.map(r => toInsertRow(r, householdId, accountId, accountName, member, categoryById))
 
     const { error } = await supabase.from('transactions').insert(payload)
 
@@ -111,7 +129,7 @@ export async function insertImportedTransactions(args: InsertArgs): Promise<Inse
       for (const r of batch) {
         const { error: oneErr } = await supabase
           .from('transactions')
-          .insert(toInsertRow(r, householdId, accountId, accountName, member))
+          .insert(toInsertRow(r, householdId, accountId, accountName, member, categoryById))
         if (oneErr) {
           failed.push({ row: r, error: oneErr.message })
         } else {

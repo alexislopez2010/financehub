@@ -83,6 +83,11 @@ export function PreviewStep({ payload, onBack, onComplete }: PreviewStepProps) {
         accountId: payload.accountId,
         accountName: payload.accountName,
         member: payload.member,
+        // Pass the categoryId → name map so the importer writes the
+        // `category` text field alongside `category_id`. Surfaces that
+        // bucket on text (spendByCategory, deriveBudgetVsActual, etc.)
+        // would otherwise treat auto-categorized rows as Uncategorized.
+        categoryById,
         onProgress: (done, total) => setInserting({ done, total })
       })
       onComplete(result)

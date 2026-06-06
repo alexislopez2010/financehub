@@ -154,6 +154,9 @@ describe('insertImportedTransactions', () => {
       account: 'Chase Checking',
       account_id: 'acc-1',
       category_id: 'cat-1',
+      // category text is null because no categoryById was passed; the
+      // dedicated test below covers the resolution path.
+      category: null,
       fingerprint: 'fp-abc',
       member: null
     })
@@ -201,6 +204,48 @@ describe('insertImportedTransactions', () => {
     for (const row of batch) {
       expect(row.member).toBe('Alexis Lopez')
     }
+  })
+
+  it('resolves category name from categoryById and writes both category + category_id', async () => {
+    // Regression: prior implementation set only category_id on insert,
+    // leaving category text null. spendByCategory + deriveBudgetVsActual
+    // bucket on the text field, so auto-categorized-at-import rows showed
+    // up as Uncategorized forever.
+    const rows = [
+      makeRow({ description: 'mapped',   categoryId: 'cat-1' }),
+      makeRow({ description: 'unmapped', categoryId: null    })
+    ]
+    const { client, calls } = makeFakeSupabase([{ error: null }])
+    await insertImportedTransactions({
+      supabase: client,
+      rows,
+      householdId: 'hh-1',
+      accountId: 'acc-1',
+      accountName: 'Chase Checking',
+      member: null,
+      categoryById: new Map([['cat-1', 'Groceries']])
+    })
+    const payload = calls[0] as ReadonlyArray<Record<string, unknown>>
+    expect(payload).toHaveLength(2)
+    expect(payload[0]).toMatchObject({ category_id: 'cat-1', category: 'Groceries' })
+    expect(payload[1]).toMatchObject({ category_id: null,    category: null })
+  })
+
+  it('still sets category to null when categoryById is omitted (back-compat)', async () => {
+    const rows = [makeRow({ categoryId: 'cat-orphan' })]
+    const { client, calls } = makeFakeSupabase([{ error: null }])
+    await insertImportedTransactions({
+      supabase: client,
+      rows,
+      householdId: 'hh-1',
+      accountId: 'acc-1',
+      accountName: 'Chase Checking',
+      member: null
+    })
+    const payload = calls[0] as ReadonlyArray<Record<string, unknown>>
+    // category_id still written; category text null because the lookup
+    // map is empty (orphan FK is the caller's responsibility to clean up).
+    expect(payload[0]).toMatchObject({ category_id: 'cat-orphan', category: null })
   })
 
   it('preserves member arg when falling back to per-row inserts', async () => {
