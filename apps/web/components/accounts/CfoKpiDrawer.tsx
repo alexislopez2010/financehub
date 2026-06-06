@@ -1,9 +1,11 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ChevronRight, X } from 'lucide-react'
 import type { Tables } from '@/lib/supabase/database.types'
 import type { AccountSummary, AccountBalance } from '@/lib/accounts/balances'
 import type { CfoKpis } from '@/lib/accounts/cfo'
+import { deriveCfoExpenseByCategory } from '@/lib/accounts/cfoExpenseByCategory'
 import { cn } from '@/lib/cn'
 
 type TransactionRow = Tables<'transactions'>
@@ -162,15 +164,13 @@ export function CfoKpiDrawer({
         )}
 
         {kind === 'cash-runway' && (
-          <FormulaBlock
-            rows={[
-              { label: 'Cash on hand',          value: summary.totalCash,        tone: 'positive' },
-              { label: 'Avg monthly expense',   value: -kpis.avgMonthlyExpense,  tone: 'negative' }
-            ]}
-            footerLabel="Runway"
-            footerValue={kpis.cashRunwayMonths}
-            formatFooter={formatMonths}
-            helperText="Runway = Cash ÷ avg monthly expense (YTD). It assumes you stop earning today and keep spending at the current pace. A '—' means avg expense is zero (probably an empty data set)."
+          <CashRunwayBreakdown
+            cashOnHand={summary.totalCash}
+            avgMonthlyExpense={kpis.avgMonthlyExpense}
+            runwayMonths={kpis.cashRunwayMonths}
+            transactions={transactions}
+            year={year}
+            monthsElapsed={monthsElapsed}
           />
         )}
 
@@ -350,6 +350,185 @@ interface FormulaBlockProps {
   footerValue: number
   formatFooter?: (n: number) => string
   helperText: string
+}
+
+/**
+ * Cash Runway breakdown. Shows the same formula (Cash ÷ avg monthly expense
+ * = Runway) at the top, then breaks the avg-monthly-expense denominator into
+ * its category contributors. Each category row is clickable; clicking expands
+ * to show the YTD transactions that fed that bucket, biggest first.
+ */
+interface CashRunwayBreakdownProps {
+  cashOnHand: number
+  avgMonthlyExpense: number
+  runwayMonths: number
+  transactions: ReadonlyArray<TransactionRow>
+  year: number
+  monthsElapsed: number
+}
+
+function CashRunwayBreakdown({
+  cashOnHand, avgMonthlyExpense, runwayMonths, transactions, year, monthsElapsed
+}: CashRunwayBreakdownProps) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+
+  const rows = useMemo(
+    () => deriveCfoExpenseByCategory({ transactions, year, monthsElapsed }),
+    [transactions, year, monthsElapsed]
+  )
+
+  // O(1) lookup so the expansion can resolve transaction IDs without rescanning.
+  const txById = useMemo(() => {
+    const m = new Map<string, TransactionRow>()
+    for (const tx of transactions) m.set(tx.id, tx)
+    return m
+  }, [transactions])
+
+  function toggleCategory(cat: string) {
+    setExpandedCategory(prev => (prev === cat ? null : cat))
+  }
+
+  return (
+    <>
+      {/* Top: the runway formula itself. */}
+      <ul className="divide-y divide-gray-100 -mx-4">
+        <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2">
+          <div className="text-sm text-ink">Cash on hand</div>
+          <div className="tabular text-sm font-medium text-emerald-600">
+            {formatUSDSigned(cashOnHand)}
+          </div>
+        </li>
+        <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2">
+          <div className="text-sm text-ink">Avg monthly expense</div>
+          <div className="tabular text-sm font-medium text-red-600">
+            {formatUSDSigned(-avgMonthlyExpense)}
+          </div>
+        </li>
+        <li className="grid grid-cols-[1fr_auto] gap-3 items-center px-4 py-2 bg-bg/40 font-semibold">
+          <div className="text-sm">Runway</div>
+          <div className="tabular text-sm">{formatMonths(runwayMonths)}</div>
+        </li>
+      </ul>
+
+      {/* Section header for the category breakdown. */}
+      <div className="mt-4 mb-1 pb-1 border-b border-rule">
+        <div className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted">
+          Average expense by category · YTD {year}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-xs text-muted py-3">
+          No Expense transactions in {year} yet.
+        </div>
+      ) : (
+        <ul className="divide-y divide-gray-100 -mx-4">
+          {rows.map(r => {
+            const isOpen = expandedCategory === r.category
+            return (
+              <li key={r.category}>
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(r.category)}
+                  aria-expanded={isOpen}
+                  className="w-full grid grid-cols-[12px_1fr_auto_auto] gap-3 items-center px-4 py-2 text-left hover:bg-bg/40 focus:bg-bg/40 focus:outline-none"
+                >
+                  <ChevronRight
+                    size={12}
+                    className={cn(
+                      'text-muted transition-transform',
+                      isOpen && 'rotate-90'
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm text-ink truncate">{r.category}</div>
+                    <div className="text-[11px] text-muted">
+                      {r.count} {r.count === 1 ? 'transaction' : 'transactions'}
+                      <span className="mx-1.5">·</span>
+                      {formatUSDCompact(r.totalYtd)} total
+                    </div>
+                  </div>
+                  <div className="tabular text-[11px] text-muted">
+                    {formatPct(r.shareOfTotal, 0)}
+                  </div>
+                  <div className="tabular text-sm text-red-600 font-medium whitespace-nowrap">
+                    {formatUSDCompact(r.avgMonthly)}/mo
+                  </div>
+                </button>
+                {isOpen && (
+                  <CategoryTransactionsList
+                    transactionIds={r.transactionIds}
+                    txById={txById}
+                  />
+                )}
+              </li>
+            )
+          })}
+          <li className="grid grid-cols-[12px_1fr_auto_auto] gap-3 items-center px-4 py-2 bg-bg/40 font-semibold">
+            <div />
+            <div className="text-sm">Total avg monthly</div>
+            <div className="tabular text-[11px] text-muted">100%</div>
+            <div className="tabular text-sm whitespace-nowrap">
+              {formatUSDCompact(avgMonthlyExpense)}/mo
+            </div>
+          </li>
+        </ul>
+      )}
+
+      <p className="text-[11px] text-muted mt-3">
+        Runway = Cash ÷ avg monthly expense (YTD). Click a category to see the contributing
+        transactions for {year} YTD. Avg monthly per category = (YTD spend in that category) ÷ {monthsElapsed} {monthsElapsed === 1 ? 'month' : 'months'} elapsed.
+      </p>
+    </>
+  )
+}
+
+interface CategoryTransactionsListProps {
+  transactionIds: ReadonlyArray<string>
+  txById: ReadonlyMap<string, TransactionRow>
+}
+
+/** Cap to keep the drawer from becoming a wall of rows on huge categories. */
+const CATEGORY_TX_CAP = 50
+
+function CategoryTransactionsList({ transactionIds, txById }: CategoryTransactionsListProps) {
+  const sorted = useMemo(() => {
+    const txs: TransactionRow[] = []
+    for (const id of transactionIds) {
+      const tx = txById.get(id)
+      if (tx) txs.push(tx)
+    }
+    // Biggest contributors first — what the user actually wants to see.
+    txs.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    return txs
+  }, [transactionIds, txById])
+
+  const shown = sorted.slice(0, CATEGORY_TX_CAP)
+  const omitted = sorted.length - shown.length
+
+  return (
+    <ul className="divide-y divide-gray-100 bg-bg/20">
+      {shown.map(tx => (
+        <li
+          key={tx.id}
+          className="grid grid-cols-[64px_1fr_auto] gap-3 items-center pl-12 pr-4 py-1.5"
+        >
+          <div className="text-[11px] text-muted tabular">{tx.date.slice(5)}</div>
+          <div className="text-[12px] text-ink truncate" title={tx.description}>
+            {tx.description}
+          </div>
+          <div className="tabular text-[12px] text-red-600 whitespace-nowrap">
+            -{formatUSD(Math.abs(tx.amount))}
+          </div>
+        </li>
+      ))}
+      {omitted > 0 && (
+        <li className="pl-12 pr-4 py-1.5 text-[11px] text-muted italic">
+          + {omitted} more transaction{omitted === 1 ? '' : 's'} not shown.
+        </li>
+      )}
+    </ul>
+  )
 }
 
 function FormulaBlock({ rows, footerLabel, footerValue, formatFooter, helperText }: FormulaBlockProps) {
