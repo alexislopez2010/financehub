@@ -7,6 +7,7 @@ import { useTransactions } from '@/lib/data/transactions'
 import { useDebts } from '@/lib/data/debts'
 import { deriveBalances } from '@/lib/accounts/balances'
 import { deriveCfoKpis } from '@/lib/accounts/cfo'
+import { mergeDebtsWithAccounts } from '@/lib/finance/debtAccountMerge'
 import { KpiTile } from '@/components/ui/KpiTile'
 import { CfoKpiDrawer, type CfoKpiKind } from './CfoKpiDrawer'
 
@@ -48,12 +49,23 @@ export function CfoSection() {
     transactions: txsQ.data ?? []
   }), [accountsQ.data, txsQ.data])
 
+  // Overlay the live account balance onto each debt row so the CFO Total Debt
+  // tile shows the truth from accounts. mergeDebtsWithAccounts returns the
+  // resolved balance per debt id; we splat that onto the raw debt rows to
+  // preserve the rest of the DebtRow shape (and the deriveCfoKpis signature).
+  const debtsForCfo = useMemo(() => {
+    const raw = debtsQ.data ?? []
+    const merged = mergeDebtsWithAccounts({ debts: raw, summary })
+    const balanceById = new Map(merged.map(m => [m.id, m.balance]))
+    return raw.map(d => ({ ...d, balance: balanceById.get(d.id) ?? d.balance }))
+  }, [debtsQ.data, summary])
+
   const kpis = useMemo(() => deriveCfoKpis({
     summary,
     transactions: txsQ.data ?? [],
-    debts: debtsQ.data ?? [],
+    debts: debtsForCfo,
     today
-  }), [summary, txsQ.data, debtsQ.data, today])
+  }), [summary, txsQ.data, debtsForCfo, today])
 
   if (accountsQ.isLoading || txsQ.isLoading || debtsQ.isLoading) {
     return (
@@ -194,7 +206,7 @@ export function CfoSection() {
           summary={summary}
           kpis={kpis}
           transactions={txsQ.data ?? []}
-          debts={debtsQ.data ?? []}
+          debts={debtsForCfo}
           year={today.year}
           monthsElapsed={today.month}
           headerLabel={drawerHeaderLabel[expandedKpi]}

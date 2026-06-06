@@ -42,6 +42,10 @@ function makeAccount(over: Partial<AccountRow> = {}): AccountRow {
     created_at: null,
     owner: null,
     import_format: null,
+    apr: null,
+    min_payment: null,
+    due_day: null,
+    original_balance: null,
     ...over
   }
 }

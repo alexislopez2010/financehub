@@ -73,6 +73,10 @@ export type Database = {
           starting_balance: number | null
           starting_balance_date: string | null
           type: string | null
+          apr: number | null
+          min_payment: number | null
+          due_day: number | null
+          original_balance: number | null
         }
         Insert: {
           archived_at?: string | null
@@ -90,6 +94,10 @@ export type Database = {
           starting_balance?: number | null
           starting_balance_date?: string | null
           type?: string | null
+          apr?: number | null
+          min_payment?: number | null
+          due_day?: number | null
+          original_balance?: number | null
         }
         Update: {
           archived_at?: string | null
@@ -107,6 +115,10 @@ export type Database = {
           starting_balance?: number | null
           starting_balance_date?: string | null
           type?: string | null
+          apr?: number | null
+          min_payment?: number | null
+          due_day?: number | null
+          original_balance?: number | null
         }
         Relationships: []
       }

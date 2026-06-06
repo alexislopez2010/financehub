@@ -24,6 +24,9 @@ const TYPES: ReadonlyArray<{ value: string; label: string }> = [
   { value: 'property',   label: 'Property' }
 ]
 
+/** Types for which the Debt metadata (APR / min payment / due day) fields render. */
+const DEBT_TYPES = new Set(['credit', 'loan', 'mortgage'])
+
 export interface EditAccountDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -41,6 +44,10 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
   const [startingBalanceDate, setStartingBalanceDate] = useState('')
   const [owner, setOwner] = useState<string>('')
   const [importFormat, setImportFormat] = useState<string>('')
+  // Debt-only fields (rendered when type is credit/loan/mortgage).
+  const [apr, setApr] = useState('')
+  const [minPayment, setMinPayment] = useState('')
+  const [dueDay, setDueDay] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   // Sync form fields whenever a new account opens the dialog. We also reset
@@ -58,6 +65,17 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
       setStartingBalanceDate(account.starting_balance_date ?? '')
       setOwner(account.owner ?? '')
       setImportFormat(account.import_format ?? '')
+      setApr(account.apr !== null && account.apr !== undefined ? String(account.apr) : '')
+      setMinPayment(
+        account.min_payment !== null && account.min_payment !== undefined
+          ? String(account.min_payment)
+          : ''
+      )
+      setDueDay(
+        account.due_day !== null && account.due_day !== undefined
+          ? String(account.due_day)
+          : ''
+      )
       setSubmitError(null)
     }
   }, [account, open])
@@ -79,6 +97,29 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
       return
     }
 
+    // Debt fields: only persist when this account is a debt type. For
+    // non-debt accounts (checking/savings/etc.) write null so a stale value
+    // can't accidentally survive a type change.
+    const isDebtType = DEBT_TYPES.has(type)
+    const parsedApr = apr.trim() === '' ? null : parseFloat(apr)
+    const parsedMin = minPayment.trim() === '' ? null : parseFloat(minPayment)
+    const parsedDue = dueDay.trim() === '' ? null : parseInt(dueDay, 10)
+
+    if (isDebtType) {
+      if (parsedApr !== null && (!Number.isFinite(parsedApr) || parsedApr < 0)) {
+        setSubmitError('APR must be a non-negative number.')
+        return
+      }
+      if (parsedMin !== null && (!Number.isFinite(parsedMin) || parsedMin < 0)) {
+        setSubmitError('Minimum payment must be a non-negative number.')
+        return
+      }
+      if (parsedDue !== null && (!Number.isFinite(parsedDue) || parsedDue < 1 || parsedDue > 31)) {
+        setSubmitError('Due day must be between 1 and 31.')
+        return
+      }
+    }
+
     try {
       await updateAccount.mutateAsync({
         id: account.id,
@@ -89,7 +130,10 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
           starting_balance: parsedStarting,
           starting_balance_date: startingBalanceDate || null,
           owner: owner || null,
-          import_format: importFormat || null
+          import_format: importFormat || null,
+          apr:         isDebtType ? parsedApr : null,
+          min_payment: isDebtType ? parsedMin : null,
+          due_day:     isDebtType ? parsedDue : null
         }
       })
       onOpenChange(false)
@@ -227,6 +271,64 @@ export function EditAccountDialog({ open, onOpenChange, account }: EditAccountDi
                 When set, only transactions on or after this date count toward the current balance.
               </span>
             </div>
+
+            {DEBT_TYPES.has(type) && (
+              <div className="rounded-lg border border-rule bg-bg/40 p-3 space-y-3">
+                <div className="text-[10px] uppercase tracking-[0.12em] font-semibold text-muted">
+                  Debt details
+                </div>
+                <p className="text-[11px] text-muted -mt-1">
+                  Used by the Debt surface payoff calculator. The current balance is computed from
+                  this account&rsquo;s transactions — these fields just describe the loan terms.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">
+                      APR&nbsp;%
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={apr}
+                      onChange={e => setApr(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm tabular text-right rounded-lg bg-surface border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">
+                      Min payment
+                    </span>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      placeholder="0"
+                      value={minPayment}
+                      onChange={e => setMinPayment(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm tabular text-right rounded-lg bg-surface border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted block mb-1">
+                      Due day
+                    </span>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="31"
+                      placeholder="1–31"
+                      value={dueDay}
+                      onChange={e => setDueDay(e.target.value)}
+                      className="w-full px-3 py-1.5 text-sm tabular text-right rounded-lg bg-surface border border-rule text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
 
             <div className="pt-2 flex justify-end gap-2">
               <Dialog.Close className="px-3 py-1.5 text-sm text-muted hover:text-ink">Cancel</Dialog.Close>
