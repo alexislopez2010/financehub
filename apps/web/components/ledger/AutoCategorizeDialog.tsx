@@ -293,6 +293,10 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
                   aria-label="Merchant groups"
                   className="rounded-xl border border-rule overflow-hidden"
                 >
+                  {/* Horizontal scroll so the dense 5-column grid doesn't clip
+                      inside the dialog on narrow phones (the grid is ~520px). */}
+                  <div className="overflow-x-auto">
+                  <div className="min-w-[520px]">
                   <header className="grid grid-cols-[24px_1fr_60px_50px_180px] gap-2 px-3 py-2 bg-bg text-[10px] font-semibold uppercase tracking-wider text-muted">
                     <span aria-hidden="true" />
                     <span>Merchant</span>
@@ -357,6 +361,8 @@ export function AutoCategorizeDialog({ open, onOpenChange }: AutoCategorizeDialo
                       )
                     })}
                   </ul>
+                  </div>
+                  </div>
                 </section>
               </>
             )}

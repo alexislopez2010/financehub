@@ -136,9 +136,10 @@ export function FiftyThirtyTwentySection() {
         Actuals are YTD spend averaged over {today.month} {today.month === 1 ? 'month' : 'months'}.
       </div>
 
-      {/* Comparison table */}
-      <div className="overflow-hidden rounded-lg border border-rule">
-        <table className="w-full text-sm">
+      {/* Comparison table — scroll horizontally on narrow phones so the 4
+          currency/percent columns don't crush the Bucket description column. */}
+      <div className="overflow-x-auto rounded-lg border border-rule">
+        <table className="w-full min-w-[440px] text-sm">
           <thead className="bg-bg/60 text-[11px] uppercase tracking-[0.10em] text-muted">
             <tr>
               <th className="text-left  px-3 py-2 font-medium">Bucket</th>

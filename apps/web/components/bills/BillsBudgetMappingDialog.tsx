@@ -188,6 +188,10 @@ export function BillsBudgetMappingDialog({ open, onOpenChange }: BillsBudgetMapp
                 aria-label="Bill → budget category mapping"
                 className="rounded-xl border border-rule overflow-hidden"
               >
+                {/* Scroll horizontally on narrow phones so the fixed 220px
+                    category column doesn't crush the bill-name column. */}
+                <div className="overflow-x-auto">
+                <div className="min-w-[420px]">
                 <header className="grid grid-cols-[1fr_220px] gap-3 px-3 py-2 bg-bg text-[10px] font-semibold uppercase tracking-wider text-muted">
                   <span>Bill</span>
                   <span>Budget category</span>
@@ -239,6 +243,8 @@ export function BillsBudgetMappingDialog({ open, onOpenChange }: BillsBudgetMapp
                     )
                   })}
                 </ul>
+                </div>
+                </div>
               </section>
             )}
           </div>
