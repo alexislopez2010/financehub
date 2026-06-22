@@ -4,6 +4,7 @@ import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/r
 import { createClient } from '@/lib/supabase/browser'
 import { queryKeys } from './keys'
 import type { TablesInsert } from '@/lib/supabase/database.types'
+import type { SeasonalProfile } from '@/lib/forecast/seasonalProfile'
 
 export type BudgetInsert = TablesInsert<'budgets'>
 
@@ -52,6 +53,58 @@ export function useApplyBudgets(): UseMutationResult<void, Error, ApplyBudgetsAr
     },
     onSettled(_data, _err, args) {
       queryClient.invalidateQueries({ queryKey: queryKeys.budgets({ year: args.year, month: args.month }) })
+    }
+  })
+}
+
+export interface AnalyzeHistoryArgs {
+  billName: string
+  rawText: string
+}
+
+export interface AnalyzeHistoryResult {
+  profile: SeasonalProfile
+  /** How many of the 12 calendar months had observed history. */
+  monthsCovered: number
+  /** How many observations the model returned after validation. */
+  observationsUsed: number
+  /** Non-fatal notes from distillation (e.g. months filled from the average). */
+  warnings: string[]
+  /** Model-authored one-line summary. */
+  note: string
+  confidence: 'high' | 'medium' | 'low'
+}
+
+/**
+ * Sends one bill's raw history to the server route, which calls Claude to
+ * extract per-month observations and then distills them into a verified
+ * SeasonalProfile. Raw text is never persisted — only the returned profile,
+ * which the caller writes to bills.seasonal_profile after the user confirms.
+ */
+export function useAnalyzeBillHistory(): UseMutationResult<AnalyzeHistoryResult, Error, AnalyzeHistoryArgs, unknown> {
+  return useMutation<AnalyzeHistoryResult, Error, AnalyzeHistoryArgs, unknown>({
+    async mutationFn(args) {
+      const res = await fetch('/api/forecast/analyze-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(args)
+      })
+      const json: unknown = await res.json().catch(() => null)
+      if (!res.ok || !json || typeof json !== 'object' || (json as { ok?: unknown }).ok !== true) {
+        const message = json && typeof json === 'object' && typeof (json as { error?: unknown }).error === 'string'
+          ? (json as { error: string }).error
+          : `Request failed (${res.status}).`
+        throw new Error(message)
+      }
+      const data = json as { ok: true } & AnalyzeHistoryResult
+      return {
+        profile: data.profile,
+        monthsCovered: data.monthsCovered,
+        observationsUsed: data.observationsUsed,
+        warnings: data.warnings,
+        note: data.note,
+        confidence: data.confidence
+      }
     }
   })
 }

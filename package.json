@@ -15,6 +15,7 @@
     "db:test": "node scripts/db-test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }
