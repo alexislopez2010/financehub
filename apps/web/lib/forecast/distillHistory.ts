@@ -44,11 +44,13 @@ export type DistillResult =
 const MIN_YEAR = 1990
 const MAX_YEAR = 2100
 const MONTHS_IN_YEAR = 12
+/** Reject absurd magnitudes so one bad value can't dominate the averages. */
+const MAX_ABS_AMOUNT = 1_000_000
 
 function isValidObservation(o: HistoryObservation): boolean {
   if (!Number.isInteger(o.month) || o.month < 1 || o.month > MONTHS_IN_YEAR) return false
   if (!Number.isInteger(o.year) || o.year < MIN_YEAR || o.year > MAX_YEAR) return false
-  if (!Number.isFinite(o.amount)) return false
+  if (!Number.isFinite(o.amount) || Math.abs(o.amount) > MAX_ABS_AMOUNT) return false
   return true
 }
 

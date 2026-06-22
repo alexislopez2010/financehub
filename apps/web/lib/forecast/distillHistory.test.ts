@@ -97,6 +97,18 @@ describe('distillSeasonalProfile', () => {
     expect(res.profile.baseline[3]).toBe(88)
   })
 
+  it('drops observations with an absurd magnitude', () => {
+    const obs = [
+      { year: 2025, month: 5, amount: 1e12 },
+      { year: 2025, month: 5, amount: 75 }
+    ]
+    const res = distillSeasonalProfile(obs, { computedAt: AT })
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.observationsUsed).toBe(1)
+    expect(res.profile.baseline[4]).toBe(75)
+  })
+
   it('fails when there are no valid observations', () => {
     const res = distillSeasonalProfile([], { computedAt: AT })
     expect(res.ok).toBe(false)

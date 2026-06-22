@@ -11,8 +11,32 @@ export const dynamic = 'force-dynamic'
 /** Cap pasted history so a single request can't run up an unbounded token bill. */
 const MAX_RAW_CHARS = 20_000
 const MAX_OUTPUT_TOKENS = 4096
+/** Upper bounds on the model's structured reply (defense against a runaway response). */
+const MAX_OBSERVATIONS = 500
+const MAX_NOTE_CHARS = 500
 /** Override-able so a model-id rename is an env change, not a redeploy. */
 const MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
+
+/**
+ * Best-effort per-user throttle. In-memory (per server instance), so it is a
+ * guard rail against a compromised session draining the API key, not a hard
+ * multi-tenant limit. Revisit with a shared store if this ever goes multi-household.
+ */
+const RATE_LIMIT = 20
+const RATE_WINDOW_MS = 60 * 60 * 1000
+const recentCallsByUser = new Map<string, number[]>()
+
+function isRateLimited(userId: string, now: number): boolean {
+  const cutoff = now - RATE_WINDOW_MS
+  const recent = (recentCallsByUser.get(userId) ?? []).filter(t => t > cutoff)
+  if (recent.length >= RATE_LIMIT) {
+    recentCallsByUser.set(userId, recent)
+    return true
+  }
+  recent.push(now)
+  recentCallsByUser.set(userId, recent)
+  return false
+}
 
 const RequestSchema = z.object({
   billName: z.string().trim().min(1).max(120),
@@ -26,8 +50,8 @@ const ObservationSchema = z.object({
   amount: z.number()
 })
 const ToolInputSchema = z.object({
-  observations: z.array(ObservationSchema),
-  note: z.string().default(''),
+  observations: z.array(ObservationSchema).max(MAX_OBSERVATIONS),
+  note: z.string().max(MAX_NOTE_CHARS).default(''),
   confidence: z.enum(['high', 'medium', 'low']).default('medium')
 })
 
@@ -79,7 +103,7 @@ const SYSTEM_PROMPT = [
 
 function friendlyError(err: unknown): string {
   if (err instanceof Anthropic.RateLimitError) return 'The AI service is rate limited right now. Try again in a minute.'
-  if (err instanceof Anthropic.AuthenticationError) return 'The AI service rejected the API key. Check ANTHROPIC_API_KEY.'
+  if (err instanceof Anthropic.AuthenticationError) return 'The AI service rejected the request. Contact the app administrator.'
   if (err instanceof Anthropic.APIConnectionError) return 'Could not reach the AI service. Check your connection and retry.'
   if (err instanceof Anthropic.APIError) return `The AI service returned an error (${err.status ?? 'unknown'}).`
   return 'Could not analyze the history. Please try again.'
@@ -91,6 +115,11 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ ok: false, error: 'Not authenticated.' }, { status: 401 })
+  }
+
+  // 1b. Throttle per user — guards against a compromised session draining the key.
+  if (isRateLimited(user.id, Date.now())) {
+    return NextResponse.json({ ok: false, error: 'Too many imports recently. Try again later.' }, { status: 429 })
   }
 
   // 2. Validate input at the boundary.
@@ -108,7 +137,7 @@ export async function POST(request: NextRequest) {
   // 3. Require the API key explicitly so the failure is legible.
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ ok: false, error: 'AI import is not configured (missing ANTHROPIC_API_KEY).' }, { status: 503 })
+    return NextResponse.json({ ok: false, error: 'AI import is not configured on this server.' }, { status: 503 })
   }
 
   // 4. Ask Claude to extract observations (it reads; we count).
