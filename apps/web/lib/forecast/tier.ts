@@ -13,6 +13,17 @@
 
 export type SpendTier = 'essential' | 'services' | 'discretionary'
 
+const SPEND_TIERS = new Set<string>(['essential', 'services', 'discretionary'])
+
+/**
+ * Narrows an untrusted value to a SpendTier. The DB types `categories.tier`
+ * and `bills.tier` as `string | null`; callers reading a tier from the DB use
+ * this guard instead of an unsafe cast.
+ */
+export function isSpendTier(v: unknown): v is SpendTier {
+  return typeof v === 'string' && SPEND_TIERS.has(v)
+}
+
 export interface ResolveTierInput {
   /** bills.tier override, or null. */
   billTier: SpendTier | null

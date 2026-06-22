@@ -3,6 +3,8 @@
  * All amounts are summed as |amount| on Expense rows only.
  */
 
+import { round2 } from './utils'
+
 export interface StatTxn {
   date: string        // ISO yyyy-mm-dd
   amount: number
@@ -20,6 +22,9 @@ function ym(date: string): { year: number; month: number } | null {
  * Average actual spend for `category` in calendar `month` (1..12) across every
  * year present. Each distinct year contributes its summed spend; the result is
  * the mean across years. Returns null when there is no matching history.
+ *
+ * TODO(Phase 3): recency-weight the per-year contributions and dampen single-
+ * month outliers (see design spec). Phase 1 uses an equal-weight mean.
  */
 export function calendarMonthAverage(
   txns: ReadonlyArray<StatTxn>,
@@ -66,8 +71,4 @@ export function trailingMonthlyAverage(
   let sum = 0
   for (const v of byMonth.values()) sum += v
   return round2(sum / byMonth.size)
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }

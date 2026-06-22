@@ -44,4 +44,12 @@ describe('trailingMonthlyAverage', () => {
   it('returns 0 when there is no spend in the window', () => {
     expect(trailingMonthlyAverage([], 'Dining', { year: 2026, month: 5 }, 6)).toBe(0)
   })
+
+  it('excludes the asOf month itself (window ends the month before)', () => {
+    const txns = [
+      tx({ date: '2026-04-10', amount: -100, category: 'Dining' }), // April → counts
+      tx({ date: '2026-05-10', amount: -999, category: 'Dining' })  // May (asOf) → excluded
+    ]
+    expect(trailingMonthlyAverage(txns, 'Dining', { year: 2026, month: 5 }, 6)).toBe(100)
+  })
 })

@@ -74,10 +74,27 @@ describe('project', () => {
     })
     expect(out[0]!.months).toHaveLength(12)
   })
+
+  it('emits an empty months array when horizon is 0', () => {
+    const out = project({
+      bills: [bill({ seasonalProfile: profile })],
+      transactions: NO_TX, horizon: 0, startYear: 2026, startMonth: 1
+    })
+    expect(out[0]!.months).toEqual([])
+  })
+
+  it('a fixed bill WITH a seasonal profile uses the profile (profile wins over flat)', () => {
+    const out = project({
+      bills: [bill({ isFixed: true, budgetAmount: 100, seasonalProfile: profile })],
+      transactions: NO_TX, horizon: 1, startYear: 2026, startMonth: 1
+    })
+    expect(out[0]!.method).toBe('seasonal-profile')
+    expect(out[0]!.months[0]!.amount).toBe(180) // January baseline, not the 100 flat amount
+  })
 })
 
 describe('projectDiscretionary', () => {
-  it('repeats the trailing monthly average across the horizon (method trend)', () => {
+  it('repeats the trailing monthly average across the horizon (method trailing-avg)', () => {
     const txns: StatTxn[] = [
       { date: '2026-03-02', amount: -50, type: 'Expense', category: 'Dining' },
       { date: '2026-03-20', amount: -70, type: 'Expense', category: 'Dining' }, // Mar total 120
@@ -88,7 +105,7 @@ describe('projectDiscretionary', () => {
       transactions: txns, horizon: 3, startYear: 2026, startMonth: 5
     })
     expect(out[0]!.tier).toBe('discretionary')
-    expect(out[0]!.method).toBe('trend')
+    expect(out[0]!.method).toBe('trailing-avg')
     expect(out[0]!.billId).toBe('cat:Dining')
     // trailing avg over Mar+Apr = (120+80)/2 = 100, repeated 3x
     expect(out[0]!.months.map(m => m.amount)).toEqual([100, 100, 100])

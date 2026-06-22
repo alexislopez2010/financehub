@@ -5,15 +5,12 @@
 
 import type { BillProjection, MonthlyProjection } from './project'
 import type { SpendTier } from './tier'
+import { round2, monthIndex } from './utils'
 
 export interface TierRollup {
-  essential: MonthlyProjection[]
-  services: MonthlyProjection[]
-  discretionary: MonthlyProjection[]
-}
-
-function monthKey(p: { year: number; month: number }): number {
-  return p.year * 12 + (p.month - 1)
+  essential: ReadonlyArray<MonthlyProjection>
+  services: ReadonlyArray<MonthlyProjection>
+  discretionary: ReadonlyArray<MonthlyProjection>
 }
 
 function rollupOne(projections: ReadonlyArray<BillProjection>, tier: SpendTier): MonthlyProjection[] {
@@ -21,16 +18,15 @@ function rollupOne(projections: ReadonlyArray<BillProjection>, tier: SpendTier):
   for (const proj of projections) {
     if (proj.tier !== tier) continue
     for (const m of proj.months) {
-      const key = monthKey(m)
+      const key = monthIndex(m)
       const existing = byMonth.get(key)
-      if (existing) {
-        existing.amount = round2(existing.amount + m.amount)
-      } else {
-        byMonth.set(key, { year: m.year, month: m.month, amount: round2(m.amount) })
-      }
+      // Immutable update — replace the cell rather than mutating it in place.
+      byMonth.set(key, existing
+        ? { ...existing, amount: round2(existing.amount + m.amount) }
+        : { year: m.year, month: m.month, amount: round2(m.amount) })
     }
   }
-  return [...byMonth.values()].sort((a, b) => monthKey(a) - monthKey(b))
+  return [...byMonth.values()].sort((a, b) => monthIndex(a) - monthIndex(b))
 }
 
 export function rollupByTier(projections: ReadonlyArray<BillProjection>): TierRollup {
@@ -39,8 +35,4 @@ export function rollupByTier(projections: ReadonlyArray<BillProjection>): TierRo
     services: rollupOne(projections, 'services'),
     discretionary: rollupOne(projections, 'discretionary')
   }
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }

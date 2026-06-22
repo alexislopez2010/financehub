@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { resolveTier, type ResolveTierInput } from './tier'
+import { resolveTier, isSpendTier, type ResolveTierInput } from './tier'
+
+describe('isSpendTier', () => {
+  it('accepts the three valid tiers', () => {
+    expect(isSpendTier('essential')).toBe(true)
+    expect(isSpendTier('services')).toBe(true)
+    expect(isSpendTier('discretionary')).toBe(true)
+  })
+
+  it('rejects null, unknown strings, and non-strings', () => {
+    expect(isSpendTier(null)).toBe(false)
+    expect(isSpendTier('Essential')).toBe(false)  // case-sensitive
+    expect(isSpendTier('savings')).toBe(false)
+    expect(isSpendTier(42)).toBe(false)
+    expect(isSpendTier(undefined)).toBe(false)
+  })
+})
 
 function input(over: Partial<ResolveTierInput> = {}): ResolveTierInput {
   return {

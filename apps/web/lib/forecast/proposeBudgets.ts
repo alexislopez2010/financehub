@@ -5,6 +5,7 @@
  */
 
 import type { BillProjection } from './project'
+import { round2 } from './utils'
 
 export interface CurrentBudget {
   category: string
@@ -52,8 +53,4 @@ export function proposeBudgets(input: ProposeBudgetsInput): ReadonlyArray<Budget
   }
   rows.sort((a, b) => a.category.localeCompare(b.category, undefined, { sensitivity: 'base' }))
   return rows
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }

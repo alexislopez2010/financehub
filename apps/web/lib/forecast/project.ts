@@ -14,10 +14,25 @@
 import { amountForMonth, type SeasonalProfile } from './seasonalProfile'
 import { calendarMonthAverage, trailingMonthlyAverage, type StatTxn } from './ledgerStats'
 import type { SpendTier } from './tier'
+import { round2 } from './utils'
 
 export type { StatTxn } from './ledgerStats'
 
-export type ProjectionMethod = 'seasonal-profile' | 'ledger-seasonal' | 'flat' | 'trend'
+/**
+ * How a projected number was derived (surfaced for explainability):
+ *   seasonal-profile — from the bill's stored SeasonalProfile baseline.
+ *   ledger-seasonal  — calendar-month average from the live ledger.
+ *   flat             — the bill's flat budget amount.
+ *   trailing-avg     — discretionary category's trailing monthly average,
+ *                      repeated across the horizon (no slope — not a true trend).
+ */
+export type ProjectionMethod = 'seasonal-profile' | 'ledger-seasonal' | 'flat' | 'trailing-avg'
+
+/**
+ * Default trailing window for discretionary projection — 6 months balances a
+ * stable average against not overfitting to a single season.
+ */
+const DEFAULT_DISCRETIONARY_WINDOW_MONTHS = 6
 
 export interface ProjectBill {
   id: string
@@ -125,13 +140,13 @@ export interface ProjectDiscretionaryInput {
 
 /**
  * Projects discretionary CATEGORIES (which have no named bill) by repeating
- * their trailing monthly average across the horizon. method = 'trend'. The
- * synthesized billId is `cat:<name>` so downstream code (rollup, proposals)
+ * their trailing monthly average across the horizon. method = 'trailing-avg'.
+ * The synthesized billId is `cat:<name>` so downstream code (rollup, proposals)
  * treats them uniformly with bill projections.
  */
 export function projectDiscretionary(input: ProjectDiscretionaryInput): ReadonlyArray<BillProjection> {
   const { categories, transactions, horizon, startYear, startMonth } = input
-  const windowMonths = input.windowMonths ?? 6
+  const windowMonths = input.windowMonths ?? DEFAULT_DISCRETIONARY_WINDOW_MONTHS
 
   return categories.map(c => {
     const avg = trailingMonthlyAverage(transactions, c.name, { year: startYear, month: startMonth }, windowMonths)
@@ -145,12 +160,8 @@ export function projectDiscretionary(input: ProjectDiscretionaryInput): Readonly
       billName: c.name,
       tier: 'discretionary',
       category: c.name,
-      method: 'trend',
+      method: 'trailing-avg',
       months
     }
   })
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }
