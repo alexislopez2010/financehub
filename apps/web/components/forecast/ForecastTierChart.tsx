@@ -18,7 +18,11 @@ export interface ForecastTierChartProps {
   selectedIndex?: number
   /** Click a bar to itemize that month below the chart. */
   onSelectMonth?: (index: number) => void
+  /** Flat projected monthly income; draws a reference line. Omit/0 = no line. */
+  incomeLine?: number
 }
+
+const INCOME_HEX = '#059669' // emerald — matches --color-accent
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 
@@ -44,12 +48,14 @@ interface HoverState {
  * Hand-rolled SVG. A left y-axis gives static reference values; hovering a
  * month reveals a floating tooltip with the per-tier breakdown and total.
  */
-export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: ForecastTierChartProps) {
+export function ForecastTierChart({ data, selectedIndex, onSelectMonth, incomeLine }: ForecastTierChartProps) {
   const [hover, setHover] = useState<HoverState | null>(null)
 
   if (data.length === 0) {
     return <div className="text-sm text-muted py-6 text-center">No projection data.</div>
   }
+
+  const hasIncome = typeof incomeLine === 'number' && incomeLine > 0
 
   // Geometry.
   const barW = 30
@@ -60,8 +66,10 @@ export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: Foreca
   const labelH = 22
   const width = padL + padR + data.length * barW + (data.length - 1) * gap
   const totals = data.map(d => d.essential + d.services + d.discretionary)
-  const maxTotal = Math.max(1, ...totals)
+  // Include income so its line never falls off the top of the scale.
+  const maxTotal = Math.max(1, hasIncome ? incomeLine! : 0, ...totals)
   const yScale = (v: number) => (v / maxTotal) * chartH
+  const incomeY = hasIncome ? chartH - yScale(incomeLine!) : 0
 
   const ticks = [maxTotal, maxTotal / 2, 0]
   const hovered = hover ? data[hover.idx] : null
@@ -81,6 +89,12 @@ export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: Foreca
             <span className="text-muted">{TIER_THEME[t].label}</span>
           </span>
         ))}
+        {hasIncome && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3.5 h-0 border-t-2 border-dashed" style={{ borderColor: INCOME_HEX }} aria-hidden="true" />
+            <span className="text-muted">Income {fmtUSD0(incomeLine!)}/mo</span>
+          </span>
+        )}
       </div>
 
       <div className="flex items-start">
@@ -132,11 +146,17 @@ export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: Foreca
               const isSelected = selectedIndex === i
               const highlight = isSelected ? 'var(--color-brand)' : isHover ? 'var(--color-ink)' : 'transparent'
               const highlightOpacity = isSelected ? 0.08 : isHover ? 0.05 : 0
+              // Portion of the bar that pokes above the income line (deficit month).
+              const overIncome = hasIncome && totals[i]! > incomeLine!
               return (
                 <g key={`${d.year}-${d.month}`}>
                   <rect x={x} y={eY} width={barW} height={eH} fill={TIER_THEME.essential.hex} />
                   <rect x={x} y={sY} width={barW} height={sH} fill={TIER_THEME.services.hex} />
                   <rect x={x} y={dY} width={barW} height={dH} fill={TIER_THEME.discretionary.hex} />
+                  {/* Red cap on spend above income. */}
+                  {overIncome && (
+                    <rect x={x} y={dY} width={barW} height={incomeY - dY} fill="var(--color-warn)" fillOpacity={0.28} />
+                  )}
                   {/* Full-column hover/select target (also covers space above the bar). */}
                   <rect
                     x={x - gap / 2}
@@ -168,25 +188,44 @@ export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: Foreca
                 </g>
               )
             })}
+
+            {/* Projected monthly income — drawn on top, non-interactive. */}
+            {hasIncome && (
+              <g style={{ pointerEvents: 'none' }}>
+                <line
+                  x1={0}
+                  x2={Math.max(width, 240)}
+                  y1={incomeY}
+                  y2={incomeY}
+                  stroke={INCOME_HEX}
+                  strokeWidth={1.5}
+                  strokeDasharray="5 3"
+                />
+                <text x={2} y={Math.max(9, incomeY - 3)} style={{ fontSize: 9, fontWeight: 600 }} fill={INCOME_HEX}>
+                  Income
+                </text>
+              </g>
+            )}
           </svg>
         </div>
       </div>
 
       {/* Floating tooltip — fixed so it never clips inside the scroll container. */}
       {hover && hovered && (
-        <TierTooltip bar={hovered} total={hoveredTotal} x={hover.x} y={hover.y} />
+        <TierTooltip bar={hovered} total={hoveredTotal} income={hasIncome ? incomeLine! : null} x={hover.x} y={hover.y} />
       )}
     </div>
   )
 }
 
-function TierTooltip({ bar, total, x, y }: { bar: ForecastMonthBar; total: number; x: number; y: number }) {
+function TierTooltip({ bar, total, income, x, y }: { bar: ForecastMonthBar; total: number; income: number | null; x: number; y: number }) {
   const flipLeft = typeof window !== 'undefined' && x > window.innerWidth - 220
   const rows: ReadonlyArray<{ key: typeof TIER_ORDER[number]; amount: number }> = [
     { key: 'essential', amount: bar.essential },
     { key: 'services', amount: bar.services },
     { key: 'discretionary', amount: bar.discretionary }
   ]
+  const net = income !== null ? income - total : null
   return (
     <div
       role="status"
@@ -214,6 +253,23 @@ function TierTooltip({ bar, total, x, y }: { bar: ForecastMonthBar; total: numbe
           </div>
         ))}
       </div>
+      {income !== null && net !== null && (
+        <div className="mt-1.5 space-y-0.5 border-t border-gray-200 pt-1.5 text-[11px] tabular-nums">
+          <div className="flex items-center justify-between gap-4">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0 border-t-2 border-dashed" style={{ borderColor: INCOME_HEX }} aria-hidden="true" />
+              <span className="text-gray-600">Income</span>
+            </span>
+            <span className="font-medium text-gray-900">{fmtUSD0(income)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className={net >= 0 ? 'text-emerald-700' : 'text-red-700'}>{net >= 0 ? 'Surplus' : 'Deficit'}</span>
+            <span className={cn('font-semibold', net >= 0 ? 'text-emerald-700' : 'text-red-700')}>
+              {net >= 0 ? '+' : '−'}{fmtUSD0(Math.abs(net))}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

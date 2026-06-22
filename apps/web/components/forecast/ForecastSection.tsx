@@ -5,6 +5,8 @@ import { TrendingUp, Sparkles, RotateCcw } from 'lucide-react'
 import { useBills, useUpdateBill } from '@/lib/data/bills'
 import { useCategories, useUpdateCategory } from '@/lib/data/categories'
 import { useTransactions } from '@/lib/data/transactions'
+import { useIncomePlan } from '@/lib/data/incomePlan'
+import { monthlyPlannedIncome } from '@/lib/forecast/projectIncome'
 import { buildProjectInputs, type ExcludedForecastItem } from '@/lib/forecast/buildProjectInputs'
 import { project, projectDiscretionary, type BillProjection, type StatTxn } from '@/lib/forecast/project'
 import { rollupByTier } from '@/lib/forecast/rollupByTier'
@@ -79,6 +81,13 @@ export function ForecastSection() {
   const now = new Date()
   const startYear = now.getFullYear()
   const startMonth = now.getMonth() + 1
+
+  // Flat projected monthly income (from the Plan) for the reference line.
+  const incomeQuery = useIncomePlan({ year: startYear })
+  const monthlyIncome = useMemo(
+    () => monthlyPlannedIncome((incomeQuery.data ?? []).map(r => ({ month: r.month, expected_amount: r.expected_amount }))),
+    [incomeQuery.data]
+  )
 
   const statTxns = useMemo<ReadonlyArray<StatTxn>>(
     () => (transactions ?? []).map(t => ({ date: t.date, amount: t.amount, type: t.type, category: t.category })),
@@ -242,7 +251,7 @@ export function ForecastSection() {
       </header>
 
       <section className="rounded-xl border border-rule bg-surface p-4">
-        <ForecastTierChart data={chartData} selectedIndex={selIdx} onSelectMonth={setFocusIdx} />
+        <ForecastTierChart data={chartData} selectedIndex={selIdx} onSelectMonth={setFocusIdx} incomeLine={monthlyIncome} />
       </section>
 
       {tierError && (
