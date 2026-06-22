@@ -87,8 +87,14 @@ export function ProposeBudgetsPanel({ projections, targetYear, targetMonth, cate
         })
       }
     }
-    await apply.mutateAsync({ year: targetYear, month: targetMonth, updates, inserts })
-    setSelected(new Set()) // collapse selection after a successful apply
+    try {
+      await apply.mutateAsync({ year: targetYear, month: targetMonth, updates, inserts })
+      // Reset to the default selection; after the refetch, applied rows have a
+      // zero delta and drop out of `changed`, so nothing stays auto-selected.
+      setSelected(null)
+    } catch {
+      // apply.isError surfaces the message below — no extra handling needed.
+    }
   }
 
   if (budgetsQuery.isLoading) {
@@ -109,7 +115,9 @@ export function ProposeBudgetsPanel({ projections, targetYear, targetMonth, cate
         <button
           type="button"
           onClick={handleApply}
-          disabled={pickedCount === 0 || apply.isPending}
+          // Block applies while a refetch is in flight so the update/insert split
+          // is never computed from stale budget rows (avoids duplicate inserts).
+          disabled={pickedCount === 0 || apply.isPending || budgetsQuery.isFetching}
           className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
         >
           {apply.isPending ? 'Applying…' : `Apply ${pickedCount} ${pickedCount === 1 ? 'change' : 'changes'}`}

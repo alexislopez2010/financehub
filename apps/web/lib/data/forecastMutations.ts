@@ -22,6 +22,13 @@ export interface ApplyBudgetsArgs {
  * budget rows in place and inserts new ones, then invalidates that period so
  * the Plan + Forecast surfaces refresh. The caller (ProposeBudgetsPanel) splits
  * proposals into updates vs inserts using the current budget rows.
+ *
+ * Updates run sequentially and are NOT wrapped in a transaction. A mid-batch
+ * failure leaves earlier rows applied — but that is self-healing here: onSettled
+ * invalidates the period, the panel refetches, and proposeBudgets re-derives the
+ * diff from the actual rows, so already-applied categories show a zero delta and
+ * drop out while the failed ones remain selectable for a retry. Acceptable for a
+ * single-household app; revisit with a transactional RPC if this becomes shared.
  */
 export function useApplyBudgets(): UseMutationResult<void, Error, ApplyBudgetsArgs, unknown> {
   const queryClient = useQueryClient()

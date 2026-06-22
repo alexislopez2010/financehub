@@ -72,9 +72,10 @@ export function ForecastTierChart({ data }: ForecastTierChartProps) {
             const sY = eY - sH
             const dY = sY - dH
             const isJan = d.month === 1
+            const monthLabel = MONTHS[d.month - 1]!
             return (
               <g key={`${d.year}-${d.month}`}>
-                <title>{`${MONTHS[d.month - 1]} ${d.year}: ${fmtUSD0(totals[i]!)}`}</title>
+                <title>{`${monthLabel} ${d.year}: ${fmtUSD0(totals[i]!)}`}</title>
                 <rect x={x} y={eY} width={barW} height={eH} fill={TIER_THEME.essential.hex} />
                 <rect x={x} y={sY} width={barW} height={sH} fill={TIER_THEME.services.hex} />
                 <rect x={x} y={dY} width={barW} height={dH} fill={TIER_THEME.discretionary.hex} />

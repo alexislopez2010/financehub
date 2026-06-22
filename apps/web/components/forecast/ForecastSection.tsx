@@ -21,24 +21,38 @@ function fmtUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-/** Aligns the per-tier rollup into one bar per projected month for the chart. */
+type MonthCell = { year: number; month: number; amount: number }
+
+/**
+ * Aligns the per-tier rollup into one bar per projected month for the chart.
+ * Accumulates into plain-number tallies (no object mutation), then builds the
+ * immutable bar list in a final pure pass.
+ */
 function toChartData(
-  essential: ReadonlyArray<{ year: number; month: number; amount: number }>,
-  services: ReadonlyArray<{ year: number; month: number; amount: number }>,
-  discretionary: ReadonlyArray<{ year: number; month: number; amount: number }>
+  essential: ReadonlyArray<MonthCell>,
+  services: ReadonlyArray<MonthCell>,
+  discretionary: ReadonlyArray<MonthCell>
 ): ForecastMonthBar[] {
   const key = (y: number, m: number) => y * 12 + (m - 1)
-  const byKey = new Map<number, ForecastMonthBar>()
-  const ensure = (y: number, m: number) => {
-    const k = key(y, m)
-    let bar = byKey.get(k)
-    if (!bar) { bar = { year: y, month: m, essential: 0, services: 0, discretionary: 0 }; byKey.set(k, bar) }
-    return bar
+  const meta = new Map<number, { year: number; month: number }>()
+  const tally = new Map<number, { essential: number; services: number; discretionary: number }>()
+  const add = (cells: ReadonlyArray<MonthCell>, tier: 'essential' | 'services' | 'discretionary') => {
+    for (const c of cells) {
+      const k = key(c.year, c.month)
+      if (!meta.has(k)) meta.set(k, { year: c.year, month: c.month })
+      const t = tally.get(k) ?? { essential: 0, services: 0, discretionary: 0 }
+      tally.set(k, { ...t, [tier]: t[tier] + c.amount })
+    }
   }
-  for (const c of essential) ensure(c.year, c.month).essential += c.amount
-  for (const c of services) ensure(c.year, c.month).services += c.amount
-  for (const c of discretionary) ensure(c.year, c.month).discretionary += c.amount
-  return [...byKey.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v)
+  add(essential, 'essential')
+  add(services, 'services')
+  add(discretionary, 'discretionary')
+  return [...meta.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([k, m]) => {
+      const t = tally.get(k) ?? { essential: 0, services: 0, discretionary: 0 }
+      return { year: m.year, month: m.month, essential: t.essential, services: t.services, discretionary: t.discretionary }
+    })
 }
 
 export function ForecastSection() {
@@ -49,6 +63,7 @@ export function ForecastSection() {
   const updateCategory = useUpdateCategory()
   const [horizon, setHorizon] = useState<Horizon>(12)
   const [pendingId, setPendingId] = useState<string | null>(null)
+  const [tierError, setTierError] = useState<string | null>(null)
 
   const bills = billsQuery.data
   const categories = categoriesQuery.data
@@ -87,7 +102,7 @@ export function ForecastSection() {
     return map
   }, [categories])
 
-  const projectionsByTier = useMemo(() => {
+  const projectionsByTier = useMemo<Record<SpendTier, ReadonlyArray<BillProjection>>>(() => {
     const groups: Record<SpendTier, BillProjection[]> = { essential: [], services: [], discretionary: [] }
     for (const p of allProjections) groups[p.tier].push(p)
     return groups
@@ -99,15 +114,25 @@ export function ForecastSection() {
     : 0
 
   async function handleChangeTier(p: BillProjection, tier: SpendTier) {
+    setTierError(null)
+    // Resolve the write target up front so we never show a spinner for a no-op.
+    const isCategoryLine = p.billId.startsWith('cat:')
+    const categoryId = isCategoryLine
+      ? categoryIdByName.get((p.category ?? '').trim().toLowerCase())
+      : undefined
+    if (isCategoryLine && !categoryId) {
+      setTierError(`Couldn’t save tier for “${p.billName}” — category not found.`)
+      return
+    }
     setPendingId(p.billId)
     try {
-      if (p.billId.startsWith('cat:')) {
-        // Discretionary category line — persist the override on the category.
-        const id = categoryIdByName.get((p.category ?? '').trim().toLowerCase())
-        if (id) await updateCategory.mutateAsync({ id, patch: { tier } })
+      if (isCategoryLine) {
+        await updateCategory.mutateAsync({ id: categoryId!, patch: { tier } })
       } else {
         await updateBill.mutateAsync({ id: p.billId, patch: { tier } })
       }
+    } catch (err) {
+      setTierError(err instanceof Error ? err.message : 'Couldn’t save the tier change.')
     } finally {
       setPendingId(null)
     }
@@ -153,6 +178,10 @@ export function ForecastSection() {
       <section className="rounded-xl border border-rule bg-surface p-4">
         <ForecastTierChart data={chartData} />
       </section>
+
+      {tierError && (
+        <p role="alert" className="rounded-lg border border-rule bg-surface px-3 py-2 text-sm text-warn">{tierError}</p>
+      )}
 
       <div className="space-y-3">
         {TIER_ORDER.map(tier => (

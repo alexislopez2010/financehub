@@ -1,7 +1,7 @@
 'use client'
 
 import type { BillProjection, ProjectionMethod } from '@/lib/forecast/project'
-import type { SpendTier } from '@/lib/forecast/tier'
+import { isSpendTier, type SpendTier } from '@/lib/forecast/tier'
 import { TIER_THEME, TIER_ORDER } from '@/lib/forecast/tierTheme'
 
 const METHOD_LABEL: Record<ProjectionMethod, string> = {
@@ -47,7 +47,7 @@ export function ForecastBillRow({ projection, monthlyAmount, horizonTotal, onCha
         aria-label={`Spend tier for ${projection.billName}`}
         value={projection.tier}
         disabled={busy}
-        onChange={e => onChangeTier(e.target.value as SpendTier)}
+        onChange={e => { if (isSpendTier(e.target.value)) onChangeTier(e.target.value) }}
         className={`shrink-0 rounded-md border border-rule bg-surface px-1.5 py-1 text-[11px] font-medium ${theme.text} disabled:opacity-50`}
       >
         {TIER_ORDER.map(t => (
