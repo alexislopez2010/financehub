@@ -18,6 +18,8 @@ import { HistoryImportDialog, type BillPick } from './HistoryImportDialog'
 const HORIZONS = [6, 12, 24] as const
 type Horizon = (typeof HORIZONS)[number]
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const
+
 function fmtUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
@@ -66,6 +68,8 @@ export function ForecastSection() {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [tierError, setTierError] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
+  // Which projected month the line items + proposals are itemizing (0 = first).
+  const [focusIdx, setFocusIdx] = useState(0)
 
   const bills = billsQuery.data
   const categories = categoriesQuery.data
@@ -116,10 +120,14 @@ export function ForecastSection() {
     return groups
   }, [allProjections])
 
-  // First-month total across all tiers — the headline number.
-  const firstMonthTotal = chartData[0]
-    ? chartData[0].essential + chartData[0].services + chartData[0].discretionary
-    : 0
+  // The month the line items + proposals itemize. Clamp so a shrunk horizon
+  // can't leave the focus past the end of the data.
+  const selIdx = Math.min(focusIdx, Math.max(0, chartData.length - 1))
+  const focusZero = startYear * 12 + (startMonth - 1) + selIdx
+  const focusYear = Math.floor(focusZero / 12)
+  const focusMonth = (focusZero % 12) + 1
+  const focusBar = chartData[selIdx]
+  const focusTotal = focusBar ? focusBar.essential + focusBar.services + focusBar.discretionary : 0
 
   async function handleChangeTier(p: BillProjection, tier: SpendTier) {
     setTierError(null)
@@ -197,7 +205,10 @@ export function ForecastSection() {
             <span className="text-xs font-medium uppercase tracking-wide">Forecast</span>
           </div>
           <h1 className="mt-1 text-2xl font-semibold text-ink">
-            {fmtUSD(firstMonthTotal)}<span className="text-base font-normal text-muted"> projected this month</span>
+            {fmtUSD(focusTotal)}
+            <span className="text-base font-normal text-muted">
+              {selIdx === 0 ? ' projected this month' : ` projected for ${MONTH_NAMES[focusMonth - 1]} ${focusYear}`}
+            </span>
           </h1>
         </div>
 
@@ -217,7 +228,7 @@ export function ForecastSection() {
               <button
                 key={h}
                 type="button"
-                onClick={() => setHorizon(h)}
+                onClick={() => { setHorizon(h); setFocusIdx(0) }}
                 aria-pressed={horizon === h}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   horizon === h ? 'bg-brand text-white' : 'text-muted hover:text-ink'
@@ -231,12 +242,24 @@ export function ForecastSection() {
       </header>
 
       <section className="rounded-xl border border-rule bg-surface p-4">
-        <ForecastTierChart data={chartData} />
+        <ForecastTierChart data={chartData} selectedIndex={selIdx} onSelectMonth={setFocusIdx} />
       </section>
 
       {tierError && (
         <p role="alert" className="rounded-lg border border-rule bg-surface px-3 py-2 text-sm text-warn">{tierError}</p>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted">
+          Itemizing <span className="font-semibold text-ink">{MONTH_NAMES[focusMonth - 1]} {focusYear}</span>
+          <span className="ml-1 text-xs">· click a bar to change</span>
+        </p>
+        {selIdx !== 0 && (
+          <button type="button" onClick={() => setFocusIdx(0)} className="text-xs font-medium text-brand hover:underline">
+            Back to this month
+          </button>
+        )}
+      </div>
 
       <div className="space-y-3">
         {TIER_ORDER.map(tier => (
@@ -244,8 +267,8 @@ export function ForecastSection() {
             key={tier}
             tier={tier}
             projections={projectionsByTier[tier]}
-            focusYear={startYear}
-            focusMonth={startMonth}
+            focusYear={focusYear}
+            focusMonth={focusMonth}
             onChangeTier={handleChangeTier}
             onRemove={p => setExcluded(p, true)}
             pendingId={pendingId}
@@ -277,8 +300,8 @@ export function ForecastSection() {
 
       <ProposeBudgetsPanel
         projections={allProjections}
-        targetYear={startYear}
-        targetMonth={startMonth}
+        targetYear={focusYear}
+        targetMonth={focusMonth}
         categoryIdByName={categoryIdByName}
       />
 

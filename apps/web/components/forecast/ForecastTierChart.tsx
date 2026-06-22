@@ -14,6 +14,10 @@ export interface ForecastMonthBar {
 
 export interface ForecastTierChartProps {
   data: ReadonlyArray<ForecastMonthBar>
+  /** Index of the month the line items are itemizing (gets a highlight). */
+  selectedIndex?: number
+  /** Click a bar to itemize that month below the chart. */
+  onSelectMonth?: (index: number) => void
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
@@ -40,7 +44,7 @@ interface HoverState {
  * Hand-rolled SVG. A left y-axis gives static reference values; hovering a
  * month reveals a floating tooltip with the per-tier breakdown and total.
  */
-export function ForecastTierChart({ data }: ForecastTierChartProps) {
+export function ForecastTierChart({ data, selectedIndex, onSelectMonth }: ForecastTierChartProps) {
   const [hover, setHover] = useState<HoverState | null>(null)
 
   if (data.length === 0) {
@@ -125,30 +129,38 @@ export function ForecastTierChart({ data }: ForecastTierChartProps) {
               const dY = sY - dH
               const isJan = d.month === 1
               const isHover = hover?.idx === i
+              const isSelected = selectedIndex === i
+              const highlight = isSelected ? 'var(--color-brand)' : isHover ? 'var(--color-ink)' : 'transparent'
+              const highlightOpacity = isSelected ? 0.08 : isHover ? 0.05 : 0
               return (
                 <g key={`${d.year}-${d.month}`}>
                   <rect x={x} y={eY} width={barW} height={eH} fill={TIER_THEME.essential.hex} />
                   <rect x={x} y={sY} width={barW} height={sH} fill={TIER_THEME.services.hex} />
                   <rect x={x} y={dY} width={barW} height={dH} fill={TIER_THEME.discretionary.hex} />
-                  {/* Full-column hover target (also covers empty space above the bar). */}
+                  {/* Full-column hover/select target (also covers space above the bar). */}
                   <rect
                     x={x - gap / 2}
                     y={0}
                     width={barW + gap}
                     height={chartH}
-                    fill={isHover ? 'var(--color-ink)' : 'transparent'}
-                    fillOpacity={isHover ? 0.05 : 0}
+                    fill={highlight}
+                    fillOpacity={highlightOpacity}
                     onMouseMove={e => onMove(i, e)}
                     onMouseEnter={e => onMove(i, e)}
                     onMouseLeave={() => setHover(null)}
-                    style={{ cursor: 'default' }}
+                    onClick={() => onSelectMonth?.(i)}
+                    style={{ cursor: onSelectMonth ? 'pointer' : 'default' }}
                   />
+                  {/* Selected-month underline. */}
+                  {isSelected && (
+                    <rect x={x} y={chartH + 1} width={barW} height={2} fill="var(--color-brand)" rx={1} />
+                  )}
                   <text
                     x={x + barW / 2}
                     y={chartH + 14}
                     textAnchor="middle"
-                    className="fill-muted"
-                    style={{ fontSize: 9 }}
+                    className={isSelected ? 'fill-brand' : 'fill-muted'}
+                    style={{ fontSize: 9, fontWeight: isSelected ? 600 : 400 }}
                   >
                     {MONTHS[d.month - 1]!}
                     {isJan ? ` '${String(d.year).slice(2)}` : ''}
