@@ -46,6 +46,8 @@ function makeBill(over: Partial<BillRow> = {}): BillRow {
     is_active: true,
     linked_debt_id: null,
     notes: null,
+    tier: null,
+    seasonal_profile: null,
     ...over
   }
 }
@@ -76,6 +78,7 @@ function makeCategory(over: Partial<CategoryRow> = {}): CategoryRow {
     type: 'expense',
     parent_category: null,
     is_fixed: null,
+    tier: null,
     created_at: null,
     ...over
   }
