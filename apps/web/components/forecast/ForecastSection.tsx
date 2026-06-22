@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, Sparkles } from 'lucide-react'
 import { useBills, useUpdateBill } from '@/lib/data/bills'
 import { useCategories, useUpdateCategory } from '@/lib/data/categories'
 import { useTransactions } from '@/lib/data/transactions'
@@ -13,6 +13,7 @@ import type { SpendTier } from '@/lib/forecast/tier'
 import { ForecastTierChart, type ForecastMonthBar } from './ForecastTierChart'
 import { TierGroup } from './TierGroup'
 import { ProposeBudgetsPanel } from './ProposeBudgetsPanel'
+import { HistoryImportDialog, type BillPick } from './HistoryImportDialog'
 
 const HORIZONS = [6, 12, 24] as const
 type Horizon = (typeof HORIZONS)[number]
@@ -64,6 +65,7 @@ export function ForecastSection() {
   const [horizon, setHorizon] = useState<Horizon>(12)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [tierError, setTierError] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   const bills = billsQuery.data
   const categories = categoriesQuery.data
@@ -101,6 +103,12 @@ export function ForecastSection() {
     for (const c of categories ?? []) map.set(c.name.trim().toLowerCase(), c.id)
     return map
   }, [categories])
+
+  // Real, active bills are the candidates for a seasonal-history import.
+  const billPicks = useMemo<BillPick[]>(
+    () => (bills ?? []).filter(b => b.is_active !== false).map(b => ({ id: b.id, name: b.name })),
+    [bills]
+  )
 
   const projectionsByTier = useMemo<Record<SpendTier, ReadonlyArray<BillProjection>>>(() => {
     const groups: Record<SpendTier, BillProjection[]> = { essential: [], services: [], discretionary: [] }
@@ -158,20 +166,32 @@ export function ForecastSection() {
           </h1>
         </div>
 
-        <div className="inline-flex rounded-lg border border-rule bg-surface p-0.5" role="group" aria-label="Forecast horizon">
-          {HORIZONS.map(h => (
-            <button
-              key={h}
-              type="button"
-              onClick={() => setHorizon(h)}
-              aria-pressed={horizon === h}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                horizon === h ? 'bg-brand text-white' : 'text-muted hover:text-ink'
-              }`}
-            >
-              {h}mo
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            disabled={billPicks.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-bg disabled:opacity-40"
+          >
+            <Sparkles size={14} className="text-brand" />
+            <span className="hidden sm:inline">Import history</span>
+          </button>
+
+          <div className="inline-flex rounded-lg border border-rule bg-surface p-0.5" role="group" aria-label="Forecast horizon">
+            {HORIZONS.map(h => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setHorizon(h)}
+                aria-pressed={horizon === h}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  horizon === h ? 'bg-brand text-white' : 'text-muted hover:text-ink'
+                }`}
+              >
+                {h}mo
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -203,6 +223,8 @@ export function ForecastSection() {
         targetMonth={startMonth}
         categoryIdByName={categoryIdByName}
       />
+
+      <HistoryImportDialog open={importOpen} onOpenChange={setImportOpen} bills={billPicks} />
     </div>
   )
 }
