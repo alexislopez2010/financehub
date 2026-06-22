@@ -20,6 +20,7 @@ function bill(over: Partial<BillRow> = {}): BillRow {
     linked_debt_id: null,
     tier: null,
     seasonal_profile: null,
+    exclude_from_forecast: false,
     created_at: null,
     ...over
   }

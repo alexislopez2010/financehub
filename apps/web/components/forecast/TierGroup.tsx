@@ -26,6 +26,7 @@ export interface TierGroupProps {
   focusYear: number
   focusMonth: number
   onChangeTier: (projection: BillProjection, tier: SpendTier) => void
+  onRemove: (projection: BillProjection) => void
   pendingId?: string | null
 }
 
@@ -34,7 +35,7 @@ export interface TierGroupProps {
  * tier's projected total for the focus month; rows let the user re-classify a
  * line into another tier.
  */
-export function TierGroup({ tier, projections, focusYear, focusMonth, onChangeTier, pendingId }: TierGroupProps) {
+export function TierGroup({ tier, projections, focusYear, focusMonth, onChangeTier, onRemove, pendingId }: TierGroupProps) {
   const [open, setOpen] = useState(true)
   const theme = TIER_THEME[tier]
   const sorted = [...projections].sort(
@@ -73,6 +74,7 @@ export function TierGroup({ tier, projections, focusYear, focusMonth, onChangeTi
                 monthlyAmount={monthAmount(p, focusYear, focusMonth)}
                 horizonTotal={horizonTotal(p)}
                 onChangeTier={t => onChangeTier(p, t)}
+                onRemove={() => onRemove(p)}
                 busy={pendingId === p.billId}
               />
             ))

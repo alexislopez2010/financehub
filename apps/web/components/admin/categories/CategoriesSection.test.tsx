@@ -24,6 +24,7 @@ function makeCategory(over: Partial<CategoryRow> = {}): CategoryRow {
     type: 'expense',
     parent_category: null,
     is_fixed: null,
+    exclude_from_forecast: false,
     tier: null,
     created_at: '2025-01-01T00:00:00Z',
     ...over

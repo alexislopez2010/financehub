@@ -48,6 +48,7 @@ function makeBill(over: Partial<BillRow> = {}): BillRow {
     notes: null,
     tier: null,
     seasonal_profile: null,
+    exclude_from_forecast: false,
     ...over
   }
 }
@@ -78,6 +79,7 @@ function makeCategory(over: Partial<CategoryRow> = {}): CategoryRow {
     type: 'expense',
     parent_category: null,
     is_fixed: null,
+    exclude_from_forecast: false,
     tier: null,
     created_at: null,
     ...over

@@ -176,6 +176,7 @@ export type Database = {
           created_at: string | null
           due_day: number | null
           due_month_anchor: number | null
+          exclude_from_forecast: boolean
           frequency: string | null
           household_id: string
           id: string
@@ -194,6 +195,7 @@ export type Database = {
           created_at?: string | null
           due_day?: number | null
           due_month_anchor?: number | null
+          exclude_from_forecast?: boolean
           frequency?: string | null
           household_id: string
           id?: string
@@ -212,6 +214,7 @@ export type Database = {
           created_at?: string | null
           due_day?: number | null
           due_month_anchor?: number | null
+          exclude_from_forecast?: boolean
           frequency?: string | null
           household_id?: string
           id?: string
@@ -263,6 +266,7 @@ export type Database = {
       categories: {
         Row: {
           created_at: string | null
+          exclude_from_forecast: boolean
           household_id: string
           id: string
           is_fixed: boolean | null
@@ -273,6 +277,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          exclude_from_forecast?: boolean
           household_id: string
           id?: string
           is_fixed?: boolean | null
@@ -283,6 +288,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          exclude_from_forecast?: boolean
           household_id?: string
           id?: string
           is_fixed?: boolean | null

@@ -19,6 +19,7 @@ function cat(over: Partial<CategoryRow> = {}): CategoryRow {
   return {
     id: 'c1', household_id: HID, name: 'Housing', type: 'expense',
     is_fixed: true, parent_category: null, tier: null, created_at: null,
+    exclude_from_forecast: false,
     ...over
   }
 }

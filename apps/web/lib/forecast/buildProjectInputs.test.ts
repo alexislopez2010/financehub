@@ -11,7 +11,7 @@ function bill(over: Partial<BillRow> = {}): BillRow {
     budget_category_id: null, category: 'Utilities', created_at: null,
     due_day: 1, due_month_anchor: null, frequency: 'monthly',
     is_active: true, linked_debt_id: null, notes: null,
-    tier: null, seasonal_profile: null,
+    tier: null, seasonal_profile: null, exclude_from_forecast: false,
     ...over
   } as BillRow
 }
@@ -20,6 +20,7 @@ function cat(over: Partial<CategoryRow> = {}): CategoryRow {
   return {
     id: 'c1', household_id: 'h', name: 'Utilities', type: 'expense',
     is_fixed: true, parent_category: null, tier: null, created_at: null,
+    exclude_from_forecast: false,
     ...over
   } as CategoryRow
 }
@@ -97,5 +98,31 @@ describe('buildProjectInputs', () => {
       categories: [cat({ name: 'Salary', type: 'income', is_fixed: false })]
     })
     expect(out.discretionaryCategories).toHaveLength(0)
+  })
+
+  it('drops an excluded bill from the projection and lists it as excluded', () => {
+    const out = buildProjectInputs({
+      bills: [bill({ id: 'b-gas', name: 'Gas', exclude_from_forecast: true })],
+      categories: [cat({ name: 'Utilities', is_fixed: true })]
+    })
+    expect(out.bills).toHaveLength(0)
+    expect(out.excluded).toEqual([{ kind: 'bill', id: 'b-gas', name: 'Gas' }])
+  })
+
+  it('drops an excluded discretionary category and lists it as excluded', () => {
+    const out = buildProjectInputs({
+      bills: [],
+      categories: [cat({ id: 'c-fees', name: 'Bank Fees', is_fixed: false, exclude_from_forecast: true })]
+    })
+    expect(out.discretionaryCategories).toHaveLength(0)
+    expect(out.excluded).toEqual([{ kind: 'category', id: 'c-fees', name: 'Bank Fees' }])
+  })
+
+  it('keeps non-excluded items out of the excluded list', () => {
+    const out = buildProjectInputs({
+      bills: [bill({ name: 'Gas' })],
+      categories: [cat({ id: 'c-dining', name: 'Dining', is_fixed: false })]
+    })
+    expect(out.excluded).toHaveLength(0)
   })
 })

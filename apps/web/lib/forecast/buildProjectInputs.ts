@@ -22,9 +22,18 @@ export interface BuildProjectInputsArgs {
   categories: ReadonlyArray<CategoryRow>
 }
 
+/** A bill or category the user removed from the forecast (re-addable). */
+export interface ExcludedForecastItem {
+  kind: 'bill' | 'category'
+  id: string
+  name: string
+}
+
 export interface ProjectInputs {
   bills: ReadonlyArray<ProjectBill>
   discretionaryCategories: ReadonlyArray<DiscretionaryCategory>
+  /** Active bills + discretionary categories the user excluded from the forecast. */
+  excluded: ReadonlyArray<ExcludedForecastItem>
 }
 
 export function buildProjectInputs(args: BuildProjectInputsArgs): ProjectInputs {
@@ -33,9 +42,14 @@ export function buildProjectInputs(args: BuildProjectInputsArgs): ProjectInputs 
 
   const billedCategoryNames = new Set<string>()
   const bills: ProjectBill[] = []
+  const excluded: ExcludedForecastItem[] = []
 
   for (const b of args.bills) {
     if (b.is_active === false) continue
+    if (b.exclude_from_forecast) {
+      excluded.push({ kind: 'bill', id: b.id, name: b.name })
+      continue
+    }
     const cat = b.category ? catByName.get(b.category.trim().toLowerCase()) : undefined
     const tier = resolveTier({
       billTier: isSpendTier(b.tier) ? b.tier : null,
@@ -69,8 +83,14 @@ export function buildProjectInputs(args: BuildProjectInputsArgs): ProjectInputs 
       hasLinkedDebt: false,
       hasBill: false
     })
-    if (tier === 'discretionary') discretionaryCategories.push({ name: c.name })
+    if (tier !== 'discretionary') continue
+    // Only a would-be discretionary line can be excluded (or shown).
+    if (c.exclude_from_forecast) {
+      excluded.push({ kind: 'category', id: c.id, name: c.name })
+      continue
+    }
+    discretionaryCategories.push({ name: c.name })
   }
 
-  return { bills, discretionaryCategories }
+  return { bills, discretionaryCategories, excluded }
 }

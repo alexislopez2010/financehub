@@ -1,5 +1,6 @@
 'use client'
 
+import { X } from 'lucide-react'
 import type { BillProjection, ProjectionMethod } from '@/lib/forecast/project'
 import { isSpendTier, type SpendTier } from '@/lib/forecast/tier'
 import { TIER_THEME, TIER_ORDER } from '@/lib/forecast/tierTheme'
@@ -29,6 +30,8 @@ export interface ForecastBillRowProps {
   /** Total projected across the whole horizon. */
   horizonTotal: number
   onChangeTier: (tier: SpendTier) => void
+  /** Removes this line from the forecast (persists exclude_from_forecast). */
+  onRemove: () => void
   busy?: boolean
 }
 
@@ -38,10 +41,10 @@ export interface ForecastBillRowProps {
  * action — the override persists to the bill (or category) and the projection
  * re-resolves.
  */
-export function ForecastBillRow({ projection, monthlyAmount, horizonTotal, onChangeTier, busy }: ForecastBillRowProps) {
+export function ForecastBillRow({ projection, monthlyAmount, horizonTotal, onChangeTier, onRemove, busy }: ForecastBillRowProps) {
   const theme = TIER_THEME[projection.tier]
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-rule last:border-0">
+    <div className="group flex items-center gap-3 py-2 border-b border-rule last:border-0">
       {/* Tier swatch + override */}
       <select
         aria-label={`Spend tier for ${projection.billName}`}
@@ -69,6 +72,17 @@ export function ForecastBillRow({ projection, monthlyAmount, horizonTotal, onCha
         <div className="text-sm font-semibold tabular-nums text-ink">{fmtUSD(monthlyAmount)}<span className="text-[11px] font-normal text-muted">/mo</span></div>
         <div className="text-[11px] tabular-nums text-muted">{fmtUSD(horizonTotal)} total</div>
       </div>
+
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={busy}
+        aria-label={`Remove ${projection.billName} from the forecast`}
+        title="Remove from forecast"
+        className="shrink-0 rounded-md p-1 text-muted opacity-60 hover:bg-red-50 hover:text-red-600 hover:opacity-100 disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-60"
+      >
+        <X size={15} />
+      </button>
     </div>
   )
 }

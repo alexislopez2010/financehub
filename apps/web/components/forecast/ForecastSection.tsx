@@ -1,11 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { TrendingUp, Sparkles } from 'lucide-react'
+import { TrendingUp, Sparkles, RotateCcw } from 'lucide-react'
 import { useBills, useUpdateBill } from '@/lib/data/bills'
 import { useCategories, useUpdateCategory } from '@/lib/data/categories'
 import { useTransactions } from '@/lib/data/transactions'
-import { buildProjectInputs } from '@/lib/forecast/buildProjectInputs'
+import { buildProjectInputs, type ExcludedForecastItem } from '@/lib/forecast/buildProjectInputs'
 import { project, projectDiscretionary, type BillProjection, type StatTxn } from '@/lib/forecast/project'
 import { rollupByTier } from '@/lib/forecast/rollupByTier'
 import { TIER_ORDER } from '@/lib/forecast/tierTheme'
@@ -146,6 +146,41 @@ export function ForecastSection() {
     }
   }
 
+  async function setExcluded(p: BillProjection, excluded: boolean) {
+    setTierError(null)
+    const isCategoryLine = p.billId.startsWith('cat:')
+    const id = isCategoryLine ? categoryIdByName.get((p.category ?? '').trim().toLowerCase()) : p.billId
+    if (!id) {
+      setTierError(`Couldn’t update “${p.billName}” — not found.`)
+      return
+    }
+    setPendingId(p.billId)
+    try {
+      if (isCategoryLine) {
+        await updateCategory.mutateAsync({ id, patch: { exclude_from_forecast: excluded } })
+      } else {
+        await updateBill.mutateAsync({ id, patch: { exclude_from_forecast: excluded } })
+      }
+    } catch (err) {
+      setTierError(err instanceof Error ? err.message : 'Couldn’t update the forecast.')
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  async function handleRestore(item: ExcludedForecastItem) {
+    setTierError(null)
+    try {
+      if (item.kind === 'bill') {
+        await updateBill.mutateAsync({ id: item.id, patch: { exclude_from_forecast: false } })
+      } else {
+        await updateCategory.mutateAsync({ id: item.id, patch: { exclude_from_forecast: false } })
+      }
+    } catch (err) {
+      setTierError(err instanceof Error ? err.message : 'Couldn’t restore the item.')
+    }
+  }
+
   if (billsQuery.isLoading || categoriesQuery.isLoading || txQuery.isLoading) {
     return <p className="text-sm text-muted">Loading forecast…</p>
   }
@@ -212,10 +247,33 @@ export function ForecastSection() {
             focusYear={startYear}
             focusMonth={startMonth}
             onChangeTier={handleChangeTier}
+            onRemove={p => setExcluded(p, true)}
             pendingId={pendingId}
           />
         ))}
       </div>
+
+      {inputs.excluded.length > 0 && (
+        <section className="rounded-xl border border-rule bg-surface px-4 py-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Excluded from forecast</h2>
+          <p className="mt-0.5 text-[11px] text-muted">These don’t count toward the projection. Add one back any time.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {inputs.excluded.map(item => (
+              <button
+                key={`${item.kind}:${item.id}`}
+                type="button"
+                onClick={() => handleRestore(item)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-rule bg-bg px-2.5 py-1 text-xs text-ink hover:border-brand hover:text-brand"
+                title={`Add ${item.name} back to the forecast`}
+              >
+                <RotateCcw size={12} />
+                {item.name}
+                <span className="text-[10px] text-muted">{item.kind}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <ProposeBudgetsPanel
         projections={allProjections}
