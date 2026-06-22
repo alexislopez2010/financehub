@@ -3,8 +3,9 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
 import { X, Sparkles, Check } from 'lucide-react'
-import { useAnalyzeBillHistory, type AnalyzeHistoryResult } from '@/lib/data/forecastMutations'
 import { useUpdateBill } from '@/lib/data/bills'
+import { parseHistory } from '@/lib/forecast/parseHistory'
+import { distillSeasonalProfile } from '@/lib/forecast/distillHistory'
 import type { SeasonalProfile } from '@/lib/forecast/seasonalProfile'
 import type { Json } from '@/lib/supabase/database.types'
 import { cn } from '@/lib/cn'
@@ -17,10 +18,13 @@ function fmtUSD(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-const CONFIDENCE_TONE: Record<AnalyzeHistoryResult['confidence'], string> = {
-  high: 'bg-emerald-50 text-emerald-700',
-  medium: 'bg-amber-50 text-amber-700',
-  low: 'bg-red-50 text-red-700'
+interface ParsedResult {
+  profile: SeasonalProfile
+  monthsCovered: number
+  observationsUsed: number
+  warnings: string[]
+  /** Non-empty lines the parser couldn't read. */
+  skipped: number
 }
 
 export interface BillPick {
@@ -60,35 +64,48 @@ function ProfilePreview({ profile }: { profile: SeasonalProfile }) {
 export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }: HistoryImportDialogProps) {
   const [billId, setBillId] = useState(initialBillId ?? bills[0]?.id ?? '')
   const [rawText, setRawText] = useState('')
-  const [result, setResult] = useState<AnalyzeHistoryResult | null>(null)
+  const [result, setResult] = useState<ParsedResult | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
-  const analyze = useAnalyzeBillHistory()
   const updateBill = useUpdateBill()
-
   const selectedBill = bills.find(b => b.id === billId)
 
   function resetAndClose(next: boolean) {
     if (!next) {
-      // Clear transient state on close so reopening starts fresh.
       setRawText('')
       setResult(null)
+      setParseError(null)
       setSaved(false)
-      analyze.reset()
       updateBill.reset()
     }
     onOpenChange(next)
   }
 
-  async function handleAnalyze() {
+  function handleParse() {
     if (!selectedBill || rawText.trim().length === 0) return
+    setParseError(null)
     setResult(null)
-    try {
-      const r = await analyze.mutateAsync({ billName: selectedBill.name, rawText: rawText.trim() })
-      setResult(r)
-    } catch {
-      // analyze.error renders below.
+    const { observations, skipped } = parseHistory(rawText, { defaultYear: new Date().getFullYear() })
+    const distilled = distillSeasonalProfile(observations, {
+      computedAt: new Date().toISOString().slice(0, 10),
+      note: `Parsed ${observations.length} ${observations.length === 1 ? 'amount' : 'amounts'} from your pasted history.`
+    })
+    if (!distilled.ok) {
+      setParseError(
+        skipped > 0
+          ? `Couldn’t read any month + amount pairs (${skipped} unrecognized ${skipped === 1 ? 'line' : 'lines'}). Try one "Month Year  $amount" per line.`
+          : 'Couldn’t find any month + amount pairs in that text.'
+      )
+      return
     }
+    setResult({
+      profile: distilled.profile,
+      monthsCovered: distilled.monthsCovered,
+      observationsUsed: distilled.observationsUsed,
+      warnings: distilled.warnings,
+      skipped
+    })
   }
 
   async function handleSave() {
@@ -103,7 +120,7 @@ export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }
     }
   }
 
-  const canAnalyze = !!selectedBill && rawText.trim().length > 0 && !analyze.isPending
+  const canParse = !!selectedBill && rawText.trim().length > 0
 
   return (
     <Dialog.Root open={open} onOpenChange={resetAndClose}>
@@ -126,8 +143,9 @@ export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }
 
           <div className="space-y-4 px-5 py-4">
             <Dialog.Description className="text-xs text-muted">
-              Paste any history you have for this bill — a table, a list of months, or even a rough description.
-              The AI reads it and the app computes a verified seasonal profile. Your raw text is never stored.
+              Paste this bill’s past amounts — one <span className="font-medium text-ink">Month Year&nbsp;&nbsp;$amount</span> per
+              line (tables, CSV exports, and ISO dates also work). The app reads them and computes a seasonal profile.
+              Nothing is sent anywhere; your text isn’t stored.
             </Dialog.Description>
 
             {saved ? (
@@ -147,13 +165,12 @@ export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }
               </div>
             ) : (
               <>
-                {/* Bill picker */}
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium text-muted">Bill</span>
                   <select
                     value={billId}
-                    onChange={e => { setBillId(e.target.value); setResult(null) }}
-                    disabled={analyze.isPending || updateBill.isPending}
+                    onChange={e => { setBillId(e.target.value); setResult(null); setParseError(null) }}
+                    disabled={updateBill.isPending}
                     className="w-full rounded-lg border border-rule bg-surface px-3 py-2 text-sm text-ink disabled:opacity-50"
                   >
                     {bills.length === 0 && <option value="">No bills available</option>}
@@ -161,59 +178,55 @@ export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }
                   </select>
                 </label>
 
-                {/* History input */}
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium text-muted">History</span>
                   <textarea
                     value={rawText}
                     onChange={e => setRawText(e.target.value.slice(0, MAX_RAW_CHARS))}
                     rows={6}
-                    placeholder={'e.g.\nJan 2024  $182.34\nFeb 2024  $171.05\n…\nor: "winters run about $180/mo, summers around $45"'}
+                    placeholder={'Jan 2024  $182.34\nFeb 2024  $171.05\nMar 2024  $140.10\n…'}
                     className="w-full resize-y rounded-lg border border-rule bg-surface px-3 py-2 font-mono text-xs text-ink"
                   />
                   <span className="mt-1 block text-right text-[10px] text-muted">{rawText.length.toLocaleString()} / {MAX_RAW_CHARS.toLocaleString()}</span>
                 </label>
 
-                {analyze.isError && (
-                  <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{analyze.error.message}</p>
+                {parseError && (
+                  <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{parseError}</p>
                 )}
 
-                {/* Preview */}
                 {result && (
                   <div className="space-y-3 rounded-xl border border-rule bg-bg p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-ink">Distilled profile</span>
-                      <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium capitalize', CONFIDENCE_TONE[result.confidence])}>
-                        {result.confidence} confidence
-                      </span>
-                    </div>
+                    <span className="text-xs font-semibold text-ink">Distilled profile</span>
                     <ProfilePreview profile={result.profile} />
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
                       <span>{result.monthsCovered}/12 months covered</span>
-                      <span>{result.observationsUsed} observations</span>
+                      <span>{result.observationsUsed} {result.observationsUsed === 1 ? 'amount' : 'amounts'}</span>
                       <span>{result.profile.years} {result.profile.years === 1 ? 'year' : 'years'}</span>
                     </div>
-                    {result.note && <p className="text-[11px] italic text-muted">“{result.note}”</p>}
                     {result.warnings.map((w, i) => (
                       <p key={i} className="text-[11px] text-amber-700">{w}</p>
                     ))}
+                    {result.skipped > 0 && (
+                      <p className="text-[11px] text-amber-700">
+                        {result.skipped} {result.skipped === 1 ? 'line was' : 'lines were'} unrecognized and skipped.
+                      </p>
+                    )}
                     {updateBill.isError && (
                       <p role="alert" className="rounded bg-red-50 px-2 py-1 text-[11px] text-red-700">{updateBill.error.message}</p>
                     )}
                   </div>
                 )}
 
-                {/* Actions */}
                 <div className="flex justify-end gap-2">
                   {!result ? (
                     <button
                       type="button"
-                      onClick={handleAnalyze}
-                      disabled={!canAnalyze}
+                      onClick={handleParse}
+                      disabled={!canParse}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
                     >
                       <Sparkles size={14} />
-                      {analyze.isPending ? 'Analyzing…' : 'Analyze'}
+                      Preview profile
                     </button>
                   ) : (
                     <>
@@ -223,7 +236,7 @@ export function HistoryImportDialog({ open, onOpenChange, bills, initialBillId }
                         disabled={updateBill.isPending}
                         className="rounded-lg border border-rule px-3 py-1.5 text-sm font-medium text-muted hover:text-ink disabled:opacity-40"
                       >
-                        Re-analyze
+                        Edit text
                       </button>
                       <button
                         type="button"
