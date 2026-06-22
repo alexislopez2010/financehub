@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react'
-import { Newspaper, List, Target, Calendar, Wallet } from 'lucide-react'
+import { Newspaper, List, Target, Calendar, Wallet, TrendingUp } from 'lucide-react'
 
 export interface TabDef {
   /** Stable identifier. */
-  key: 'briefing' | 'ledger' | 'plan' | 'bills' | 'accounts'
+  key: 'briefing' | 'ledger' | 'plan' | 'bills' | 'forecast' | 'accounts'
   /** Route path. */
   href: string
   /** Short label shown beneath the icon on mobile, beside it on desktop. */
@@ -12,11 +12,12 @@ export interface TabDef {
 }
 
 export const TABS: ReadonlyArray<TabDef> = [
-  { key: 'briefing', href: '/',          label: 'Briefing', icon: Newspaper },
-  { key: 'ledger',   href: '/ledger',    label: 'Ledger',   icon: List      },
-  { key: 'plan',     href: '/plan',      label: 'Plan',     icon: Target    },
-  { key: 'bills',    href: '/bills',     label: 'Bills',    icon: Calendar  },
-  { key: 'accounts', href: '/accounts',  label: 'Accounts', icon: Wallet    }
+  { key: 'briefing', href: '/',          label: 'Briefing', icon: Newspaper  },
+  { key: 'ledger',   href: '/ledger',    label: 'Ledger',   icon: List       },
+  { key: 'plan',     href: '/plan',      label: 'Plan',     icon: Target     },
+  { key: 'bills',    href: '/bills',     label: 'Bills',    icon: Calendar   },
+  { key: 'forecast', href: '/forecast',  label: 'Forecast', icon: TrendingUp },
+  { key: 'accounts', href: '/accounts',  label: 'Accounts', icon: Wallet     }
 ]
 
 /**

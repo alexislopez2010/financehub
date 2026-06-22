@@ -23,7 +23,7 @@ export function TabBar({ variant, className }: TabBarProps) {
           className
         )}
       >
-        <ul className="grid grid-cols-5 mx-auto max-w-xl">
+        <ul className="grid grid-cols-6 mx-auto max-w-xl">
           {TABS.map(tab => (
             <TabItem key={tab.key} tab={tab} active={isTabActive(pathname, tab)} variant="bottom" />
           ))}

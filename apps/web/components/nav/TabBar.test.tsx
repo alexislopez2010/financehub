@@ -41,14 +41,15 @@ describe('isTabActive', () => {
 })
 
 describe('<TabBar variant="bottom">', () => {
-  it('renders all 5 tabs', () => {
+  it('renders all 6 tabs', () => {
     mockUsePathname.mockReturnValue('/')
     render(<TabBar variant="bottom" />)
-    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+    expect(screen.getAllByRole('listitem')).toHaveLength(6)
     expect(screen.getByText('Briefing')).toBeInTheDocument()
     expect(screen.getByText('Ledger')).toBeInTheDocument()
     expect(screen.getByText('Plan')).toBeInTheDocument()
     expect(screen.getByText('Bills')).toBeInTheDocument()
+    expect(screen.getByText('Forecast')).toBeInTheDocument()
     expect(screen.getByText('Accounts')).toBeInTheDocument()
   })
 
@@ -79,10 +80,10 @@ describe('<TabBar variant="bottom">', () => {
 })
 
 describe('<TabBar variant="inline">', () => {
-  it('renders all 5 tabs', () => {
+  it('renders all 6 tabs', () => {
     mockUsePathname.mockReturnValue('/')
     render(<TabBar variant="inline" />)
-    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+    expect(screen.getAllByRole('listitem')).toHaveLength(6)
   })
 
   it('marks the active tab', () => {
