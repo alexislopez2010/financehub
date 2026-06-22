@@ -104,7 +104,11 @@ describe('<EditAccountDialog>', () => {
           starting_balance: 5000,
           starting_balance_date: '2025-03-01',
           owner: null,
-          import_format: null
+          import_format: null,
+          // Debt-only fields are always present in the patch, null for non-debt types.
+          apr: null,
+          min_payment: null,
+          due_day: null
         }
       })
     )

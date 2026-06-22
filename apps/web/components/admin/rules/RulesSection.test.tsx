@@ -107,7 +107,7 @@ describe('<RulesSection>', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/failed to load match rules.*boom/i)
   })
 
-  it('renders rules grouped by bill with frequency in the header', () => {
+  it('groups rules under their resolved category with a rule count', () => {
     const bills = [makeBill({ id: 'b1', name: 'Mortgage', frequency: 'monthly' })]
     const rules = [makeRule({ id: 'r1', bill_id: 'b1', keyword: 'mortgage', category: 'Housing' })]
     mockUseRules.mockReturnValue({ data: rules, isLoading: false, error: null })
@@ -115,47 +115,50 @@ describe('<RulesSection>', () => {
     mockUseCategories.mockReturnValue({ data: [makeCategory()], isLoading: false, error: null })
 
     render(<RulesSection />)
-    expect(screen.getByText('Mortgage')).toBeInTheDocument()
-    expect(screen.getByText(/monthly/i)).toBeInTheDocument()
+    // Grouped by the resolved category (Housing), not by the bill.
+    expect(screen.getAllByText('Housing').length).toBeGreaterThan(0)
+    // The keyword matcher is shown as the editable cell's label.
     expect(screen.getByText('mortgage')).toBeInTheDocument()
-    expect(screen.getByText('1 rule')).toBeInTheDocument()
+    // The section summary reflects one rule in one category.
+    expect(screen.getByText(/1 rule across 1 category/i)).toBeInTheDocument()
   })
 
-  it('renders the General rules group at the bottom for null-bill rules', () => {
-    const bills = [makeBill({ id: 'b1', name: 'Mortgage' })]
+  it('puts rules with no resolvable category under "(no category)"', () => {
     const rules = [
-      makeRule({ id: 'g1', bill_id: null, bill_name: null, keyword: 'generic', category: 'Housing' })
+      makeRule({ id: 'g1', bill_id: null, bill_name: null, keyword: 'generic', category: null })
     ]
     mockUseRules.mockReturnValue({ data: rules, isLoading: false, error: null })
-    mockUseBills.mockReturnValue({ data: bills, isLoading: false, error: null })
+    mockUseBills.mockReturnValue({ data: [], isLoading: false, error: null })
     mockUseCategories.mockReturnValue({ data: [makeCategory()], isLoading: false, error: null })
 
     render(<RulesSection />)
-    expect(screen.getByText(/general rules/i)).toBeInTheDocument()
+    expect(screen.getByText('(no category)')).toBeInTheDocument()
     expect(screen.getByText('generic')).toBeInTheDocument()
   })
 
-  it('shows the "No rules" placeholder when a bill has none', () => {
-    const bills = [makeBill({ id: 'b1', name: 'Mortgage' })]
+  it('shows an empty-category placeholder for a known category with no rules', () => {
     mockUseRules.mockReturnValue({ data: [], isLoading: false, error: null })
-    mockUseBills.mockReturnValue({ data: bills, isLoading: false, error: null })
-    mockUseCategories.mockReturnValue({ data: [makeCategory()], isLoading: false, error: null })
+    mockUseBills.mockReturnValue({ data: [], isLoading: false, error: null })
+    mockUseCategories.mockReturnValue({ data: [makeCategory({ name: 'Housing' })], isLoading: false, error: null })
 
     render(<RulesSection />)
-    expect(screen.getByText(/no rules.*detected manually/i)).toBeInTheDocument()
+    expect(screen.getByText(/no rules yet for Housing/i)).toBeInTheDocument()
   })
 
-  it('hides inactive bills from the grouping', () => {
-    const bills = [
-      makeBill({ id: 'b1', name: 'Mortgage', is_active: true }),
-      makeBill({ id: 'b2', name: 'Old Service', is_active: false })
-    ]
+  it('seeds a group for every known expense category, even with no rules', () => {
     mockUseRules.mockReturnValue({ data: [], isLoading: false, error: null })
-    mockUseBills.mockReturnValue({ data: bills, isLoading: false, error: null })
-    mockUseCategories.mockReturnValue({ data: [makeCategory()], isLoading: false, error: null })
+    mockUseBills.mockReturnValue({ data: [], isLoading: false, error: null })
+    mockUseCategories.mockReturnValue({
+      data: [
+        makeCategory({ id: 'c1', name: 'Housing' }),
+        makeCategory({ id: 'c2', name: 'Utilities' })
+      ],
+      isLoading: false,
+      error: null
+    })
 
     render(<RulesSection />)
-    expect(screen.getByText('Mortgage')).toBeInTheDocument()
-    expect(screen.queryByText('Old Service')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Housing').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Utilities').length).toBeGreaterThan(0)
   })
 })
