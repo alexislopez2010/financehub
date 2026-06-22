@@ -64,6 +64,8 @@ function mkBill(overrides: {
     created_at: null,
     frequency: null,
     linked_debt_id: null,
+    tier: null,
+    seasonal_profile: null,
     notes: null,
   }
 }

@@ -25,6 +25,8 @@ function mkBill(
     created_at: null,
     frequency,
     linked_debt_id: null,
+    tier: null,
+    seasonal_profile: null,
     notes: null,
   }
 }

@@ -44,6 +44,7 @@ function makeCategory(name: string): CategoryRow {
     type: 'expense',
     parent_category: null,
     is_fixed: null,
+    tier: null,
     created_at: null
   }
 }

@@ -183,6 +183,8 @@ export type Database = {
           linked_debt_id: string | null
           name: string
           notes: string | null
+          seasonal_profile: Json | null
+          tier: string | null
         }
         Insert: {
           account?: string | null
@@ -199,6 +201,8 @@ export type Database = {
           linked_debt_id?: string | null
           name: string
           notes?: string | null
+          seasonal_profile?: Json | null
+          tier?: string | null
         }
         Update: {
           account?: string | null
@@ -215,6 +219,8 @@ export type Database = {
           linked_debt_id?: string | null
           name?: string
           notes?: string | null
+          seasonal_profile?: Json | null
+          tier?: string | null
         }
         Relationships: []
       }
@@ -262,6 +268,7 @@ export type Database = {
           is_fixed: boolean | null
           name: string
           parent_category: string | null
+          tier: string | null
           type: string
         }
         Insert: {
@@ -271,6 +278,7 @@ export type Database = {
           is_fixed?: boolean | null
           name: string
           parent_category?: string | null
+          tier?: string | null
           type: string
         }
         Update: {
@@ -280,6 +288,7 @@ export type Database = {
           is_fixed?: boolean | null
           name?: string
           parent_category?: string | null
+          tier?: string | null
           type?: string
         }
         Relationships: []
